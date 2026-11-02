@@ -88,6 +88,11 @@ smale_aggregater:
 Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `smale_aggregater` must be globally unique:
 ```yaml
 definisjon:
+  navn: Befolkning etter alder
+  navn_en: Population by age
+  innhold: Befolkning fordelt etter periode og alder.
+  innhold_en: Population distributed by period and age.
+  nav_id: NAV21000
   obt_tabell: obt_befolkning
   periodisering: periode
   inkrementell: overskriv_alt

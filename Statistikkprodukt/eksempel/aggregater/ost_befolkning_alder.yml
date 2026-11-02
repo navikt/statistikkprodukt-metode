@@ -1,5 +1,6 @@
 definisjon:
   obt_tabell: obt_befolkning
+  nav_id: NAV21000
   navn: Befolkning etter alder
   navn_en: Population by age
   innhold: Befolkning fordelt etter periode og alder.

@@ -178,7 +178,10 @@ Eksempel på aggregatfil:
 
 ```yaml
 definisjon:
-  # Metadata per småaggregat, påkrevd
+  # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
+  # Format: NAV2[10000-29999]
+  nav_id: NAV21000
+  # Metadata per småaggregat, påkrevd  
   navn: "Kort navn på norsk"
   navn_en: "Short name in English"
   innhold: "Beskrivelse av innhold på norsk"

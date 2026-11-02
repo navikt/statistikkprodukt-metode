@@ -49,6 +49,7 @@ smale_aggregater:
     (aggregate_directory / f"{aggregate_table}.yml").write_text(
         f"""
 definisjon:
+  nav_id: NAV21000
   obt_tabell: {source_table}
   navn: Aggregerte verdier
   navn_en: Aggregated values

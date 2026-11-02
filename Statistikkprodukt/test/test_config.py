@@ -16,6 +16,11 @@ def configuration():
             },
             "smale_aggregater": [
                 {
+                    "nav_id": "NAV21000",
+                    "navn": "Navn",
+                    "navn_en": "Name",
+                    "innhold": "Innhold",
+                    "innhold_en": "Content",
                     "tabell": "TABELL",
                     "obt_tabell": "OBT_TABELL",
                     "sporring_sql": "select.sql",
@@ -62,6 +67,11 @@ smale_aggregater:
         (aggregate_directory / f"{table}.yml").write_text(
             f"""
 definisjon:
+  navn: {table}
+  navn_en: {table}
+  innhold: {table} 
+  innhold_en: {table}
+  nav_id: NAV21000
   obt_tabell: OBT_TABELL
   periodisering: periode
   inkrementell: overskriv_ikke
@@ -106,9 +116,12 @@ smale_aggregater:
     (aggregate_directory / "annet_navn.yml").write_text(
         """
 definisjon:
-  tabell: tabell
+  navn: dummy
+  navn_en: dummy
+  innhold: dummy 
+  innhold_en: dummy
+  nav_id: NAV21000
   obt_tabell: OBT_TABELL
-  sporring_sql: aggregater/tabell.sql
   periodisering: periode
   inkrementell: overskriv_ikke
   tallkolonne:

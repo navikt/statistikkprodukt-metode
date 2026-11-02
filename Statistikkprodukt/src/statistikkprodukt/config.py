@@ -67,10 +67,16 @@ def is_not_empty(value: str) -> str:
         raise ConfigError("Strengen kan ikke være tom eller bare mellomrom.")
     return value
 
+def is_nav_id(value: str) -> str:
+    """Validerer at en streng ikke er tom eller bare mellomrom."""
+    if not re.match("^NAV2[1-2][0-9]{3}$", value):
+        raise ConfigError("Må være et gyldig NAV-ID, f.eks. NAV22023.")
+    return value
 
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
+NavId = Annotated[str, AfterValidator(is_nav_id)]
 
 
 class StrictModel(BaseModel):
@@ -157,12 +163,13 @@ class Variable(StrictModel):
 
 
 class SmallAggregate(StrictModel):
-    navn: str | None = None
-    navn_en: str | None = None
+    nav_id: NavId
+    navn: str
+    navn_en: str
     tabell: OracleIdentifier
     obt_tabell: OracleTableIdentifier
-    innhold: str | None = None
-    innhold_en: str | None = None
+    innhold: str
+    innhold_en: str
     sporring_sql: NonEmptyString
     periodisering: OracleIdentifier
     inkrementell: InkrementalMode
