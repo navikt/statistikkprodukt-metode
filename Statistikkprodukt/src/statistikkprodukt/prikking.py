@@ -27,7 +27,7 @@ def prikking(
         importr('NavDataprodukt')
     except rpackages.LibraryError as exc:
         raise RuntimeError(
-            "R-pakken 'NavDataprodukt' er ikke installert. Kjør 'statistikkprodukt installer-pakker' for å installere den."
+            "R-pakken 'NavDataprodukt' er ikke installert. Kjør 'statistikkprodukt installer-r-pakker' for å installere den."
         ) from exc
 
     r_prikking = robjects.r('dvh_prikking')
