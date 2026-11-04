@@ -35,19 +35,28 @@ def test_read_metadata_uses_obt_table(monkeypatch):
 
     def fetch_table(schema, table_name, cursor):
         calls.append(("table", schema, table_name))
-        return Metadata()
+        return Metadata(
+            navn="DB table",
+            navn_en="DB table",
+            innhold="DB table",
+            innhold_en="DB table",
+        )
 
     def fetch_column(schema, table_name, column, cursor):
         calls.append(("column", schema, table_name, column))
-        return Metadata()
+        return Metadata(
+            navn=f"DB {column}",
+            navn_en=f"DB {column}",
+            innhold=f"DB {column}",
+            innhold_en=f"DB {column}",
+        )
 
     monkeypatch.setattr(metadata, "_fetch_table_metadata", fetch_table)
     monkeypatch.setattr(metadata, "_fetch_column_metadata", fetch_column)
-    monkeypatch.setattr(metadata, "_merge_metadata", lambda name, config, db: db)
 
-    aggregate = configuration().smale_aggregater[0]
+    aggregate = configuration().aggregater[0]
     aggregate.obt_tabell = "obt.obt_kilde"
-    metadata.read_metadata(Connection(), "TEST", aggregate)
+    result = metadata.read_metadata(Connection(), "TEST", aggregate)
 
     assert calls == [
         ("table", "obt", "obt_kilde"),
@@ -55,6 +64,17 @@ def test_read_metadata_uses_obt_table(monkeypatch):
         ("column", "obt", "obt_kilde", "region"),
         ("column", "obt", "obt_kilde", "antall"),
     ]
+    assert result.columns["periode"].navn == "Periodisering"
+    period_comment = next(
+        statement
+        for statement in metadata.comment_statements("TEST", "target_prepub", result)
+        if statement.startswith("COMMENT ON COLUMN test.target_prepub.periode")
+    )
+    assert period_comment == (
+        "COMMENT ON COLUMN test.target_prepub.periode IS "
+        "'#NAVN Periodisering #NAVN_EN Periodization #INNHOLD Månedsperiode "
+        "#INNHOLD_EN Month period'"
+    )
 
 
 def test_metadata_tags_are_order_independent_and_multiline():
@@ -79,7 +99,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
 ):
     config = configuration()
     config.connection.schema_name = "SYSTEM"
-    aggregate = config.smale_aggregater[0]
+    aggregate = config.aggregater[0]
     aggregate.tabell = f"sb_test_{uuid4().hex[:12]}"
     aggregate.sporring_sql = "create_test.sql"
     (tmp_path / aggregate.sporring_sql).write_text(
@@ -185,7 +205,7 @@ def test_write_database_writes_column_comments_to_all_comments(
 ):
     config = configuration()
     config.connection.schema_name = "SYSTEM"
-    aggregate = config.smale_aggregater[0]
+    aggregate = config.aggregater[0]
     aggregate.tabell = f"sb_test_{uuid4().hex[:12]}"
     metadata = TableMetadata(
         table=Metadata(
@@ -307,7 +327,7 @@ def test_empty_database_result_does_not_inspect_or_mutate_connection():
             """Feiler testen dersom en metode eller egenskap brukes."""
             raise AssertionError(f"Unexpected database call: {name}")
 
-    aggregate = configuration().smale_aggregater[0]
+    aggregate = configuration().aggregater[0]
     write_result(
         NoDatabaseCalls(),
         "TEST",
@@ -320,7 +340,7 @@ def test_empty_database_result_does_not_inspect_or_mutate_connection():
 def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
     """Lar Oracle avvise kolonner som ikke finnes i måltabellen."""
     table = f"sb_test_{uuid4().hex[:12]}"
-    aggregate = configuration().smale_aggregater[0].model_copy(update={"tabell": table})
+    aggregate = configuration().aggregater[0].model_copy(update={"tabell": table})
     try:
         with oracle_connection.cursor() as cursor:
             cursor.execute(
@@ -355,7 +375,7 @@ def test_read_query_filters_periods_in_oracle(oracle_connection, periods):
         "select 202501 as periode, 'Oslo' as region, 10 as antall from dual "
         "union all select 202502, 'Oslo', 20 from dual;"
     )
-    aggregate = configuration().smale_aggregater[0]
+    aggregate = configuration().aggregater[0]
     assert read_periods(oracle_connection, sql, "periode") == {202501, 202502}
 
     frame = read_query(
@@ -371,7 +391,7 @@ def test_read_query_binds_string_periods_in_oracle(oracle_connection):
         "union all select '2025-02', 'Oslo', 20 from dual"
     )
     frame = read_query(
-        oracle_connection, sql, configuration().smale_aggregater[0], periods_to_load=[period]
+        oracle_connection, sql, configuration().aggregater[0], periods_to_load=[period]
     )
     assert frame["periode"].tolist() == [period]
 
@@ -379,7 +399,7 @@ def test_read_query_binds_string_periods_in_oracle(oracle_connection):
 def test_read_target_periods_uses_configured_schema(oracle_connection):
     table = f"sb_test_{uuid4().hex[:12]}"
     prepub_table = f"{table}_prepub"
-    aggregate = configuration().smale_aggregater[0].model_copy(update={"tabell": table})
+    aggregate = configuration().aggregater[0].model_copy(update={"tabell": table})
     try:
         with oracle_connection.cursor() as cursor:
             cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode NUMBER(6,0))")
@@ -398,7 +418,7 @@ def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
     frame = read_query(
         oracle_connection,
         "select 202501 as periode, 'Oslo' as region, 10 as antall from dual",
-        configuration().smale_aggregater[0],
+        configuration().aggregater[0],
         periods_to_load=list(range(202000, 203001)),
     )
     assert frame["periode"].tolist() == [202501]
@@ -430,9 +450,9 @@ def test_process_aggregate_only_masks_selected_periods(
     table = f"sb_test_{uuid4().hex[:12]}"
     config = configuration()
     config.connection.schema_name = "system"
-    aggregate = config.smale_aggregater[0]
+    aggregate = config.aggregater[0]
     aggregate.tabell = table
-    aggregate.inkrementell = InkrementalMode(mode)
+    aggregate.inkrementell_strategi = InkrementalMode(mode)
     (tmp_path / aggregate.sporring_sql).write_text(
         "select 202501 as periode, 'Oslo' as region, 10 as antall from dual "
         "union all select 202502, 'Oslo', 20 from dual "

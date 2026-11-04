@@ -1,29 +1,35 @@
 definisjon:
-  obt_tabell: obt_befolkning
-  nav_id: NAV21001
+  id: NAV21001
+  obt-tabell: obt_befolkning
+
   navn: Befolkning etter kjønn
-  navn_en: Population by sex
+  navn-en: Population by sex
   innhold: Befolkning fordelt etter periode og kjønn.
-  innhold_en: Population by period and sex.
-  periodisering: periode
-  inkrementell: overskriv_alt
-  tallkolonne:
+  innhold-en: Population by period and sex.
+
+  periodisering:
+    navn: Periode
+    navn-en: Period
+    kolonne: periode
+    innhold: Månedsperiode på formatet YYYYMM.
+    innhold-en: Month in YYYYMM format.
+
+  teller:
     navn: Antall personer
-    navn_en: Number of people
+    navn-en: Number of people
     kolonne: antall
     innhold: Antall personer i gruppen.
-    innhold_en: Number of people in the group.
+    innhold-en: Number of people in the group.
+
+  variabler:
+    - navn: Kjønn
+      navn-en: Sex
+      kolonne: kjonn
+      innhold: Fordelt på kjønn.
+      innhold-en: Distributed by sex.
+
+  inkrementell-strategi: overskriv_alt
+
   formula: "~ periode : kjonn"
   prikking: true
   saerskilt: false
-  variabler:
-    - navn: Periode
-      navn_en: Period
-      kolonne: periode
-      innhold: Månedsperiode på formatet YYYYMM.
-      innhold_en: Month in YYYYMM format.
-    - navn: Kjønn
-      navn_en: Sex
-      kolonne: kjonn
-      innhold: Kjønnskategori.
-      innhold_en: Sex category.

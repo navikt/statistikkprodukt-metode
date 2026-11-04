@@ -164,12 +164,12 @@ def _select_aggregates(
 ) -> list[SmallAggregate]:
     """Velger alle aggregater eller kontrollerer eksplisitte tabellvalg."""
     if not selected_tables:
-        return configuration.smale_aggregater
+        return configuration.aggregater
 
     wanted = {name.lower() for name in selected_tables}
     aggregates = [
         aggregate
-        for aggregate in configuration.smale_aggregater
+        for aggregate in configuration.aggregater
         if aggregate.tabell.lower() in wanted
     ]
     unknown = wanted - {aggregate.tabell.lower() for aggregate in aggregates}
@@ -221,9 +221,9 @@ def _process_aggregate(
     LOGGER.info("Prikker %d rader for %s.", len(data), aggregate.tabell)
     prepub, kontroll = prikking(
         data,
-        aggregate.periodisering,
+        aggregate.periodisering.kolonne,
         aggregate.formula,
-        aggregate.tallkolonne.kolonne,
+        aggregate.teller.kolonne,
         aggregate.prikking,
         aggregate.saerskilt,
     )
@@ -264,17 +264,19 @@ def _get_periods_to_load(
         config_directory,
         transfer,
     )
-    if aggregate.inkrementell == InkrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_ALT:
         return sorted(available)
 
     missing = available - existing
-    if aggregate.inkrementell == InkrementalMode.OVERSKRIV_SISTE_PERIODE:
+    if aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_SISTE_PERIODE:
         max_available = {max(existing)} if existing and max(existing) in available else set()
         return sorted(missing.union(max_available))
-    elif aggregate.inkrementell == InkrementalMode.OVERSKRIV_IKKE:
+    elif aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_IKKE:
         return sorted(missing)
     else:
-        raise NotImplementedError("Ukjent inkrementell modus: {aggregate.inkrementell}")
+        raise NotImplementedError(
+            f"Ukjent inkrementell modus: {aggregate.inkrementell_strategi}"
+        )
 
 
 def _fetch_periods(
@@ -289,10 +291,12 @@ def _fetch_periods(
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
         data = lokal.read_csv(directory, aggregate)
-        available = set(data[aggregate.periodisering].dropna().tolist())
+        available = set(data[aggregate.periodisering.kolonne].dropna().tolist())
     else:
         available = oracle.read_periods(
-            transfer.connection, _read_sql(aggregate, config_directory), aggregate.periodisering
+            transfer.connection,
+            _read_sql(aggregate, config_directory),
+            aggregate.periodisering.kolonne,
         )
 
     existing = oracle.read_target_periods(
@@ -322,7 +326,7 @@ def _read_input(
         directory = transfer.input_directory
         data = lokal.read_csv(directory, aggregate)
         if periods_to_load is not None:
-            data = data[data[aggregate.periodisering].isin(periods_to_load)]
+            data = data[data[aggregate.periodisering.kolonne].isin(periods_to_load)]
         return data
     else:
         if transfer.connection is None:

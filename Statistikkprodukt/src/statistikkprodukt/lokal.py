@@ -29,9 +29,10 @@ def validate_columns(frame: pd.DataFrame, aggregate: SmallAggregate) -> None:
         raise ValueError(f"CSV-filen for {aggregate.tabell} har kolonner med like navn.")
 
     expected = [
-                   variable.kolonne
-                   for variable in aggregate.variabler
-               ] + [aggregate.tallkolonne.kolonne]
+        aggregate.periodisering.kolonne,
+        *(variable.kolonne for variable in aggregate.variabler),
+        aggregate.teller.kolonne,
+    ]
     missing = [column for column in expected if column.lower() not in actual_by_lower]
     unexpected = [
         column for column in frame.columns
@@ -66,9 +67,9 @@ def write_csv(
         print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 
-    if aggregate.inkrementell != InkrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi != InkrementalMode.OVERSKRIV_ALT:
         LOGGER.warning("CSV filer overskrives også når inkrementell modus er satt til %s.",
-                       aggregate.inkrementell.value)
+                       aggregate.inkrementell_strategi.value)
 
     if dry_run:
         print(f"Ville skrevet {len(frame)} rader til {path}.")

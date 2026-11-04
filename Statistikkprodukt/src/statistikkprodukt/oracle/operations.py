@@ -52,7 +52,7 @@ def read_query(
     sql = sql.strip().removesuffix(";").rstrip()
     parameters = []
     if periods_to_load is not None:
-        period = validate_identifier(aggregate.periodisering)
+        period = validate_identifier(aggregate.periodisering.kolonne)
         parameters = [_db_value(value) for value in periods_to_load]
         predicate = _generate_in_predicate(period, parameters)
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
@@ -87,7 +87,7 @@ def read_target_periods(
 ) -> set[int | str]:
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
-    period = validate_identifier(aggregate.periodisering)
+    period = validate_identifier(aggregate.periodisering.kolonne)
     return read_periods(connection, f"SELECT {period} FROM {table}", period)
 
 
@@ -166,9 +166,11 @@ def write_result(
         f"{validate_identifier(table_name)}"
     )
 
-    period_column = aggregate.periodisering.lower()
+    period_column = aggregate.periodisering.kolonne.lower()
     if period_column not in frame.columns:
-        raise ValueError(f"Periodekolonnen {aggregate.periodisering} mangler i resultatet.")
+        raise ValueError(
+            f"Periodekolonnen {aggregate.periodisering.kolonne} mangler i resultatet."
+        )
 
     try:
         with connection.cursor() as cursor:
