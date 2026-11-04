@@ -1,5 +1,5 @@
 from statistikkprodukt.oracle.metadata import (
-    column_comment_statements,
+    comment_statements,
     parse_metadata,
     read_metadata,
 )
@@ -10,13 +10,13 @@ from statistikkprodukt.oracle.operations import (
     read_query,
     read_target_periods,
     table_exists,
-    write_column_comments,
+    write_comments,
     write_result,
 )
 
 __all__ = [
     "connect",
-    "column_comment_statements",
+    "comment_statements",
     "create_table_statement",
     "parse_metadata",
     "read_metadata",
@@ -24,6 +24,6 @@ __all__ = [
     "read_query",
     "read_target_periods",
     "table_exists",
-    "write_column_comments",
+    "write_comments",
     "write_result",
 ]

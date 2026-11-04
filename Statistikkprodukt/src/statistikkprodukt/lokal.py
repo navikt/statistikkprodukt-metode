@@ -56,13 +56,14 @@ def write_csv(
         frame: pd.DataFrame,
         directory: Path,
         aggregate: SmallAggregate,
+        name: str,
         *,
         dry_run: bool,
 ) -> None:
-    """Skriver aggregatresultatet med konfigurert inkrementell oppførsel."""
-    path = directory / f"{aggregate.tabell}.csv"
+    """Skriver aggregatresultatet til {name}.csv med konfigurert inkrementell oppførsel."""
+    path = directory / f"{name}.csv"
     if frame.empty:
-        print(f"Ingen rader for {aggregate.tabell}; CSV-filen endres ikke.")
+        print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 
     if aggregate.inkrementell != InkrementalMode.OVERSKRIV_ALT:

@@ -7,25 +7,22 @@ from typing import Any
 import oracledb
 import pandas as pd
 from statistikkprodukt.config import (
-    DATABASE_PROFILES,
     DatabaseConnection,
     SmallAggregate,
     validate_identifier,
 )
-from statistikkprodukt.oracle.metadata import TableMetadata, column_comment_statements
+from statistikkprodukt.oracle.metadata import TableMetadata, comment_statements
 
 LOGGER = logging.getLogger(__name__)
 
 
 def connect(configuration: DatabaseConnection) -> oracledb.Connection:
     """Kobler til konfigurert Oracle-database og velger skjema."""
-    profile = DATABASE_PROFILES[configuration.database]
+    host, port, service = configuration.oracle_parameters()
     connection = oracledb.connect(
         user=configuration.user,
         password=configuration.password.get_secret_value(),
-        dsn=oracledb.makedsn(
-            profile["host"], profile["port"], service_name=profile["service_name"]
-        ),
+        dsn=oracledb.makedsn(host, port, service_name=service),
         tcp_connect_timeout=configuration.timeout,
     )
 
@@ -89,7 +86,7 @@ def read_target_periods(
         connection: oracledb.Connection, schema: str, aggregate: SmallAggregate
 ) -> set[int | str]:
     """Henter periodene som allerede finnes i måltabellen."""
-    table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.tabell)}"
+    table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
     period = validate_identifier(aggregate.periodisering)
     return read_periods(connection, f"SELECT {period} FROM {table}", period)
 
@@ -107,27 +104,37 @@ def table_exists(
         return cursor.fetchone() is not None
 
 
-def create_table_statement(schema: str, aggregate: SmallAggregate, sql: str) -> str:
-    """Lager DDL for en tom aggregattabell basert på SQL-spørringens kolonner."""
-    table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.tabell)}"
+def create_table_statement(
+        schema: str, table_name: str, sql: str, *, with_markers: bool = False
+) -> str:
+    """Lager DDL for en tom tabell basert på SQL-spørringens kolonner.
+
+    Kontrolltabellen har i tillegg markørkolonnene primary og suppressed.
+    """
+    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     source_sql = sql.strip().removesuffix(";").rstrip()
+    markers = (
+        ", CAST(NULL AS NUMBER(1)) AS primary, CAST(NULL AS NUMBER(1)) AS suppressed"
+        if with_markers
+        else ""
+    )
     return (
         f"CREATE TABLE {table} AS\n"
-        "SELECT source_data.*, CAST(NULL AS NUMBER(1)) AS prikket\n"
+        f"SELECT source_data.*{markers}\n"
         f"FROM (\n{source_sql}\n) source_data\n"
         "WHERE 1 = 0"
     )
 
 
-def write_column_comments(
+def write_comments(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate,
+        table_name: str,
         metadata: TableMetadata,
 ) -> None:
-    """Oppretter eller oppdaterer målkolonnenes Oracle-kommentarer."""
+    """Oppretter eller oppdaterer tabellens og kolonnenes Oracle-kommentarer."""
     with connection.cursor() as cursor:
-        for statement in column_comment_statements(schema, aggregate, metadata):
+        for statement in comment_statements(schema, table_name, metadata):
             cursor.execute(statement)
 
 
@@ -135,13 +142,14 @@ def write_result(
         connection: oracledb.Connection,
         schema: str,
         aggregate: SmallAggregate,
+        table_name: str,
         frame: pd.DataFrame,
         *,
         dry_run: bool = False,
 ) -> None:
-    """Skriver aggregatresultatet transaksjonelt."""
+    """Skriver aggregatresultatet til tabellen table_name transaksjonelt."""
     if frame.empty:
-        LOGGER.info("Ingen rader for %s; databasen endres ikke.", aggregate.tabell)
+        LOGGER.info("Ingen rader for %s; databasen endres ikke.", table_name)
         return
 
     if dry_run:
@@ -149,13 +157,13 @@ def write_result(
             "Ville skrevet %d rader til %s.%s.",
             len(frame),
             schema,
-            aggregate.tabell,
+            table_name,
         )
         return
 
     qualified_table_name = (
         f"{validate_identifier(schema)}."
-        f"{validate_identifier(aggregate.tabell)}"
+        f"{validate_identifier(table_name)}"
     )
 
     period_column = aggregate.periodisering.lower()

@@ -1,10 +1,11 @@
+from pathlib import Path
 from uuid import uuid4
 
 import oracledb
 import pandas as pd
 import pytest
 from statistikkprodukt import app, oracle
-from statistikkprodukt.config import InkrementalMode, Metadata
+from statistikkprodukt.config import InkrementalMode, Metadata, StorageOption
 from statistikkprodukt.oracle import metadata
 from statistikkprodukt.oracle import (
     write_result,
@@ -114,48 +115,68 @@ def test_create_tables_writes_column_comments_to_all_comments(
         def close(self):
             pass
 
+    table_metadata = Metadata(
+        navn="Tabell",
+        navn_en="Table",
+        innhold="Tabellinnhold",
+        innhold_en="Table content",
+    )
+    expected_table_comment = (
+        "#NAVN Tabell #NAVN_EN Table #INNHOLD Tabellinnhold #INNHOLD_EN Table content"
+    )
     monkeypatch.setattr(app, "_connect", lambda _: ConnectionProxy())
     monkeypatch.setattr(
         oracle,
         "read_metadata",
-        lambda *args: TableMetadata(table=Metadata(), columns=column_metadata),
+        lambda *args: TableMetadata(table=table_metadata, columns=column_metadata),
     )
+    tables = [aggregate.prepub_tabell, aggregate.kontroll_tabell]
 
     try:
         app.create_tables(config, tmp_path, create_in_database=True)
 
-        with oracle_connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT column_name, comments FROM sys.all_col_comments "
-                "WHERE owner = :owner AND table_name = :table_name "
-                "AND comments IS NOT NULL",
-                owner="SYSTEM",
-                table_name=aggregate.tabell.upper(),
-            )
-            comments = dict(cursor.fetchall())
+        for table_name in tables:
+            with oracle_connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT column_name, comments FROM sys.all_col_comments "
+                    "WHERE owner = :owner AND table_name = :table_name "
+                    "AND comments IS NOT NULL",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                comments = dict(cursor.fetchall())
+                cursor.execute(
+                    "SELECT comments FROM sys.all_tab_comments "
+                    "WHERE owner = :owner AND table_name = :table_name",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                table_comment = cursor.fetchone()[0]
 
-        assert comments == {
-            "PERIODE": (
-                "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
-            ),
-            "REGION": (
-                "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
-                "#INNHOLD_EN Geographical area"
-            ),
-            "ANTALL": (
-                "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
-                "#INNHOLD_EN Number of people"
-            ),
-        }
+            assert table_comment == expected_table_comment
+            assert comments == {
+                "PERIODE": (
+                    "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
+                ),
+                "REGION": (
+                    "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
+                    "#INNHOLD_EN Geographical area"
+                ),
+                "ANTALL": (
+                    "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
+                    "#INNHOLD_EN Number of people"
+                ),
+            }
     finally:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-                owner="SYSTEM",
-                table_name=aggregate.tabell.upper(),
-            )
-            if cursor.fetchone():
-                cursor.execute(f"DROP TABLE SYSTEM.{aggregate.tabell} PURGE")
+            for table_name in tables:
+                cursor.execute(
+                    "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                if cursor.fetchone():
+                    cursor.execute(f"DROP TABLE SYSTEM.{table_name} PURGE")
         oracle_connection.commit()
 
 
@@ -167,7 +188,12 @@ def test_write_database_writes_column_comments_to_all_comments(
     aggregate = config.smale_aggregater[0]
     aggregate.tabell = f"sb_test_{uuid4().hex[:12]}"
     metadata = TableMetadata(
-        table=Metadata(),
+        table=Metadata(
+            navn="Tabell",
+            navn_en="Table",
+            innhold="Tabellinnhold",
+            innhold_en="Table content",
+        ),
         columns={
             "periode": Metadata(
                 navn="Periode",
@@ -190,62 +216,86 @@ def test_write_database_writes_column_comments_to_all_comments(
         },
     )
     monkeypatch.setattr(oracle, "read_metadata", lambda *args: metadata)
+    tables = [aggregate.prepub_tabell, aggregate.kontroll_tabell]
 
     try:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(
-                f"CREATE TABLE SYSTEM.{aggregate.tabell} ("
-                "periode NUMBER, region VARCHAR2(100), "
-                "antall NUMBER, prikket NUMBER(1))"
-            )
+            for table_name in tables:
+                cursor.execute(
+                    f"CREATE TABLE SYSTEM.{table_name} ("
+                    "periode NUMBER, region VARCHAR2(100), "
+                    "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
+                )
 
+        frame = pd.DataFrame(
+            {
+                "periode": [202501],
+                "region": ["Oslo"],
+                "antall": [10],
+                "primary": [True],
+                "suppressed": [True],
+            }
+        )
         app._write_database(
             config,
             aggregate,
-            pd.DataFrame(
-                {
-                    "periode": [202501],
-                    "region": ["Oslo"],
-                    "antall": [10],
-                    "prikket": [True],
-                }
+            frame,
+            frame,
+            app.Transfer(
+                oracle_connection,
+                StorageOption.DB,
+                StorageOption.DB,
+                Path("dummy"),
+                Path("dummy")
             ),
-            oracle_connection,
             dry_run=False,
         )
 
-        with oracle_connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT column_name, comments FROM sys.all_col_comments "
-                "WHERE owner = :owner AND table_name = :table_name "
-                "AND comments IS NOT NULL",
-                owner="SYSTEM",
-                table_name=aggregate.tabell.upper(),
-            )
-            comments = dict(cursor.fetchall())
+        for table_name in tables:
+            with oracle_connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT column_name, comments FROM sys.all_col_comments "
+                    "WHERE owner = :owner AND table_name = :table_name "
+                    "AND comments IS NOT NULL",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                comments = dict(cursor.fetchall())
+                cursor.execute(
+                    "SELECT comments FROM sys.all_tab_comments "
+                    "WHERE owner = :owner AND table_name = :table_name",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                table_comment = cursor.fetchone()[0]
 
-        assert comments == {
-            "PERIODE": (
-                "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
-            ),
-            "REGION": (
-                "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
-                "#INNHOLD_EN Geographical area"
-            ),
-            "ANTALL": (
-                "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
-                "#INNHOLD_EN Number of people"
-            ),
-        }
+            assert table_comment == (
+                "#NAVN Tabell #NAVN_EN Table #INNHOLD Tabellinnhold "
+                "#INNHOLD_EN Table content"
+            )
+            assert comments == {
+                "PERIODE": (
+                    "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
+                ),
+                "REGION": (
+                    "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
+                    "#INNHOLD_EN Geographical area"
+                ),
+                "ANTALL": (
+                    "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
+                    "#INNHOLD_EN Number of people"
+                ),
+            }
     finally:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-                owner="SYSTEM",
-                table_name=aggregate.tabell.upper(),
-            )
-            if cursor.fetchone():
-                cursor.execute(f"DROP TABLE SYSTEM.{aggregate.tabell} PURGE")
+            for table_name in tables:
+                cursor.execute(
+                    "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
+                    owner="SYSTEM",
+                    table_name=table_name.upper(),
+                )
+                if cursor.fetchone():
+                    cursor.execute(f"DROP TABLE SYSTEM.{table_name} PURGE")
         oracle_connection.commit()
 
 
@@ -262,7 +312,8 @@ def test_empty_database_result_does_not_inspect_or_mutate_connection():
         NoDatabaseCalls(),
         "TEST",
         aggregate,
-        pd.DataFrame(columns=["periode", "region", "antall", "prikket"]),
+        "tabell_prepub",
+        pd.DataFrame(columns=["periode", "region", "antall", "primary", "suppressed"]),
     )
 
 
@@ -275,7 +326,7 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{table} ("
                 "periode NUMBER, region VARCHAR2(100), "
-                "antall NUMBER, prikket NUMBER(1))"
+                "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
             )
 
         with pytest.raises(oracledb.DatabaseError):
@@ -283,6 +334,7 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
                 oracle_connection,
                 "SYSTEM",
                 aggregate,
+                table,
                 pd.DataFrame(
                     {"periode": [202501], "region": ["Oslo"], "ukjent": [10]}
                 ),
@@ -326,18 +378,19 @@ def test_read_query_binds_string_periods_in_oracle(oracle_connection):
 
 def test_read_target_periods_uses_configured_schema(oracle_connection):
     table = f"sb_test_{uuid4().hex[:12]}"
+    prepub_table = f"{table}_prepub"
     aggregate = configuration().smale_aggregater[0].model_copy(update={"tabell": table})
     try:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"CREATE TABLE SYSTEM.{table} (periode NUMBER(6,0))")
+            cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode NUMBER(6,0))")
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{table} (periode) VALUES (:1)",
+                f"INSERT INTO SYSTEM.{prepub_table} (periode) VALUES (:1)",
                 [(202501,), (202502,), (202502,)],
             )
         assert read_target_periods(oracle_connection, "SYSTEM", aggregate) == {202501, 202502}
     finally:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"DROP TABLE SYSTEM.{table} PURGE")
+            cursor.execute(f"DROP TABLE SYSTEM.{prepub_table} PURGE")
         oracle_connection.commit()
 
 
@@ -385,15 +438,17 @@ def test_process_aggregate_only_masks_selected_periods(
         "union all select 202502, 'Oslo', 20 from dual "
         "union all select 202503, 'Oslo', 30 from dual;"
     )
-    original_prikking = app.prikking
     # == periods passed to prikking will be loaded in the database.
     # Store those here to use in an assert later on
     masked_periods = []
 
     # Record the periods passed to masking, independently of the resulting table contents.
-    def mask(data, **kwargs):
+    def mask(data, *args, **kwargs):
         masked_periods.extend(data["periode"].tolist())
-        return original_prikking(data, **kwargs)
+        result = data.copy()
+        result["primary"] = pd.Series(True, index=result.index, dtype=bool)
+        result["suppressed"] = pd.Series(True, index=result.index, dtype=bool)
+        return data.copy(), result
 
     monkeypatch.setattr(app, "prikking", mask)
     monkeypatch.setattr(
@@ -401,41 +456,53 @@ def test_process_aggregate_only_masks_selected_periods(
         "read_metadata",
         lambda *args: TableMetadata(table=Metadata(), columns={}),
     )
-    monkeypatch.setattr(oracle, "write_column_comments", lambda *args: None)
+    monkeypatch.setattr(oracle, "write_comments", lambda *args: None)
+    prepub_table = f"{table}_prepub"
+    kontroll_table = f"{table}_kontroll"
     try:
         with oracle_connection.cursor() as cursor:
             cursor.execute(
-                f"CREATE TABLE SYSTEM.{table} ("
+                f"CREATE TABLE SYSTEM.{prepub_table} ("
+                "periode NUMBER, region VARCHAR2(100), antall NUMBER)"
+            )
+            cursor.execute(
+                f"CREATE TABLE SYSTEM.{kontroll_table} ("
                 "periode NUMBER, region VARCHAR2(100), "
-                "antall NUMBER, prikket NUMBER(1))"
+                "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
             )
-            cursor.executemany(
-                f"INSERT INTO SYSTEM.{table} VALUES (:1, :2, :3, :4)",
-                [(202500, "Oslo", 0, 1), (202501, "Oslo", 1, 1), (202502, "Oslo", 2, 1)],
-            )
+            existing = [(202500, "Oslo", 0), (202501, "Oslo", 1), (202502, "Oslo", 2)]
             if mode == "overskriv_siste_periode":
                 # Make 202503 the existing latest period so this mode must replace it.
-                cursor.execute(
-                    f"INSERT INTO SYSTEM.{table} VALUES (:1, :2, :3, :4)",
-                    [202503, "Oslo", 3, 1],
-                )
+                existing.append((202503, "Oslo", 3))
+            cursor.executemany(
+                f"INSERT INTO SYSTEM.{prepub_table} VALUES (:1, :2, :3)", existing
+            )
+            cursor.executemany(
+                f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, :3, 1, 1)",
+                existing,
+            )
 
         app._process_aggregate(
             config,
             aggregate,
             tmp_path,
-            oracle_connection,
-            input_directory=None,
-            output_directory=None,
+            app.Transfer(
+                oracle_connection,
+                StorageOption.DB,
+                StorageOption.DB,
+                Path("dummy"),
+                Path("dummy"),
+            ),
             dry_run=False,
         )
 
         assert sorted(masked_periods) == loaded
         with (oracle_connection.cursor() as cursor):
-            cursor.execute(f"SELECT periode, antall FROM SYSTEM.{table} ORDER BY periode")
-            available = cursor.fetchall()
-            assert available == expected
+            for name in (prepub_table, kontroll_table):
+                cursor.execute(f"SELECT periode, antall FROM SYSTEM.{name} ORDER BY periode")
+                assert cursor.fetchall() == expected
     finally:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"DROP TABLE SYSTEM.{table} PURGE")
+            cursor.execute(f"DROP TABLE SYSTEM.{prepub_table} PURGE")
+            cursor.execute(f"DROP TABLE SYSTEM.{kontroll_table} PURGE")
         oracle_connection.commit()

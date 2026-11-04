@@ -1,73 +1,193 @@
 # Statistikkprodukt
 
-`statistikkprodukt` lager små statistikkaggregater og markerer rader som er behandlet av prikking. Verktøyet kan hente data fra Oracle eller lokale CSV-filer og lagre resultatet i Oracle eller CSV.
+`statistikkprodukt` er et verktøy for datateam for å lage statistikkaggregater med Gaussian Suppression prikking/maskering av små verdier for personvernhensyn.
+
+Verktøyet konfigureres med yaml filer og kan håndtere flere aggregater samtidig.
+
+For hver aggregat::
+- Lese data fra Oracle/CSV inkrementell
+- Kjøre Gaussian Suppression algoritme implementert i R for hver 
+- Lagre resultatet i Oracle/CSV
+- Les metadata fra en bredt aggregat tabell (obt), oppdater fra konfigurasjonsfilen, skriv som databasekommentarer-
+
+For hver aggregat lages to resultattabeller: `{tabell}_prepub` med de prikkede dataene, og `{tabell}_kontroll` med kontrolldata for feilsøking.
 
 Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerhåndbok.
 
 ## Kom i gang
 
-Installer Python 3.12 eller nyere, R og pakkene fra prosjektet:
-
+### Lokal / KNAST
+Last ned repositoriet og installer python avhengigheter:
 ```sh
 uv sync
 uv run statistikkprodukt --help
 ```
 
-Kjør eksempelet, som leser to CSV-filer fra `eksempel/inputs/` og skriver resultatene til `eksempel/outputs/`, uten Oracle-tilkobling eller hemmeligheter:
-
+KNAST har allerede R installert. For å installere eller oppdatere R avhengighetene for prikking, kjør:
 ```sh
-uv run statistikkprodukt last \
-  --config eksempel/konfigurasjon.yml \
-  --input-directory inputs/ \
-  --output-directory outputs/
+uv run statistikkprodukt installer-r-pakker
 ```
 
-Kjør med `--dry-run` for å se planlagte endringer uten å skrive filer.
+Kjør eksempelet, som leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`, uten Oracle-tilkobling eller hemmeligheter:
 
-`--input-directory` velger CSV som kilde, og `--output-directory` velger CSV som mål. Uten disse valgene leses data fra eller skrives til Oracle. Eksisterende resultatfiler overskrives. Et tomt resultat endrer ikke dataradene i Oracle, men kolonnekommentarene synkroniseres ved databaseskriving.
+```sh
+cd Statistikkprodukt/eksempel
+uv run statistikkprodukt last \
+  --config konfigurasjon.yml \
+  --kilde=csv \
+  --maal=csv
+```
 
-Opprett en tom måltabell basert på SQL-spørringen og skriv DDL med kolonnekommentarer til standard output:
+Konfigurasjonsmuligheter:
+- `--dry-run` viser planlagte endringer uten å modifisere data.
+- `--kilde`/`--maal` er enten `db` (default) eller `csv`
+- `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
+
+Det betyr man kan:
+- Skrive fra Oracle til Oracle, normal ETL.
+- Skrive fra CSV-filer til CSV-filer, uten Oracle-tilkobling, bra for testing.
+- Skrive fra Oracle til CSV-filer, bra for testing.
+- Skrive fra CSV-filer til Oracle, for eventuell manuell overstyring.
+
+Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
+```shell
+uv run statistikkprodukt last --config konfigurasjon.yml ost_befolkning_alder ost_befolkning_kjonn
+```
+
+### Mot databasen
+
+Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test obt tabell.
+
+Modifiser `eksempel/konfigurasjon.yml` med riktig databaseprofil:
+```yaml
+connection:
+  host: oracle.example.no
+  port: 1521
+  service: my_service
+  user: my_user[my_schema]
+  password: terminal://
+```
+
+Opprett småaggregat-tabellene i Oracle med følgende kommando:
+- ost_befolkning_alder_prepub
+- ost_befolkning_alder_kontroll
+- ost_befolkning_kjonn_prepub
+- ost_befolkning_kjonn_kontroll
+
+```shell
+cd Statistikkprodukt/eksempel
+statistikkprodukt skjema opprett --config konfigurasjon.yml
+```
+
+Kjør lasten fra databasen til csv:
+```shell
+uv run statistikkprodukt last --config konfigurasjon.yml --maal=csv
+```
+
+CSV filene i `data_ut` overskrives, men de skal ikke endre seg, siden eksempelet er ekvivalent med lasten fra csv til csv.
+Du kan slette de for å verifisere at data kommer inn det.
+
+Kjør lasten fra databasen til databasen:
+```shell
+uv run statistikkprodukt last --config konfigurasjon.yml
+```
+
+Sjekk resultatene i Oracle:
+```sql
+select * from ost_befolkning_alder_kontroll;
+-- ... og andre ost tabeller
+```
+
+# System dokumentasjon
+## Databaseskjema 
+Databasetabeller kan opprettes som følger:
 
 ```sh
 # For alle aggregater i konfigurasjonen
-uv run statistikkprodukt skjema opprett --config eksempel/konfigurasjon.yml
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml
 
 # For enkelte aggregater
-uv run statistikkprodukt skjema opprett --config eksempel/konfigurasjon.yml aggregat1 aggregat2
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml ost_2 ost_1
 ```
 
-Kommandoen bruker den konfigurerte Oracle-tilkoblingen til å sjekke målskjemaet og hente metadata. Tabeller som finnes fra før, hoppes over. Legg til `--db` for å utføre DDL-en i Oracle i stedet for å skrive den ut. Tabellen opprettes uten rader ved hjelp av `WHERE 1 = 0`.
+Det opprettes to tabeller per aggregat.
+```sql
+create table ost_1_kontroll (
+  -- Fra SQL spørringen:
+  periode_kolonne varchar2(10),
+  variabel1_kolonne varchar2(10),
+  variabel2_kolonne varchar2(10),
+  -- tall som ikke er prikket
+  tall_kolonne number,
+    
+  -- Lagd til:
+  -- primærprikking (små tall) 1/0 for ja/nei
+  primary number, 
+  -- sekundærprikking via gaussian suppression 1/0 for ja/nei
+  suppressed number
+);
 
-Prikking er foreløpig ikke implementert: resultatet får en boolsk `prikket`-kolonne med verdien `True`. R-integrasjonen er klargjort, men kjøres ikke ennå.
+create table ost_1_prepub (
+  -- Fra SQL spørringen:
+  periode_kolonne varchar2(10),
+  variabel_kolonne varchar2(10),
+  -- nan når det er prikket
+  tall_kolonne number
+);
+```
 
 ## Konfigurasjon
 
-Konfigurasjonen er delt i én felles fil og én YAML-fil per småaggregat. Den felles filen inneholder databasetilkobling, søkemønstre for aggregatfilene og navnene på aggregatene som skal kjøres:
+### Hovedkonfigurasjonsfil
+Konfigurasjonen er delt i én felles fil og én YAML-fil per småaggregat. Den felles filen inneholder databasetilkobling, søkemønstre for aggregatfilene og navnene på aggregatene som skal kjøres. Lag ulike filer for ulike miljøer
 
 ```yaml
 connection:
-  # Velger forhåndsdefinerte verdier for vert, port og tjenestenavn.
+  # Velg enten en profil ...
   database: DWHP
+  # ... eller oppgi alle verdiene direkte i stedet:
+  # host: oracle.example.no
+  # port: 1521
+  # service: ORCL
   schema: mitt_skjemanavn
   # Bruker kan oppgis direkte eller hentes fra en støttet hemmelighetskilde.
   user: gsm://projects/my_project/secrets/my_secret/versions/latest/username
   password: gsm://projects/my_project/secrets/my_secret/versions/latest/password
   timeout: 30
 
+# Hvor i repositoriet aggregatkonfigurasjonen finnes
 mapper:
   - aggregater/**
 
+# Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `mapper`.
 smale_aggregater:
   - ost_befolkning_alder
   - ost_befolkning_kjonn
 ```
 
-Hvert navn i `smale_aggregater` må finnes blant YAML-filene som treffes av `mapper`. Hver aggregatfil inneholder én definisjon under `definisjon`. Filnavnet bestemmer måltabellen (`tabell`) og navnet på SQL-filen: `sporringer/ost_befolkning_alder.yml` gir tabellen `ost_befolkning_alder` og SQL-filen `sporringer/ost_befolkning_alder.sql`. Ikke angi `tabell` eller `sporring_sql` i aggregatfilen.
+Mer om lasting av hemmeligheter følger.
+
+## Konfigurasjon per småaggregat
+
+Per småaggregat må det lages:
+- `{aggregatnavn}.yml` som konfigurasjon
+- `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
+
 
 Eksempel på aggregatfil:
 
 ```yaml
 definisjon:
+  # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
+  # Format: NAV2[10000-29999]
+  nav_id: NAV21000
+  # Metadata per småaggregat, påkrevd  
+  navn: "Kort navn på norsk"
+  navn_en: "Short name in English"
+  innhold: "Beskrivelse av innhold på norsk"
+  innhold_en: "Description of content in English"
+  
+  # Konfigurasjon av aggregat
   obt_tabell: befolkning
   periodisering: periode  # kolonnenavn for periodisering
   inkrementell: overskriv_alt  # overskriv_ikke, overskriv_alt, overskriv_siste_periode
@@ -81,11 +201,133 @@ definisjon:
     - kolonne: alder
 ```
 
-`obt_tabell` angir OBT-tabellen som er datagrunnlaget som det smale aggregatet bygges fra i SQL spørringen. Den brukes når metadata mangler i YAML-filen. Den kan oppgis som `SKJEMA.TABELL`; uten skjema brukes verdien fra `connection.schema`. Metadatafeltene `navn`, `navn_en`, `innhold` og `innhold_en` er valgfrie når de finnes i databasekommentarene. Kommentarene må bruke taggene `#NAVN`, `#NAVN_EN`, `#INNHOLD` og `#INNHOLD_EN`. Metadata er ikke nødvendig når både input og output er lokale CSV-filer.
+`obt_tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata.
 
-`password` må være en hemmelighetsreferanse, ikke et passord i klartekst. Støttede former er `env://VARIABEL`, `terminal://` og `gsm://projects/.../secrets/.../versions/...`; for GSM kan siste stisegment angi en nøkkel i en flat JSON-verdi. `terminal://` virker bare når programmet kjøres fra en terminal.
+Metadata på variabler og tallkolonne kommer fra kolonnekommentarer med tags:
+- `#NAVN` for norsk navn
+- `#NAVN_EN` for engelsk navn
+- `#INNHOLD` for norsk beskrivelse
+- `#INNHOLD_EN` for engelsk beskrivelse
 
-`inkrementell` kan være `overskriv_ikke` (legg til perioder som ikke finnes), `overskriv_alt` (erstatt alle perioder returnert fra spørringen, men ikke slett andre i smalagreggatet) eller `overskriv_siste_periode` (erstatt siste periode i resultatet). Bruk `--dry-run` for å se hva kjøringen vil gjøre uten å skrive til databasen eller CSV-filer.
+De kan overskrives med:
+```yaml
+# ...
+  tallkolonne:
+    kolonne: antall
+    navn: "Navn på norsk"
+    navn_en: "Name in English"
+    innhold: "Beskrivelse på norsk"
+    innhold_en: "Description in English"
+  variabler:
+    - kolonne: periode
+      navn: "Navn på norsk"
+      # ...
+```
+
+### Inkrementelle laster
+
+Følgende inkrementelle strategier er støttet. Inkrementelle laster baserer seg på periodekolonnen.
+
+#### `overskriv_ikke`
+
+Laster kun nye perioder:
+```text
+# I kilden
+202501
+202502
+202503
+
+# I målet
+202502
+
+# Lastet
+202501
+202503
+```
+
+#### `overskriv_alt`
+
+Overskrive alle perioder som finnes i kilden. Perioder som ikke finnes i kilden, men som finnes i målet, beholdes.
+
+```text
+# I kilden
+202501
+202502
+202503
+
+# I målet
+202412
+202502
+
+# Lastet
+202501
+202501
+202503
+
+# Perioden 202412 beholdes.
+```
+
+#### `overskriv_siste_periode`
+
+Som `overskriv_ikke`, men den nyeste perioden i målet overskrives. 
+
+```text
+# I kilden
+202412
+202501
+202502
+202503
+
+# I målet
+202501
+202502
+
+# Lastet
+202412
+202502
+202503
+```
+
+### Hemmeligheter
+
+Hemmeligheter kan lastes fra Google Secret Manager (GSM), miljøvariabler eller terminalen (lokal utvikling).
+
+NB at passordet _må_ være en hemmelighetsreferanse, der er ikke mulig å legge inn passord i klartekst.
+
+#### GSM
+
+```yaml
+  user: gsm://projects/my_project/secrets/my_secret/versions/latest/username
+  password: gsm://projects/my_project/secrets/my_secret/versions/latest/password
+```
+Leser fra hemmeligheten `my_secret` i prosjektet `my_project`. Det forventes at den inneholder en JSON-string, og den pakkes ut med nøklene `username` og `password`. De kan velges fritt. 
+
+Nøklene er valgfritt, man kan også bruke hele hemmeligheten som en enkel verdi:
+```yaml
+  user: my_user
+  password: gsm://projects/my_project/secrets/my_secret/versions/latest
+```
+
+#### Miljøvariabler
+
+```yaml
+  user: env://DB_USER
+  password: env://DB_PASSWORD
+```
+
+#### Lokal utvikling
+
+Lag deg en egen fil til lokal utvikling, ikke sjekk den inn i versjonskontroll.
+
+```yaml
+  user: my_ident
+  password: terminal://
+```
+
+Da leses hemmeligheten fra terminalen.
+
+Vi jobber på å få integrasjon med KNAST sin `dvh` kommandoen for å slippe å taste passord ved hver kjøring.
+
 
 # Bruk av KI
 

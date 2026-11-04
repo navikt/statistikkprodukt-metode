@@ -175,8 +175,9 @@ def _get_named_container(client):
 
 def _connect_testenv_oracle(**kwargs) -> oracledb.Connection:
     """Oppretter en Oracle-tilkobling til testmiljøet."""
+    user = kwargs.pop("user", ORACLE_USER)
     return oracledb.connect(
-        user=ORACLE_USER,
+        user=user,
         password=ORACLE_PASSWORD,
         dsn=oracledb.makedsn(
             "127.0.0.1", CONTAINER_PORT, service_name=ORACLE_SERVICE

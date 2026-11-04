@@ -27,47 +27,23 @@ R/
 
 ## Utviklingsmiljø
 
-Prosjektet bruker `uv`, Python 3.14 eller nyere, Oracle Database-driveren, pandas, Pydantic, R og rpy2.
-
-```sh
-uv sync
-uv run pytest test/test_config.py
-```
-
-## Konfigurasjon
-
-`--config` peker på en YAML-fil med databaseinnstillinger, søkemønstre i `mapper` og listen `smale_aggregater` over hvilke aggregater som skal kjøres. Mønstrene finner aggregatfilene; de velger ikke aggregatene. Hvert aggregatnavn må være unikt og samsvare med YAML-filens navn. `tabell` utledes fra filnavnet, og `sporring_sql` blir samme relative sti med `.sql`-endelse. SQL-stien er relativ til hovedkonfigurasjonen, for eksempel gir `sporringer/ost_befolkning_alder.yml` tabellen `ost_befolkning_alder` og SQL-filen `sporringer/ost_befolkning_alder.sql`.
-
-`statistikkprodukt skjema opprett` bruker samme konfigurerte Oracle-tilkobling til SQL-kilde og måltabell. Den skriver DDL med `WHERE 1 = 0` og kolonnekommentarer til standard output; `--db` utfører DDL-en i databasen. Tabeller som allerede finnes, hoppes over og logges.
-
-```yaml
-connection:
-  database: DWHP
-  schema: STATISTIKKPRODUKT
-  user: env://ORACLE_USER
-  password: env://ORACLE_PASSWORD
-mapper:
-  - aggregater/**
-smale_aggregater:
-  - ost_befolkning_alder
-  - ost_befolkning_kjonn
-```
+I tillegg til det som skal installeres i brukerdokuentasjon trenger man docker, colima eller podman for å kunne kjøre integrasjonstester med Oracle. 
 
 ## Integrasjonstester med Oracle
 
-Oracle-testmiljøet må administreres utenfor Copilot-sandkassen:
+Testene starter er en Oracle-testcontainer som kjører i bakgrunnen. Det skjer automatisk som del av testmiljø oppsett, men det kan også gjøres manuelt. Det kan være en fordel når man kjører en agent i en sandbox, som ikke skal ha tilgang til docker styring.
 
 ```sh
 uv run statistikkprodukt testenv setup
 uv run statistikkprodukt testenv teardown
 ```
 
-Inne i sandkassen kjøres tester mot det eksternt startede miljøet med:
+Containeren blir værende mellom testkjøringer som ytelsesoptimering.
+
+Start testene som følger:
 
 ```sh
 uv run statistikkprodukt testenv pytest
-# eller med argumenter:
+# eller med argumenter til pytest, som må følge '--':
 uv run statistikkprodukt testenv pytest -- -q
 ```
-
-Utenfor sandkassen håndteres testmiljøet automatisk.

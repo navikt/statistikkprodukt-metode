@@ -17,7 +17,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 3. **Oracle connection profiles:** Allowed values for `connection.database` are `DWHP`, `DWHQ`, `DWHU`, and `DWHR`. Use placeholder mappings for host, port, and service name for now.
 4. **Secret references:** Support the URI forms shown in the configuration example. Google Secret Manager payloads are UTF-8 strings and may contain a flat JSON object. Allow `terminal://` only when stdin is a TTY. Fail if a referenced value is missing.
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
-6. **Database writes:** `tabell` is the target table name. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
+6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
 7. **Incremental modes:** The modes operate on the configured period column:
    - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
    - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
@@ -25,8 +25,8 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 8. **Period values:** Periods may be integers, such as `YYYYMM`, or strings. Assume values of the chosen type are sortable.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
-11. **Local CSV mode:** Specifying `--input-directory` selects CSV input; without it, input comes from the database. Specifying `--output-directory` selects CSV output; without it, output goes to the database. Both CSV files are named `{tabell}.csv` and are distinguished by their input and output directories. OBT source data are queried only through the SQL query; `obt_tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
-12. **R boundary:** `prikking` currently returns the input dataframe with one new Boolean column, `prikket`, set to `True`; all input dtypes are preserved. Persist only the input columns and `prikket`. The prepared R function sources the script directly rather than loading it as an installed R package.
+11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `obt_tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
+12. **R boundary:** `prikking` calls the R script and returns two dataframes, one masked and one with added metadata for debugging.
 13. **Language and errors:** CLI help and output, configuration validation, logs, documentation, and other user-facing errors must be in Norwegian. Exit with `0` for success, `2` for CLI or configuration errors, and `1` for operational failures.
 14. **Container:** Use an Ubuntu base image and install Python and R. Defer a Chainguard-based image.
 15. **Integration tests:** Tests may require Docker and use a fixed host port. CI will not run these tests in parallel.
@@ -59,8 +59,12 @@ Do not change the database schema. If an insert is incompatible with the existin
 The shared configuration file contains connection settings and patterns for finding aggregate definitions:
 ```yaml
 connection:
-  # selects preconfigured values for host, port, and service_name
+  # Select either a predefined profile ...
   database: DWHP
+  # ... or specify all connection values directly instead:
+  # host: oracle.example.no
+  # port: 1521
+  # service: myservice
   schema: my_schema # Set this as session default when connecting
   # Values may be literal strings or references using one of these forms:
   # user: my_username
@@ -84,6 +88,11 @@ smale_aggregater:
 Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `smale_aggregater` must be globally unique:
 ```yaml
 definisjon:
+  navn: Befolkning etter alder
+  navn_en: Population by age
+  innhold: Befolkning fordelt etter periode og alder.
+  innhold_en: Population distributed by period and age.
+  nav_id: NAV21000
   obt_tabell: obt_befolkning
   periodisering: periode
   inkrementell: overskriv_alt
@@ -123,17 +132,18 @@ statistikkprodukt last --dry-run
 statistikkprodukt last --log-level=WARN
 statistikkprodukt last --verbose
 
-# Skriv til CSV i stedet for database (for eksempel til output/ost_tabellnavn_beskrivende.csv)
-statistikkprodukt last --output-directory=output/
+# Skriv til CSV i stedet for database (for eksempel til data_ut/ost_tabellnavn_beskrivende.csv)
+statistikkprodukt last --maal=csv
 
 # Les fra CSV i stedet for database. Filnavnet følger verdien i `tabell`,
 # for eksempel `tabell: ost_tabellnavn_beskrivende`
-# -> input/ost_tabellnavn_beskrivende.csv
-statistikkprodukt last --input-directory=input/
+# -> data_inn/ost_tabellnavn_beskrivende.csv
+statistikkprodukt last --kilde=csv
 
-# Lokal innlesing og utskriving kan kombineres
+# Lokal innlesing og utskriving kan kombineres, valgfritt med mappe (vist er default)
 statistikkprodukt last \
-  --input-directory=input/ --output-directory=output/
+  --kilde=csv --maal=csv \
+  --kilde-mappe=data_inn --maal-mappe=data_ut
 
 # Ikke les hemmeligheter, hvis ikke det er behov for det
 

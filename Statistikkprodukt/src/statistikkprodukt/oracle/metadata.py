@@ -17,21 +17,23 @@ class TableMetadata:
     columns: dict[str, Metadata]
 
 
-def column_comment_statements(
-        schema: str, aggregate: SmallAggregate, metadata: TableMetadata
+def _format_comment(metadata: Metadata) -> str:
+    comment = " ".join(
+        f"#{tag.upper()} {getattr(metadata, tag)}" for tag in Metadata.model_fields
+    )
+    return comment.replace("'", "''")
+
+
+def comment_statements(
+        schema: str, table_name: str, metadata: TableMetadata
 ) -> list[str]:
-    """Lager Oracle-setninger for kommentarer på aggregatets kolonner."""
-    table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.tabell)}"
-    statements = []
+    """Lager Oracle-setninger for kommentarer på tabellen og kolonnene."""
+    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+    statements = [f"COMMENT ON TABLE {table} IS '{_format_comment(metadata.table)}'"]
     for column, column_metadata in metadata.columns.items():
         qualified_column = f"{table}.{validate_identifier(column)}"
-        comment = " ".join(
-            f"#{tag.upper()} {getattr(column_metadata, tag)}"
-            for tag in Metadata.model_fields
-        )
-        escaped_comment = comment.replace("'", "''")
         statements.append(
-            f"COMMENT ON COLUMN {qualified_column} IS '{escaped_comment}'"
+            f"COMMENT ON COLUMN {qualified_column} IS '{_format_comment(column_metadata)}'"
         )
     return statements
 
