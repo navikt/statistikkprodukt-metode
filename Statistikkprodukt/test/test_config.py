@@ -6,6 +6,7 @@ from statistikkprodukt.config import (
     Configuration,
     ConfigurationSource,
     SmallAggregate,
+    TellerVariable,
     load_configuration,
     resolve_secret,
 )
@@ -39,7 +40,7 @@ def configuration():
                         "innhold-en": "Month period",
                     },
                     "inkrementell-strategi": "overskriv_ikke",
-                    "teller": {"kolonne": "antall"},
+                    "teller": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
                     "saerskilt": False,
@@ -94,11 +95,11 @@ definisjon:
     innhold-en: Month
   inkrementell-strategi: overskriv_ikke
   teller:
-    navn: Antall
-    navn-en: Count
-    kolonne: antall
-    innhold: Antall i gruppen
-    innhold-en: Count in group
+    - navn: Antall
+      navn-en: Count
+      kolonne: antall
+      innhold: Antall i gruppen
+      innhold-en: Count in group
   formula: "~ periode * region"
   prikking: true
   saerskilt: false
@@ -121,7 +122,8 @@ definisjon:
     assert aggregate.sporring_sql == "aggregater/tabell.sql"
     assert aggregate.periodisering.kolonne == "periode"
     assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
-    assert aggregate.teller.kolonne == "antall"
+    assert isinstance(aggregate.teller[0], TellerVariable)
+    assert aggregate.teller[0].kolonne == "antall"
 
 
 def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
@@ -155,7 +157,7 @@ definisjon:
     kolonne: periode
   inkrementell-strategi: overskriv_ikke
   teller:
-    kolonne: antall
+    - kolonne: antall
   formula: "~ periode * region"
   prikking: true
   saerskilt: false

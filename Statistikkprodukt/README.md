@@ -200,11 +200,11 @@ definisjon:
     innhold-en: Month period
   
   teller:
-    kolonne: antall
-    navn: Antall personer
-    navn-en: Number of people
-    innhold: Antall personer i gruppen.
-    innhold-en: Number of people in the group.
+    - kolonne: antall
+      navn: Antall personer
+      navn-en: Number of people
+      innhold: Antall personer i gruppen.
+      innhold-en: Number of people in the group.
     
   variabler:
     - kolonne: alder

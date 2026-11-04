@@ -15,11 +15,11 @@ definisjon:
     innhold-en: Month in YYYYMM format.
 
   teller:
-    navn: Antall personer
-    navn-en: Number of people
-    kolonne: antall
-    innhold: Antall personer i gruppen.
-    innhold-en: Number of people in the group.
+    - navn: Antall personer
+      navn-en: Number of people
+      kolonne: antall
+      innhold: Antall personer i gruppen.
+      innhold-en: Number of people in the group.
 
   variabler:
     - navn: Alder

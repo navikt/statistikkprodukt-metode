@@ -223,7 +223,7 @@ def _process_aggregate(
         data,
         aggregate.periodisering.kolonne,
         aggregate.formula,
-        aggregate.teller.kolonne,
+        aggregate.teller[0].kolonne,
         aggregate.prikking,
         aggregate.saerskilt,
     )

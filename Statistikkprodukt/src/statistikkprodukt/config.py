@@ -164,6 +164,10 @@ class Variable(StrictModel):
         return value.strip() or None if isinstance(value, str) else value
 
 
+class TellerVariable(Variable):
+    pass
+
+
 class SmallAggregate(StrictModel):
     id: AggregateId
     navn: str
@@ -175,7 +179,7 @@ class SmallAggregate(StrictModel):
     sporring_sql: NonEmptyString
     periodisering: Variable
     inkrementell_strategi: InkrementalMode = Field(alias="inkrementell-strategi")
-    teller: Variable
+    teller: list[TellerVariable] = Field(min_length=1, max_length=1)
     formula: NonEmptyString
     prikking: bool
     saerskilt: bool
@@ -225,9 +229,9 @@ class SmallAggregate(StrictModel):
             raise ConfigError("variabler kan ikke inneholde gjentatte kolonner")
         if self.periodisering.kolonne in columns:
             raise ConfigError("periodisering.kolonne kan ikke også være en variabel")
-        if self.teller.kolonne in columns:
+        if any(t.kolonne in columns for t in self.teller):
             raise ConfigError("teller kan ikke også være en variabel")
-        if self.teller.kolonne == self.periodisering.kolonne:
+        if any(t.kolonne == self.periodisering.kolonne in columns for t in self.teller):
             raise ConfigError("teller.kolonne kan ikke være periodisering.kolonne")
         return self
 

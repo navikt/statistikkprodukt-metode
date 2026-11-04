@@ -63,11 +63,11 @@ definisjon:
     innhold-en: Period.
   inkrementell-strategi: overskriv_alt
   teller:
-    navn: Antall
-    navn-en: Count
-    kolonne: antall
-    innhold: Summert antall.
-    innhold-en: Summed count.
+    - navn: Antall
+      navn-en: Count
+      kolonne: antall
+      innhold: Summert antall.
+      innhold-en: Summed count.
   formula: "~ periode / region"
   prikking: true
   saerskilt: false

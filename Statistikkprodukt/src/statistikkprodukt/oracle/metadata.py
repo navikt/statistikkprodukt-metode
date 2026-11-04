@@ -63,7 +63,7 @@ def read_metadata(
         for variable in [
             aggregate.periodisering,
             *aggregate.variabler,
-            aggregate.teller,
+            *aggregate.teller,
         ]:
             column = variable.kolonne
             db_metadata = _fetch_column_metadata(

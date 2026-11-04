@@ -102,7 +102,7 @@ definisjon:
     innhold-en: Month period
   inkrementell-strategi: overskriv_alt
   teller:
-    kolonne: antall
+    - kolonne: antall
   formula: "~ periode * alder"
   prikking: true
   saerskilt: false
@@ -206,7 +206,7 @@ for sub in df[periode].unique():
     r_result = r_prikking(
         data = sub_df, 
         formula = config["formula"], 
-        tallKol = config['aggregater']['teller']['kolonne'],
+        tallKol = config['aggregater']['teller'][0]['kolonne'],
         prikking = config["prikking"], 
         saerskilt = config["saerskilt"]
     )
