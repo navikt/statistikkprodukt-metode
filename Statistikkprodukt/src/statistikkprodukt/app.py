@@ -148,22 +148,21 @@ def create_tables(
 
 def installer_r_pakker() -> None:
     """Installerer R-pakker som kreves for prikking."""
-    import rpy2.robjects.packages as rpackages
+    import rpy2.robjects
+    import rpy2.robjects.packages
+    import rpy2.rinterface
     from rpy2.robjects.vectors import StrVector
 
-    # Bootstrap the 'pak' installation if it doesn't exist in your R library
-    if not rpackages.isinstalled('pak'):
-        LOGGER.info("Installere 'pak' pakken...")
-        utils = rpackages.importr('utils')
-        # Cannot use CRAN directly in KNAST, need a proxy
-        utils.chooseCRANmirror(ind=1)
-        utils.install_packages(StrVector(['pak']))
+    pkg_dir = Path(__file__).parents[3] / "NavDataprodukt"
 
-    pak = rpackages.importr('pak')
-
-    # Install the prikking package from GitHub
-    LOGGER.info("Insatllere 'NavDataprodukt' fra github...")
-    pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt", upgrade=True)
+    LOGGER.info("Installere 'NavDataprodukt'...")
+    utils = rpy2.robjects.packages.importr('utils')
+    utils.install_packages(StrVector(['SSBtools', 'GaussSuppression', 'openxlsx', 'readxl', 'DBI', 'odbc', 'rstudioapi']), dependencies=True)
+    utils.install_packages(
+        StrVector([str(pkg_dir)]),
+        repos=rpy2.rinterface.NULL,
+        type="source"
+        )
 
 
 def _select_aggregates(
