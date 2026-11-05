@@ -4,7 +4,15 @@ import numpy as np
 import pandas as pd
 from statistikkprodukt.app import run
 from statistikkprodukt.config import StorageOption
+from statistikkprodukt.lokal import validate_columns
 from test.test_config import configuration
+
+
+def test_csv_columns_include_periodisering_separately():
+    """Godtar periodekolonnen selv om den ikke står i variabler."""
+    frame = pd.DataFrame(columns=["periode", "region", "antall"])
+
+    validate_columns(frame, configuration().aggregater[0])
 
 
 def test_csv_masked(tmp_path):

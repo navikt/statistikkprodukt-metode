@@ -67,7 +67,7 @@ def is_not_empty(value: str) -> str:
         raise ConfigError("Strengen kan ikke være tom eller bare mellomrom.")
     return value
 
-def is_nav_id(value: str) -> str:
+def is_aggregate_id(value: str) -> str:
     """Validerer at en streng ikke er tom eller bare mellomrom."""
     if not re.match("^NAV2[1-2][0-9]{3}$", value):
         raise ConfigError("Må være et gyldig NAV-ID, f.eks. NAV22023.")
@@ -76,18 +76,20 @@ def is_nav_id(value: str) -> str:
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
-NavId = Annotated[str, AfterValidator(is_nav_id)]
+AggregateId = Annotated[str, AfterValidator(is_aggregate_id)]
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=False)
 
 
 class Metadata(StrictModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
     navn: str | None = None
-    navn_en: str | None = None
+    navn_en: str | None = Field(default=None, alias="navn-en")
     innhold: str | None = None
-    innhold_en: str | None = None
+    innhold_en: str | None = Field(default=None, alias="innhold-en")
 
 
 class DatabaseConnection(StrictModel):
@@ -149,10 +151,10 @@ class DatabaseConnection(StrictModel):
 
 class Variable(StrictModel):
     navn: str | None = None
-    navn_en: str | None = None
+    navn_en: str | None = Field(default=None, alias="navn-en")
     kolonne: OracleIdentifier
     innhold: str | None = None
-    innhold_en: str | None = None
+    innhold_en: str | None = Field(default=None, alias="innhold-en")
 
     # For everyone of navn, navn_en, ..., we want to normalize empty strings to None
     @field_validator(*Metadata.model_fields.keys(), mode="before")
@@ -162,18 +164,22 @@ class Variable(StrictModel):
         return value.strip() or None if isinstance(value, str) else value
 
 
+class TellerVariable(Variable):
+    pass
+
+
 class SmallAggregate(StrictModel):
-    nav_id: NavId
+    id: AggregateId
     navn: str
-    navn_en: str
+    navn_en: str = Field(alias="navn-en")
     tabell: OracleIdentifier
-    obt_tabell: OracleTableIdentifier
+    obt_tabell: OracleTableIdentifier = Field(alias="obt-tabell")
     innhold: str
-    innhold_en: str
+    innhold_en: str = Field(alias="innhold-en")
     sporring_sql: NonEmptyString
-    periodisering: OracleIdentifier
-    inkrementell: InkrementalMode
-    tallkolonne: Variable
+    periodisering: Variable
+    inkrementell_strategi: InkrementalMode = Field(alias="inkrementell-strategi")
+    teller: list[TellerVariable] = Field(min_length=1, max_length=1)
     formula: NonEmptyString
     prikking: bool
     saerskilt: bool
@@ -196,13 +202,15 @@ class SmallAggregate(StrictModel):
         """Navnet på tabellen/CSV-en med kontrolldata for feilsøking."""
         return f"{self.tabell}_kontroll"
 
-    @field_validator("inkrementell", mode="before")
+    @field_validator("inkrementell_strategi", mode="before")
     @classmethod
     def validate_incremental_mode(cls, value: str) -> str:
         """Kontrollerer at inkrementell modus er støttet."""
         allowed = list(InkrementalMode)
         if value not in allowed:
-            raise ConfigError(f"inkrementell må være én av {', '.join(sorted(allowed))}")
+            raise ConfigError(
+                f"inkrementell-strategi må være én av {', '.join(sorted(allowed))}"
+            )
         return value
 
     @field_validator("variabler")
@@ -219,10 +227,12 @@ class SmallAggregate(StrictModel):
         columns = [variable.kolonne for variable in self.variabler]
         if len(columns) != len(set(columns)):
             raise ConfigError("variabler kan ikke inneholde gjentatte kolonner")
-        if self.tallkolonne.kolonne in columns:
-            raise ConfigError("tallkolonne kan ikke også være en variabel")
-        if self.periodisering not in columns:
-            raise ConfigError("periodisering må være en av variablene")
+        if self.periodisering.kolonne in columns:
+            raise ConfigError("periodisering.kolonne kan ikke også være en variabel")
+        if any(t.kolonne in columns for t in self.teller):
+            raise ConfigError("teller kan ikke også være en variabel")
+        if any(t.kolonne == self.periodisering.kolonne in columns for t in self.teller):
+            raise ConfigError("teller.kolonne kan ikke være periodisering.kolonne")
         return self
 
 
@@ -233,7 +243,7 @@ class AggregateConfiguration(StrictModel):
 class ConfigurationSource(StrictModel):
     connection: DatabaseConnection
     mapper: list[NonEmptyString]
-    smale_aggregater: list[OracleIdentifier]
+    aggregater: list[OracleIdentifier]
 
     @field_validator("mapper")
     @classmethod
@@ -243,12 +253,12 @@ class ConfigurationSource(StrictModel):
             raise ConfigError("mapper må inneholde minst ett mønster")
         return value
 
-    @field_validator("smale_aggregater")
+    @field_validator("aggregater")
     @classmethod
     def validate_aggregate_names(cls, value: list[str]) -> list[str]:
         """Krever minst ett unikt aggregatnavn."""
         if not value:
-            raise ConfigError("smale_aggregater må inneholde minst ett aggregat")
+            raise ConfigError("aggregater må inneholde minst ett aggregat")
         if len(value) != len(set(value)):
             raise ConfigError("aggregatnavn må være unike")
         return value
@@ -256,14 +266,14 @@ class ConfigurationSource(StrictModel):
 
 class Configuration(StrictModel):
     connection: DatabaseConnection
-    smale_aggregater: list[SmallAggregate]
+    aggregater: list[SmallAggregate]
 
-    @field_validator("smale_aggregater")
+    @field_validator("aggregater")
     @classmethod
     def validate_aggregates(cls, value: list[SmallAggregate]) -> list[SmallAggregate]:
         """Krever aggregater med unike måltabeller."""
         if not value:
-            raise ConfigError("smale_aggregater må inneholde minst ett aggregat")
+            raise ConfigError("aggregater må inneholde minst ett aggregat")
         tables = [item.tabell.upper() for item in value]
         if len(tables) != len(set(tables)):
             raise ConfigError("tabellnavn må være unike")
@@ -291,7 +301,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
         ) from exc
 
     aggregate_paths = _find_aggregate_configurations(
-        source.mapper, source.smale_aggregater, path.parent
+        source.mapper, source.aggregater, path.parent
     )
     aggregates: list[SmallAggregate] = []
     for aggregate_path in aggregate_paths:
@@ -316,7 +326,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
     try:
         config = Configuration(
             connection=source.connection,
-            smale_aggregater=aggregates,
+            aggregater=aggregates,
         )
     except ValidationError as exc:
         raise ConfigError(

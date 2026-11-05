@@ -13,7 +13,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 ## Implementation decisions
 
 1. **Program and package naming:** The Python distribution, import package, and executable are all named `statistikkprodukt`.
-2. **Configuration location:** `--config` accepts a YAML file containing the database connection, `mapper` glob patterns for finding aggregate files, and a `smale_aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and derive `sporring_sql` by replacing its suffix with `.sql`. Resolve glob patterns and SQL paths from the configuration file's directory.
+2. **Configuration location:** `--config` accepts a YAML file containing the database connection, `mapper` glob patterns for finding aggregate files, and an `aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and derive `sporring_sql` by replacing its suffix with `.sql`. Resolve glob patterns and SQL paths from the configuration file's directory.
 3. **Oracle connection profiles:** Allowed values for `connection.database` are `DWHP`, `DWHQ`, `DWHU`, and `DWHR`. Use placeholder mappings for host, port, and service name for now.
 4. **Secret references:** Support the URI forms shown in the configuration example. Google Secret Manager payloads are UTF-8 strings and may contain a flat JSON object. Allow `terminal://` only when stdin is a TTY. Fail if a referenced value is missing.
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
@@ -22,10 +22,10 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
    - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
    - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
    - `overskriv_siste_periode` replaces only the maximum period present in the result.
-8. **Period values:** Periods may be integers, such as `YYYYMM`, or strings. Assume values of the chosen type are sortable.
+8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
-11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `obt_tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
+11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `obt-tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
 12. **R boundary:** `prikking` calls the R script and returns two dataframes, one masked and one with added metadata for debugging.
 13. **Language and errors:** CLI help and output, configuration validation, logs, documentation, and other user-facing errors must be in Norwegian. Exit with `0` for success, `2` for CLI or configuration errors, and `1` for operational failures.
 14. **Container:** Use an Ubuntu base image and install Python and R. Defer a Chainguard-based image.
@@ -80,33 +80,37 @@ connection:
 
 mapper:
   - aggregater/**
-smale_aggregater:
+aggregater:
   - ost_befolkning_alder
   - ost_befolkning_kjonn
 ```
 
-Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `smale_aggregater` must be globally unique:
+Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `aggregater` must be globally unique:
 ```yaml
 definisjon:
   navn: Befolkning etter alder
-  navn_en: Population by age
+  navn-en: Population by age
   innhold: Befolkning fordelt etter periode og alder.
-  innhold_en: Population distributed by period and age.
-  nav_id: NAV21000
-  obt_tabell: obt_befolkning
-  periodisering: periode
-  inkrementell: overskriv_alt
-  tallkolonne:
-    kolonne: antall
+  innhold-en: Population distributed by period and age.
+  id: NAV21000
+  obt-tabell: obt_befolkning
+  periodisering:
+    navn: Period
+    navn-en: Period
+    kolonne: periode
+    innhold: Månedsperiode
+    innhold-en: Month period
+  inkrementell-strategi: overskriv_alt
+  teller:
+    - kolonne: antall
   formula: "~ periode * alder"
   prikking: true
   saerskilt: false
   variabler:
-    - kolonne: periode
     - kolonne: alder
 ```
 
-`obt_tabell` names the OBT source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `OBT.BEFOLKNING_ALDER`; an unqualified name uses the configured connection schema. `navn`, `navn_en`, `innhold` and `innhold_en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `obt_tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
+`obt-tabell` names the OBT source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `OBT.BEFOLKNING_ALDER`; an unqualified name uses the configured connection schema. `navn`, `navn-en`, `innhold` and `innhold-en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `obt-tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
 
 ## CLI
 
@@ -202,7 +206,7 @@ for sub in df[periode].unique():
     r_result = r_prikking(
         data = sub_df, 
         formula = config["formula"], 
-        tallKol = config['smale_aggregater']['tallkolonne']['kolonne'], 
+        tallKol = config['aggregater']['teller'][0]['kolonne'],
         prikking = config["prikking"], 
         saerskilt = config["saerskilt"]
     )
