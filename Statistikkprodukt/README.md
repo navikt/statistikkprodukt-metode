@@ -231,6 +231,7 @@ Metadata på `periodisering`, variabler og `teller` kommer fra kolonnekommentare
 - `#INNHOLD` for norsk beskrivelse
 - `#INNHOLD_EN` for engelsk beskrivelse
 
+NB: Både periode og variabler må være streng.
 
 ### Inkrementelle laster
 

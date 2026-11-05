@@ -201,7 +201,7 @@ def query_connection():
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.description = [
-        ("PERIODE", oracledb.DB_TYPE_NUMBER, None, None, 6, 0, True),
+        ("PERIODE", oracledb.DB_TYPE_VARCHAR, 6, None, None, None, True),
         ("REGION", oracledb.DB_TYPE_VARCHAR, 100, None, None, None, True),
         ("ANTALL", oracledb.DB_TYPE_NUMBER, None, None, 10, 0, True),
     ]
@@ -247,9 +247,9 @@ def test_read_query_splits_large_period_lists():
 
 def test_read_periods_only_selects_distinct_periods():
     connection, cursor = query_connection()
-    cursor.fetchall.return_value = [(202501,), (202502,)]
+    cursor.fetchall.return_value = [("202501",), ("202502",)]
 
-    assert oracle.read_periods(connection, "select * from kilde;", "periode") == {202501, 202502}
+    assert oracle.read_periods(connection, "select * from kilde;", "periode") == {"202501", "202502"}
     cursor.execute.assert_called_once_with(
         "SELECT DISTINCT periode FROM (\nselect * from kilde\n) WHERE periode IS NOT NULL"
     )

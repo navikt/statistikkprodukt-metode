@@ -128,6 +128,14 @@ def create_tables(
                 with connection.cursor() as cursor:
                     for statement in statements:
                         cursor.execute(statement)
+                string_columns = [
+                    aggregate.periodisering.kolonne,
+                    *(variable.kolonne for variable in aggregate.variabler),
+                ]
+                for table_name, _ in missing:
+                    oracle.validate_string_columns(
+                        connection, schema, table_name, string_columns
+                    )
                 LOGGER.info(
                     "Opprettet tabellene %s.",
                     ", ".join(f"{schema}.{name}" for name, _ in missing),
