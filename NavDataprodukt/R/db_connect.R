@@ -15,6 +15,15 @@ db_connect <- function(database = "DWHI", uid = NULL, dwhi_cred = c("x","y","z")
 
   # TODO: Plasser dsn, uid og pwd i keyvault
 
+  if (!requireNamespace("odbc", quietly = TRUE)) {
+    stop(
+      "Pakken 'odbc' er nødvendig for at denne funksjonen skal kjøre. ",
+      "Vennligst installer pakken med å kjøre: install.packages('odbc')",
+      call. = FALSE
+    )
+  }
+  
+
   # DWHI der alle i Nav har tilgang
   if (tolower(database) == "dwhi") {
 
