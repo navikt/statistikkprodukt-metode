@@ -1,6 +1,6 @@
 # statistikkprodukt-metode
 
-Dette repoet inneholder en R-pakke til bruk for Navs statistikere for å vurdere prikkemetode for sine statistikker, i tillegg til en Python workflow som benytter en av funksjonene, slik at data engineers får integrert prikkemetodikken med data fra datavarehuset. 
+Dette repoet inneholder en R-pakke til bruk for Navs statistikere for å vurdere prikkemetode for sine statistikker, i tillegg til et python CLI-verktøy som benytter en av funksjonene, slik at data engineers får integrert prikkemetodikken med data fra datavarehuset. 
 
 ## Hensikt og metode
 
@@ -21,8 +21,8 @@ Statistikkprodukt:
 https://confluence.adeo.no/spaces/navdvh/pages/860129264/Prosedyre+-+Smale+aggregater
 
 ## Struktur
-- NavDataprodukt inneholder R-pakken
-- Statistikkprodukt inneholder python-koden
+- NavDataprodukt inneholder R-pakken. [Readme R-pakke](NavDataprodukt/README.md)
+- Statistikkprodukt inneholder python-koden. [Readme python verktøy](Statistikkprodukt/README.md)
 
 
 
