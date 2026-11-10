@@ -11,6 +11,15 @@
 #' @importFrom DBI dbGetQuery
 
 hent_data <- function(connection, query = "") {
+
+  if (!requireNamespace("DBI", quietly = TRUE)) {
+    stop(
+      "Pakken 'odbc' er nødvendig for at denne funksjonen skal kjøre. ",
+      "Vennligst installer pakken med å kjøre: install.packages('DBI')",
+      call. = FALSE
+    )
+  }
+  
   if (!DBI::dbIsValid(connection)) {
     stop("Feil i databaseconnection.")
   }
