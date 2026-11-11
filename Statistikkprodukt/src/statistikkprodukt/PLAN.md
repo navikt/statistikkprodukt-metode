@@ -289,20 +289,3 @@ This command must:
 When `test/conftest.py` sees `STATISTIKKPRODUKT_TESTENV_EXTERNAL=1`, it must not instantiate or start `OracleDbContainer`. It must instead use the fixed external connection settings and fail clearly if the database cannot be reached. Without the variable, tests retain the normal self-managed `OracleDbContainer` behavior for local development and CI.
 
 Document this workflow in `.github/copilot-instructions.md` and `README_DEV.md`. Agents running inside the sandbox must use `statistikkprodukt testenv pytest -- ...`, never plain pytest for integration tests.
-
-## Container and dependency updates
-
-Write a Dockerfile using an Ubuntu base image with Python and R installed. A Chainguard-based image is deferred.
-
-Set up dependabot, for github actions and uv. Create separate groups for security and version updates. Use a 14 day dependency cooldown.
-
-## Documentation and example
-
-Write three sets of documentation.
-- .github/copilot-instructions.md
-- a README.md for the non-technical audience
-- a README_DEV.md for developers.
-
-Create an `eksempel` folder containing `inputs/ost_befolkning_kjonn.csv`, `inputs/ost_befolkning_alder.csv`, `outputs/ost_befolkning_kjonn.csv`, `outputs/ost_befolkning_alder.csv`, a configuration file for the transformations, SQL files that refer to the OBT source tables, and a README explaining how to run the example locally.
-
-TODO:
