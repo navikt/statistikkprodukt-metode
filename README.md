@@ -14,11 +14,9 @@ Programmeringsspråk:
 - Python
 
 Interne arbeidsmetodikker finnes her:
-Prikking:
-https://confluence.adeo.no/spaces/navdvh/pages/852298026/Prikking+-+GaussSuppression
+[Prikking](https://confluence.adeo.no/spaces/navdvh/pages/852298026/Prikking+-+GaussSuppression)
 
-Statistikkprodukt:
-https://confluence.adeo.no/spaces/navdvh/pages/860129264/Prosedyre+-+Smale+aggregater
+[Statistikkprodukt](https://confluence.adeo.no/spaces/navdvh/pages/860129264/Prosedyre+-+Smale+aggregater)
 
 ## Struktur
 - NavDataprodukt inneholder R-pakken. [Readme R-pakke](NavDataprodukt/README.md)
@@ -26,5 +24,15 @@ https://confluence.adeo.no/spaces/navdvh/pages/860129264/Prosedyre+-+Smale+aggre
 
 
 
+# Bruk av KI
 KI er blitt benyttet for å generere deler av koden.
+
+# Henvendelser
+Spørsmål knyttet til koden eller repositoryen kan stilles som issues her på GitHub.
+
+## For Nav ansatte
+Interne henvendelser kan sendes via Slack i kanalen #dvh-miljo.
+
+# Lisens
+MIT
 
