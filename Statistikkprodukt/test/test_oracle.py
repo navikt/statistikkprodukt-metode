@@ -189,7 +189,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
             }
     finally:
         with oracle_connection.cursor() as cursor:
-            for table_name in tables:
+            for table_name in [*tables, aggregate.meta_tabell]:
                 cursor.execute(
                     "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
                     owner="SYSTEM",
@@ -289,6 +289,9 @@ def test_write_database_writes_column_comments_to_all_comments(
                     "periode NUMBER, region VARCHAR2(100), "
                     "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
                 )
+            cursor.execute(
+                oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell)
+            )
 
         frame = pd.DataFrame(
             {
@@ -351,7 +354,7 @@ def test_write_database_writes_column_comments_to_all_comments(
             }
     finally:
         with oracle_connection.cursor() as cursor:
-            for table_name in tables:
+            for table_name in [*tables, aggregate.meta_tabell]:
                 cursor.execute(
                     "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
                     owner="SYSTEM",
