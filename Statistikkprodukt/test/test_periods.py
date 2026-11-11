@@ -19,6 +19,7 @@ def test_run_passes_transfer_with_selected_modes(monkeypatch, tmp_path, kilde, m
     connect = MagicMock(return_value=connection)
     transfers = []
     monkeypatch.setattr(app, "_connect", connect)
+    monkeypatch.setattr(oracle, "write_log", MagicMock())
     monkeypatch.setattr(
         app,
         "_process_aggregate",
