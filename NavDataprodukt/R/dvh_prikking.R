@@ -5,8 +5,8 @@
 #' @param data A data frame containing only the relevant columns for the result, that is the dimension columns and one value.
 #' @param formula A formula object or string expression defining the model structure.
 #' @param tallKol Character string indicating the numeric column to count/suppress.
-#' @param prikking Character ("ja"/"nei"). If "nei", suppression is bypassed.
-#' @param saerskilt Character ("ja"/"nei"). If "nei", normal threshold is used. If "ja", a higher threshold is used.
+#' @param prikking Character ("true"/"false"). If "false", suppression is bypassed.
+#' @param saerskilt Character ("true"/"false"). If "false", normal threshold is used. If "true", a higher threshold is used.
 #'
 #' @return The functions return two data frame with primary/secondary suppression applied, one that is cleaned, and one that contains original data with suppression flags.
 #' @export
