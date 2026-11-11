@@ -6,7 +6,12 @@ import os
 from pathlib import Path
 
 from statistikkprodukt import app
-from statistikkprodukt.config import load_configuration, ConfigError, StorageOption
+from statistikkprodukt.config import (
+    ConfigError,
+    StorageOption,
+    check_lopenummer,
+    load_configuration,
+)
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
 LOGGER = logging.getLogger(__name__)
@@ -152,6 +157,7 @@ def main() -> None:
         elif args.command == "last":
             config_path = args.config
             configuration, config_directory = load_configuration(config_path)
+            check_lopenummer(configuration.aggregater)
 
             app.run(
                 configuration,
@@ -165,6 +171,7 @@ def main() -> None:
             )
         elif args.command == "skjema":
             configuration, config_directory = load_configuration(args.config)
+            check_lopenummer(configuration.aggregater)
             app.create_tables(
                 configuration,
                 config_directory,
