@@ -47,7 +47,7 @@ class StorageOption(StrEnum):
 
 
 def validate_identifier(value: str) -> str:
-    """Kontrollerer og småbokstaverer en Oracle-identifikator."""
+    """Kontrollerer og oversett til små bokstaver for Oracle-identifikator."""
     if not _IDENTIFIER.fullmatch(value):
         raise ValueError(f"Må være et gyldig Oracle-navn, er: {value!r}")
     return value.lower()
@@ -64,19 +64,19 @@ def validate_table_identifier(value: str) -> str:
 def is_not_empty(value: str) -> str:
     """Validerer at en streng ikke er tom eller bare mellomrom."""
     if not value.strip():
-        raise ConfigError("Strengen kan ikke være tom eller bare mellomrom.")
+        raise ConfigError("Strengen kan ikke være tom eller kun inneholde mellomrom.")
     return value
 
 def is_aggregate_id(value: str) -> str:
-    """Validerer at en streng ikke er tom eller bare mellomrom."""
-    if not re.match("^NAV2[1-2][0-9]{3}$", value):
-        raise ConfigError("Må være et gyldig NAV-ID, f.eks. NAV22023.")
+    """Validerer at en streng er en gyldig NAV-ID fra 20000 og oppover."""
+    if not isinstance(value, str) or not re.fullmatch(r"(2[0-9]{4}|[3-9][0-9]{4}|[1-9][0-9]{5,})", value):
+        raise ConfigError("Må være en gyldig NAV-ID (tall fra 20000 og oppover), f.eks. 22023.")
     return value
 
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
-AggregateId = Annotated[str, AfterValidator(is_aggregate_id)]
+NavId = Annotated[str, AfterValidator(is_aggregate_id)]
 
 
 class StrictModel(BaseModel):
@@ -108,12 +108,12 @@ class DatabaseConnection(StrictModel):
         """Kontrollerer at databasenavnet viser til en støttet profil."""
         if value is not None and value not in DATABASE_PROFILES:
             valid_db_names = ", ".join(sorted(DATABASE_PROFILES.keys()))
-            raise ConfigError("database må være en av " + valid_db_names)
+            raise ConfigError("Database må være en av " + valid_db_names)
         return value
 
     @model_validator(mode="after")
     def validate_connection_source(self) -> DatabaseConnection:
-        """Krever enten en profil eller et komplett sett med tilkoblingsverdier."""
+        """Krever enten en profil (databasenavn) eller et komplett sett med tilkoblingsverdier."""
         direct_values = (self.host, self.port, self.service)
         has_direct_values = any(value is not None for value in direct_values)
         if self.database is not None and has_direct_values:
@@ -169,7 +169,7 @@ class TellerVariable(Variable):
 
 
 class SmallAggregate(StrictModel):
-    id: AggregateId
+    id: NavId
     navn: str
     navn_en: str = Field(alias="navn-en")
     tabell: OracleIdentifier
@@ -202,6 +202,11 @@ class SmallAggregate(StrictModel):
         """Navnet på tabellen/CSV-en med kontrolldata for feilsøking."""
         return f"{self.tabell}_kontroll"
 
+    @property
+    def meta_tabell(self) -> str:
+        """Navnet på tabellen med metadata om aggregatet; overskrives ved hver kjøring."""
+        return f"{self.tabell}_meta"
+
     @field_validator("inkrementell_strategi", mode="before")
     @classmethod
     def validate_incremental_mode(cls, value: str) -> str:
@@ -230,9 +235,9 @@ class SmallAggregate(StrictModel):
         if self.periodisering.kolonne in columns:
             raise ConfigError("periodisering.kolonne kan ikke også være en variabel")
         if any(t.kolonne in columns for t in self.teller):
-            raise ConfigError("teller kan ikke også være en variabel")
+            raise ConfigError("tellepunkt kan ikke også være en variabel")
         if any(t.kolonne == self.periodisering.kolonne in columns for t in self.teller):
-            raise ConfigError("teller.kolonne kan ikke være periodisering.kolonne")
+            raise ConfigError("tellepunkt.kolonne kan ikke være periodisering.kolonne")
         return self
 
 
@@ -260,7 +265,7 @@ class ConfigurationSource(StrictModel):
         if not value:
             raise ConfigError("aggregater må inneholde minst ett aggregat")
         if len(value) != len(set(value)):
-            raise ConfigError("aggregatnavn må være unike")
+            raise ConfigError("aggregatnavn må være unikt.")
         return value
 
 
