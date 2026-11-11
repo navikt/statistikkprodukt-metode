@@ -1,7 +1,9 @@
 from statistikkprodukt.oracle.metadata import (
     comment_statements,
+    create_meta_table_statement,
     parse_metadata,
     read_metadata,
+    write_metadata_table,
 )
 from statistikkprodukt.oracle.operations import (
     connect,
@@ -18,6 +20,7 @@ from statistikkprodukt.oracle.operations import (
 __all__ = [
     "connect",
     "comment_statements",
+    "create_meta_table_statement",
     "create_table_statement",
     "parse_metadata",
     "read_metadata",
@@ -27,5 +30,6 @@ __all__ = [
     "table_exists",
     "validate_string_columns",
     "write_comments",
+    "write_metadata_table",
     "write_result",
 ]
