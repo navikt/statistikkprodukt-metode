@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import getpass
-import json
 import logging
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
+from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 from uuid import uuid4
@@ -12,7 +12,6 @@ from uuid import uuid4
 import oracledb
 from oracledb import Cursor
 from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
-from statistikkprodukt.oracle.operations import table_exists
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,7 +103,9 @@ def _merge_metadata(column, config_metadata: Metadata, db_metadata: Metadata):
 
     return result
 
-META_COLUMNS = (
+# Metadatatabellen er på radformat: én rad per felt, med feltnavnet i "felt"
+# og innholdet i "verdi". dvh_sist_oppdatert settes av databasen.
+META_FIELDS = (
     "nav_id",
     "tabell",
     "navn",
@@ -113,39 +114,39 @@ META_COLUMNS = (
     "innhold_en",
     "periodisering",
 )
+META_COLUMNS = ("felt", "verdi")
+
 
 def create_meta_table_statement(schema: str, table_name: str) -> str:
-    """Lager DDL for metadatatabellen ({tabell}_meta) med faste kolonner."""
+    """Lager DDL for metadatatabellen ({tabell}_meta) på radformat (felt/verdi)."""
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     return (
         f"CREATE TABLE {table} (\n"
-        "  nav_id        VARCHAR2(10)   NOT NULL,\n"
-        "  tabell        VARCHAR2(128)  NOT NULL,\n"
-        "  navn          VARCHAR2(4000),\n"
-        "  navn_en       VARCHAR2(4000),\n"
-        "  innhold       VARCHAR2(4000),\n"
-        "  innhold_en    VARCHAR2(4000),\n"
-        "  periodisering VARCHAR2(128),\n"
-        "  dvh_sist_oppdatert     TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
+        "  felt               VARCHAR2(128)  NOT NULL,\n"
+        "  verdi              VARCHAR2(4000),\n"
+        "  dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
         ")"
     )
 
 
-def metadata_rows(aggregate: SmallAggregate, metadata: TableMetadata) -> list[dict]:
-    """Bygger radene i metadatatabellen: én for tabellen og én per kolonne.
-
-    Aggregatfeltene fra YAML gjentas på hver rad, slik at hver rad kan leses alene.
-    """
-    common = {
-        "nav_id": aggregate.nav_id,
+def metadata_rows(aggregate: Aggregate, metadata: TableMetadata) -> list[dict]:
+    """Bygger radene i metadatatabellen: én rad per felt i META_FIELDS."""
+    values = {
+        "nav_id": aggregate.id,
         "tabell": aggregate.tabell,
-        "periodisering": aggregate.periodisering,
+        "navn": metadata.table.navn,
+        "navn_en": metadata.table.navn_en,
+        "innhold": metadata.table.innhold,
+        "innhold_en": metadata.table.innhold_en,
+        "periodisering": aggregate.periodisering.kolonne,
     }
+    return [{"felt": felt, "verdi": values[felt]} for felt in META_FIELDS]
+
 
 def write_metadata_table(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         metadata: TableMetadata,
 ) -> None:
     """Overskriver hele {tabell}_meta med gjeldende metadata i én transaksjon."""
@@ -213,27 +214,26 @@ def parse_metadata(comment: str | None) -> Metadata:
 
     return Metadata.model_validate(values)
 
-#TODO: subject_kort må enten legges til i yml eller hentes fra navnet på tabellen.
-LOG_TABLE = "ost_{subject_kort}_logg"
+def log_table(aggregate: Aggregate) -> str:
+    """Navnet på loggtabellen for aggregatets emne: ost_{emne}_logg.
+
+    Emnet er andre ledd i tabellnavnet, f.eks. ost_befolkning_alder -> ost_befolkning_logg.
+    """
+    parts = aggregate.tabell.split("_")
+    if len(parts) < 3 or parts[0] != "ost":
+        raise ValueError(
+            f"Kan ikke finne emnet for loggtabellen fra tabellnavnet {aggregate.tabell!r}; "
+            "forventet formen ost_{emne}_{navn}."
+        )
+    return f"ost_{parts[1]}_logg"
 
 _MAX_BYTES = 4000
 
-LOGG_COLUMNS = (
-    "nav_id",
-    "tabell",
-    "objekttype",
-    "kolonne",
-    "rekkefolge",
-    "navn",
-    "navn_en",
-    "innhold",
-    "innhold_en",
-    "obt_tabell",
-    "periodisering",
-    "inkrementell",
-    "formula",
-    "prikking",
-    "saerskilt",
+# Loggtabellen har én rad per aggregat per kjøring. Kjøringsfeltene gjentas på hver
+# rad, og aggregatets konfigurasjon og metadata lagres slik de var ved kjøringen
+# (metadatatabellen overskrives, loggen gjør det ikke).
+LOG_COLUMNS = (
+    # Kjøringen
     "kjoring_id",
     "starttid",
     "sluttid",
@@ -244,37 +244,32 @@ LOGG_COLUMNS = (
     "kilde",
     "maal",
     "antall_aggregater",
-    "aggregater",
-    "nav_ider",
-    "antall_rader",
-    "antall_prikket",
-    "detaljer",
     "feilmelding",
+    # Aggregatet
+    "nav_id",
+    "tabell",
+    "navn",
+    "navn_en",
+    "innhold",
+    "innhold_en",
+    "obt_tabell",
+    "periodisering",
+    "inkrementell",
+    "formula",
+    "prikking",
+    "saerskilt",
+    "sporring_sql",
+    # Resultatet for aggregatet
+    "perioder",
+    "antall_rader",
+    "antall_primaerprikket",
+    "antall_prikket",
 )
 
 
-
-
-
-
-def logg_rows(aggregate: SmallAggregate, metadata: TableMetadata) -> list[dict]:
-    """Bygger rad i loggtabellen: én per kjøring.
-    """
-    common = {
-        "nav_id": aggregate.nav_id,
-        "tabell": aggregate.tabell,
-        "obt_tabell": aggregate.obt_tabell,
-        "periodisering": aggregate.periodisering,
-        "inkrementell": str(aggregate.inkrementell),
-        "formula": aggregate.formula,
-        "prikking": int(aggregate.prikking),
-        "saerskilt": int(aggregate.saerskilt),
-    }
-
 @dataclass
 class AggregatResultat:
-    """Hva som ble gjort med ett småaggregat i en kjøring."""
-    tabell: str
+    """Hva som ble gjort med ett aggregat i en kjøring."""
     nav_id: str
     perioder: list[Any]
     antall_rader: int
@@ -284,11 +279,11 @@ class AggregatResultat:
 
 @dataclass
 class Kjorelogg:
-    """Samler informasjon om én kjøring frem til den skrives som én rad."""
+    """Samler informasjon om én kjøring frem til den skrives til loggtabellen."""
     konfigurasjon: str
     kilde: str
     maal: str
-    aggregater: list[tuple[str, str]]  # (tabell, nav_id) for alle valgte aggregater
+    aggregater: list[Aggregate]  # alle valgte aggregater
     kjoring_id: str = field(default_factory=lambda: str(uuid4()))
     starttid: datetime = field(default_factory=datetime.now)
     sluttid: datetime | None = None
@@ -302,9 +297,12 @@ class Kjorelogg:
         self.status = "FEILET" if feil else "OK"
         self.feilmelding = str(feil) if feil else None
 
-    def som_rad(self) -> dict[str, Any]:
-        """Gjør loggen om til bindverdier for INSERT."""
-        return {
+    def som_rader(self) -> list[tuple[Aggregate, dict[str, Any]]]:
+        """Gjør loggen om til bindverdier for INSERT, én rad per aggregat.
+
+        Aggregater uten resultat (f.eks. ved feil) får tomme resultatfelt.
+        """
+        kjoring = {
             "kjoring_id": self.kjoring_id,
             "starttid": self.starttid,
             "sluttid": self.sluttid or datetime.now(),
@@ -315,65 +313,100 @@ class Kjorelogg:
             "kilde": self.kilde,
             "maal": self.maal,
             "antall_aggregater": len(self.aggregater),
-            "aggregater": _truncate(", ".join(tabell for tabell, _ in self.aggregater)),
-            "nav_ider": _truncate(", ".join(nav_id for _, nav_id in self.aggregater)),
-            "antall_rader": sum(r.antall_rader for r in self.resultater),
-            "antall_prikket": sum(r.antall_prikket for r in self.resultater),
-            "detaljer": json.dumps(
-                [asdict(r) for r in self.resultater], ensure_ascii=False, default=str
-            ),
             "feilmelding": _truncate(self.feilmelding),
         }
+        resultater = {resultat.nav_id: resultat for resultat in self.resultater}
+        return [
+            (
+                aggregate,
+                {
+                    **kjoring,
+                    **_aggregat_felt(aggregate),
+                    **_resultat_felt(resultater.get(aggregate.id)),
+                },
+            )
+            for aggregate in self.aggregater
+        ]
 
-def create_logg_table_statement(schema: str, table_name: str) -> str:
-    """Lager DDL for loggtabellen (ost_{subject_kort}_logg) med faste kolonner."""
+
+def _aggregat_felt(aggregate: Aggregate) -> dict[str, Any]:
+    """Aggregatets konfigurasjon og metadata slik de var ved kjøringen."""
+    return {
+        "nav_id": aggregate.id,
+        "tabell": aggregate.tabell,
+        "navn": _truncate(aggregate.navn),
+        "navn_en": _truncate(aggregate.navn_en),
+        "innhold": _truncate(aggregate.innhold),
+        "innhold_en": _truncate(aggregate.innhold_en),
+        "obt_tabell": aggregate.obt_tabell,
+        "periodisering": aggregate.periodisering.kolonne,
+        "inkrementell": str(aggregate.inkrementell_strategi),
+        "formula": _truncate(aggregate.formula),
+        "prikking": int(aggregate.prikking),
+        "saerskilt": int(aggregate.saerskilt),
+        "sporring_sql": aggregate.sporring_sql,
+    }
+
+
+def _resultat_felt(resultat: AggregatResultat | None) -> dict[str, Any]:
+    """Hva kjøringen gjorde med aggregatet; tomt hvis aggregatet ikke ble ferdig."""
+    if resultat is None:
+        return dict.fromkeys(
+            ("perioder", "antall_rader", "antall_primaerprikket", "antall_prikket")
+        )
+    return {
+        "perioder": _truncate(", ".join(str(periode) for periode in resultat.perioder)),
+        "antall_rader": resultat.antall_rader,
+        "antall_primaerprikket": resultat.antall_primaerprikket,
+        "antall_prikket": resultat.antall_prikket,
+    }
+
+
+def create_log_table_statement(schema: str, table_name: str) -> str:
+    """Lager DDL for loggtabellen (ost_{emne}_logg) med faste kolonner."""
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     return (
         f"CREATE TABLE {table} (\n"
-        "  nav_id        VARCHAR2(10)   NOT NULL,\n"
-        "  tabell        VARCHAR2(128)  NOT NULL,\n"
-        "  objekttype    VARCHAR2(20)   NOT NULL,\n"  # tabell, variabel eller tallkolonne
-        "  kolonne       VARCHAR2(128),\n"  # NULL for raden som beskriver tabellen
-        "  rekkefolge    NUMBER(4)      NOT NULL,\n"
-        "  navn          VARCHAR2(4000),\n"
-        "  navn_en       VARCHAR2(4000),\n"
-        "  innhold       VARCHAR2(4000),\n"
-        "  innhold_en    VARCHAR2(4000),\n"
-        "  obt_tabell    VARCHAR2(261),\n"
-        "  periodisering VARCHAR2(128),\n"
-        "  inkrementell  VARCHAR2(30),\n"
-        "  formula       VARCHAR2(4000),\n"
-        "  prikking      NUMBER(1),\n"
-        "  saerskilt     NUMBER(1),\n"
-        "  kjoring_id        VARCHAR2(36)   NOT NULL,\n"
-        "  starttid          TIMESTAMP      NOT NULL,\n"
-        "  sluttid           TIMESTAMP      NOT NULL,\n"
-        "  status            VARCHAR2(10)   NOT NULL,\n"  # OK eller FEILET
-        "  db_bruker         VARCHAR2(128)  DEFAULT SYS_CONTEXT('USERENV', 'SESSION_USER'),\n"
-        "  os_bruker         VARCHAR2(128),\n"
-        "  programversjon    VARCHAR2(50),\n"
-        "  konfigurasjon     VARCHAR2(4000),\n"
-        "  kilde             VARCHAR2(10),\n"
-        "  maal              VARCHAR2(10),\n"
-        "  antall_aggregater NUMBER,\n"
-        "  aggregater        VARCHAR2(4000),\n"
-        "  nav_ider          VARCHAR2(4000),\n"
-        "  antall_rader      NUMBER,\n"
-        "  antall_prikket    NUMBER,\n"
-        "  detaljer          CLOB,\n"  # JSON med perioder og antall per aggregat
-        "  feilmelding       VARCHAR2(4000)\n"
-        "  dvh_sist_oppdatert     TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
+        "  kjoring_id            VARCHAR2(36)   NOT NULL,\n"
+        "  starttid              TIMESTAMP      NOT NULL,\n"
+        "  sluttid               TIMESTAMP      NOT NULL,\n"
+        "  status                VARCHAR2(10)   NOT NULL,\n"  # OK eller FEILET
+        "  db_bruker             VARCHAR2(128)  DEFAULT SYS_CONTEXT('USERENV', 'SESSION_USER'),\n"
+        "  os_bruker             VARCHAR2(128),\n"
+        "  programversjon        VARCHAR2(50),\n"
+        "  konfigurasjon         VARCHAR2(4000),\n"
+        "  kilde                 VARCHAR2(10),\n"
+        "  maal                  VARCHAR2(10),\n"
+        "  antall_aggregater     NUMBER,\n"
+        "  feilmelding           VARCHAR2(4000),\n"
+        "  nav_id                VARCHAR2(10)   NOT NULL,\n"
+        "  tabell                VARCHAR2(128)  NOT NULL,\n"
+        "  navn                  VARCHAR2(4000),\n"
+        "  navn_en               VARCHAR2(4000),\n"
+        "  innhold               VARCHAR2(4000),\n"
+        "  innhold_en            VARCHAR2(4000),\n"
+        "  obt_tabell            VARCHAR2(261),\n"
+        "  periodisering         VARCHAR2(128),\n"
+        "  inkrementell          VARCHAR2(30),\n"
+        "  formula               VARCHAR2(4000),\n"
+        "  prikking              NUMBER(1),\n"
+        "  saerskilt             NUMBER(1),\n"
+        "  sporring_sql          CLOB,\n"
+        "  perioder              VARCHAR2(4000),\n"
+        "  antall_rader          NUMBER,\n"
+        "  antall_primaerprikket NUMBER,\n"
+        "  antall_prikket        NUMBER,\n"
+        "  dvh_sist_oppdatert    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
         ")"
     )
 
-def ensure_log_table(connection: oracledb.Connection, schema: str) -> None:
+
+def ensure_log_table(connection: oracledb.Connection, schema: str, table_name: str) -> None:
     """Oppretter loggtabellen i skjemaet hvis den ikke finnes."""
-    if table_exists(connection, schema, LOG_TABLE):
-        return
     try:
         with connection.cursor() as cursor:
-            cursor.execute(create_log_table_statement(schema))
-        LOGGER.info("Opprettet loggtabellen %s.%s.", schema, LOG_TABLE)
+            cursor.execute(create_log_table_statement(schema, table_name))
+        LOGGER.info("Opprettet loggtabellen %s.%s.", schema, table_name)
     except oracledb.DatabaseError as exc:
         (error,) = exc.args
         if getattr(error, "code", None) != 955:  # ORA-00955: finnes allerede
@@ -381,18 +414,30 @@ def ensure_log_table(connection: oracledb.Connection, schema: str) -> None:
 
 
 def write_log(connection: oracledb.Connection, schema: str, logg: Kjorelogg) -> None:
-    """Legger til én rad i loggtabellen i en egen transaksjon."""
-    table = f"{validate_identifier(schema)}.{LOG_TABLE}"
+    """Legger til kjøringens rader i loggtabellene i en egen transaksjon.
+
+    Hvert aggregat logges i loggtabellen for sitt emne (se log_table).
+    """
+    rows_per_table: dict[str, list[dict[str, Any]]] = {}
+    for aggregate, row in logg.som_rader():
+        rows_per_table.setdefault(log_table(aggregate), []).append(row)
+
     names = ", ".join(LOG_COLUMNS)
     binds = ", ".join(f":{name}" for name in LOG_COLUMNS)
-    # En feilet kjøring kan ha etterlatt en åpen transaksjon; den skal ikke følge med loggraden.
+    # En feilet kjøring kan ha etterlatt en åpen transaksjon; den skal ikke følge med loggradene.
     connection.rollback()
-    ensure_log_table(connection, schema)
+    for table_name in rows_per_table:
+        ensure_log_table(connection, schema, table_name)
     with connection.cursor() as cursor:
-        cursor.setinputsizes(detaljer=oracledb.DB_TYPE_CLOB)
-        cursor.execute(f"INSERT INTO {table} ({names}) VALUES ({binds})", logg.som_rad())
+        for table_name, rows in rows_per_table.items():
+            table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+            cursor.setinputsizes(sporring_sql=oracledb.DB_TYPE_CLOB)
+            cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+            LOGGER.info(
+                "Kjøringen er logget i %s med id %s (%d rader).",
+                table, logg.kjoring_id, len(rows),
+            )
     connection.commit()
-    LOGGER.info("Kjøringen er logget i %s med id %s.", table, logg.kjoring_id)
 
 
 def _truncate(text: str | None, max_bytes: int = _MAX_BYTES) -> str | None:
