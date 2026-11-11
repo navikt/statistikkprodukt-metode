@@ -69,18 +69,53 @@ def run(
         dry_run=dry_run,
     )
 
+    logg = oracle.Kjorelogg(
+        konfigurasjon=str(config_directory),
+        kilde=str(source),
+        maal=str(target),
+        aggregater=aggregates,
+    )
+
     try:
         for aggregate in aggregates:
-            _process_aggregate(
+            resultat = _process_aggregate(
                 configuration,
                 aggregate,
                 config_directory,
                 transfer,
                 dry_run=dry_run,
             )
+            logg.resultater.append(resultat)
+    except BaseException as exc:
+        logg.fullfor(exc)
+        _write_log(configuration, transfer, logg, dry_run=dry_run)
+        raise
+    else:
+        logg.fullfor()
+        _write_log(configuration, transfer, logg, dry_run=dry_run)
     finally:
         if transfer.connection is not None:
             transfer.connection.close()
+
+
+def _write_log(
+        configuration: Configuration,
+        transfer: Transfer,
+        logg: oracle.Kjorelogg,
+        *,
+        dry_run: bool,
+) -> None:
+    """Skriver kjøreloggen til Oracle når kjøringen skriver til databasen."""
+    if transfer.target != StorageOption.DB or dry_run or transfer.connection is None:
+        return
+    try:
+        oracle.write_log(transfer.connection, configuration.connection.schema_name, logg)
+    except Exception:
+        # En feil i loggingen skal ikke skjule feilen fra selve kjøringen.
+        if logg.status == "FEILET":
+            LOGGER.exception("Kunne ikke skrive kjøreloggen.")
+        else:
+            raise
 
 
 def create_tables(
@@ -96,6 +131,9 @@ def create_tables(
     try:
         schema = configuration.connection.schema_name
         for aggregate in aggregates:
+            _create_meta_table(
+                connection, schema, aggregate, create_in_database=create_in_database
+            )
             tables = [
                 (aggregate.prepub_tabell, False),
                 (aggregate.kontroll_tabell, True),
@@ -144,6 +182,27 @@ def create_tables(
                 print(";\n".join(statements) + ";")
     finally:
         connection.close()
+
+
+def _create_meta_table(
+        connection: oracledb.Connection,
+        schema: str,
+        aggregate: Aggregate,
+        *,
+        create_in_database: bool,
+) -> None:
+    """Viser DDL for metadatatabellen ({tabell}_meta) eller oppretter den i Oracle."""
+    table_name = aggregate.meta_tabell
+    if oracle.table_exists(connection, schema, table_name):
+        LOGGER.info("Tabellen %s.%s finnes allerede; hopper over.", schema, table_name)
+        return
+    statement = oracle.create_meta_table_statement(schema, table_name)
+    if create_in_database:
+        with connection.cursor() as cursor:
+            cursor.execute(statement)
+        LOGGER.info("Opprettet tabellen %s.%s.", schema, table_name)
+    else:
+        print(statement + ";")
 
 
 def installer_r_pakker() -> None:
@@ -207,8 +266,8 @@ def _process_aggregate(
         transfer: Transfer,
         *,
         dry_run: bool,
-) -> None:
-    """Leser, prikker og lagrer ett småaggregat."""
+) -> oracle.AggregatResultat:
+    """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
     LOGGER.info("Leser data for %s.", aggregate.tabell)
     periods_to_load = _get_periods_to_load(
         configuration,
@@ -248,6 +307,14 @@ def _process_aggregate(
         transfer,
         config_directory=config_directory,
         dry_run=dry_run,
+    )
+
+    return oracle.AggregatResultat(
+        nav_id=aggregate.id,
+        perioder=sorted(prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()),
+        antall_rader=len(prepub),
+        antall_primaerprikket=int(kontroll["primary"].sum()),
+        antall_prikket=int(kontroll["suppressed"].sum()),
     )
 
 
@@ -416,3 +483,7 @@ def _write_database(
         if not dry_run:
             LOGGER.info("Oppdaterer kommentarer for %s.", table_name)
             oracle.write_comments(connection, schema, table_name, metadata)
+
+    if not dry_run:
+        LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
+        oracle.write_metadata_table(connection, schema, aggregate, metadata)
