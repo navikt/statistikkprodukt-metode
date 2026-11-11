@@ -19,3 +19,15 @@ A DBIConnection object.
 \description{
 Establishes an ODBC connection to the data warehouse environments.
 }
+\examples{
+\dontrun{
+# Connect to a database, with password prompt
+database <- 'db'
+brukernavn <- 'ABC123'
+con <- db_connect(database = database, uid = brukernavn)
+
+# Always remember to disconnect when finished
+DBI::dbDisconnect(con)
+}
+
+}
