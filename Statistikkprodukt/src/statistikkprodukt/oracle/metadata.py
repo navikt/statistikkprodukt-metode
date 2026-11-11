@@ -215,15 +215,13 @@ def parse_metadata(comment: str | None) -> Metadata:
     return Metadata.model_validate(values)
 
 def log_table(aggregate: Aggregate) -> str:
-    """Navnet på loggtabellen for aggregatets emne: ost_{emne}_logg.
-
-    Emnet er andre ledd i tabellnavnet, f.eks. ost_befolkning_alder -> ost_befolkning_logg.
+    """Navnet på loggtabellen for aggregatets subject_kort: ost_{subject_kort}_logg.
     """
     parts = aggregate.tabell.split("_")
     if len(parts) < 3 or parts[0] != "ost":
         raise ValueError(
-            f"Kan ikke finne emnet for loggtabellen fra tabellnavnet {aggregate.tabell!r}; "
-            "forventet formen ost_{emne}_{navn}."
+            f"Kan ikke finne subject_kort for loggtabellen fra tabellnavnet {aggregate.tabell!r}; "
+            "forventet formen ost_{subject_kort}_{navn}."
         )
     return f"ost_{parts[1]}_logg"
 
@@ -363,7 +361,7 @@ def _resultat_felt(resultat: AggregatResultat | None) -> dict[str, Any]:
 
 
 def create_log_table_statement(schema: str, table_name: str) -> str:
-    """Lager DDL for loggtabellen (ost_{emne}_logg) med faste kolonner."""
+    """Lager DDL for loggtabellen (ost_{subject_kort}_logg) med faste kolonner."""
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     return (
         f"CREATE TABLE {table} (\n"
@@ -416,7 +414,7 @@ def ensure_log_table(connection: oracledb.Connection, schema: str, table_name: s
 def write_log(connection: oracledb.Connection, schema: str, logg: Kjorelogg) -> None:
     """Legger til kjøringens rader i loggtabellene i en egen transaksjon.
 
-    Hvert aggregat logges i loggtabellen for sitt emne (se log_table).
+    Hvert aggregat logges i loggtabellen for sitt subject_kort (se log_table).
     """
     rows_per_table: dict[str, list[dict[str, Any]]] = {}
     for aggregate, row in logg.som_rader():
