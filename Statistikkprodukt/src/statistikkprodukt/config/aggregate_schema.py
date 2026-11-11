@@ -138,6 +138,11 @@ class Aggregate(StrictModel):
         """Navnet på tabellen/CSV-en med kontrolldata for feilsøking."""
         return f"{self.tabell}_kontroll"
 
+    @property
+    def meta_tabell(self) -> str:
+        """Navnet på tabellen med metadata om aggregatet; overskrives ved hver kjøring."""
+        return f"{self.tabell}_meta"
+
     @field_validator("inkrementell_strategi", mode="before")
     @classmethod
     def validate_incremental_mode(cls, value: str) -> str:
