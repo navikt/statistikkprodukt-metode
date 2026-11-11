@@ -1,4 +1,4 @@
-"""Kontroll av aggregat-ID og tabellnavn mot løpenummerlisten (lopenummer.txt)."""
+"""Kontroll av aggregat-ID og tabellnavn mot løpenummerlisten (Lopenr.txt)."""
 from __future__ import annotations
 
 import csv
