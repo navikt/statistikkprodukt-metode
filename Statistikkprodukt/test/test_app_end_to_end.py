@@ -17,7 +17,8 @@ def test_e2e_run(
     """Oppretter og fyller ett småaggregat fra en OBT-tabell."""
     suffix = uuid4().hex[:12]
     source_table = f"obt_e2e_{suffix}"
-    aggregate_table = f"agg_e2e_{suffix}"
+    aggregate_table = f"ost_e2e{suffix}_agg"
+    log_table = f"ost_e2e{suffix}_logg"
     aggregate_directory = tmp_path / "aggregater"
     aggregate_directory.mkdir()
 
@@ -150,11 +151,27 @@ group by periode, region
 
         assert sorted(prepub_rows) == sorted(expected_prepub)
         assert sorted(kontroll_rows) == sorted(expected_kontroll)
+
+        with oracle_connection.cursor() as cursor:
+            cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate_table}_meta")
+            meta = dict(cursor.fetchall())
+            cursor.execute(
+                "SELECT status, nav_id, tabell, navn, antall_rader, antall_prikket "
+                f"FROM SYSTEM.{log_table}"
+            )
+            log_rows = cursor.fetchall()
+
+        assert meta["nav_id"] == "21000"
+        assert meta["navn"] == "Aggregerte verdier"
+        assert meta["periodisering"] == "periode"
+        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 2)]
     finally:
         with oracle_connection.cursor() as cursor:
             for table in (
                 f"{aggregate_table}_prepub",
                 f"{aggregate_table}_kontroll",
+                f"{aggregate_table}_meta",
+                log_table,
                 source_table,
             ):
                 if oracle.table_exists(oracle_connection, "SYSTEM", table):
