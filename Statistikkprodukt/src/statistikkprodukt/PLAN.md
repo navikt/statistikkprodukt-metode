@@ -8,7 +8,7 @@ The CLI is intended to be used both manually on Linux (a sandboxed development e
 
 Important domain terms are "bredde aggregater" (lots of variables) and "smale aggregater" (few variables). "Bredde aggregater" are the source from which a number of "smale aggregater" are generated. Those are masked to avoid reidentification through small numbers.
 
-Use oracledb, ppy2 and pandas. All orchestration and interaction with the database happens in Python. R only does masking. Mock out the R invocation for now; the real implementation will be added later.
+Use oracledb, ppy2 and pandas. All orchestration and interaction with the database happens in Python. R only does masking.
 
 ## Implementation decisions
 
