@@ -8,6 +8,14 @@
 #' @return A data frame.
 #' @export
 #'
+#' @examples
+#' \dontrun{
+#' # State the query to collect data from database connection
+#' sporring = "SELECT * FROM schema.table"
+#' data <- hent_data(connection = con, query = sporring)
+#' }
+#'
+#'
 #' @importFrom DBI dbGetQuery
 
 hent_data <- function(connection, query = "") {
@@ -22,6 +30,10 @@ hent_data <- function(connection, query = "") {
   
   if (!DBI::dbIsValid(connection)) {
     stop("Feil i databaseconnection.")
+  }
+
+  if (missing(query) || !nzchar(trimws(query))) {
+    stop("Du må oppgi en gyldig SQL-spørring i 'query'.", call. = FALSE)
   }
 
   data <- DBI::dbGetQuery(connection, query)
