@@ -14,12 +14,12 @@
 #' @importFrom GaussSuppression GaussSuppressionFromData
 #' @importFrom stats as.formula
 dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
-  
+
   colnames(data) <- tolower(colnames(data))
-  
+
   freqVar <- tolower(tallKol)
-  data[[freqVar]][is.na(data[[freqVar]])] <- 0 # Må legges på hvis verdikolonner kan inneholde NULL
-  
+  data[[freqVar]][is.na(data[[freqVar]])] <- 0 # Maa legges paa hvis verdikolonner kan inneholde NULL
+
   if(tolower(prikking) == 'false'){
     maxN_val     <- -1
     protectZeros <- FALSE
@@ -29,9 +29,9 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
   }else{maxN_val     <- 3
   protectZeros <- TRUE
   }
-  
+
   formula <- as.formula(tolower(format(formula)))
-  
+
   # Formula validering
   if (inherits(formula, "formula")) {
     # formula er ok
@@ -43,10 +43,10 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
       stop("Formelen ble oppgitt som tekst, men er ikke i et gyldig R-formelformat (f.eks. '~ var1 * var2').")
     })
   } else {
-    stop("Argumentet 'formula' må være et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
+    stop("Argumentet 'formula' maa vaere et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
   }
-  
-  
+
+
   prikk <- GaussSuppressionFromData(data = data,
                                     formula = formula,
                                     freqVar = freqVar,
@@ -57,7 +57,7 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
                                     extend0 = FALSE,
                                     avoidHierarchical = TRUE
   )
-  
+
 
   # Erstatt "Total" med "I alt"
   prikk[prikk == "Total"] <- "I alt"
