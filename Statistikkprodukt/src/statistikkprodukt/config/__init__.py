@@ -27,6 +27,7 @@ from .app_schema import (
     StorageOption,
 )
 from .loader import format_validation_error, load_configuration, resolve_secret
+from .lopenummer import check_lopenummer
 
 __all__ = [
     "AggregateConfiguration",
@@ -47,6 +48,7 @@ __all__ = [
     "StrictModel",
     "Tellepunkt",
     "Variable",
+    "check_lopenummer",
     "format_validation_error",
     "is_aggregate_id",
     "is_not_empty",
