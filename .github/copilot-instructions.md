@@ -2,7 +2,7 @@
 
 Dette prosjektet leverer Python-CLI-en `statistikkprodukt`; kommando- og feilmeldinger skal være på norsk. Følg `Statistikkprodukt/src/statistikkprodukt/PLAN.md` for domenekrav og arkitektur.
 
-Python biblioteket er i `Statistikkprodukt/`. `pyproject.toml` er i root mappen.
+Python biblioteket er i `Statistikkprodukt/`. `pyproject.toml` er i repository root mappen, et nivå over `Statistikkprodukt/`.
 
 Kjør enhetstester sånn:
 ```sh
