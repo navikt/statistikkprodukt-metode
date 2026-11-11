@@ -22,7 +22,7 @@ def configuration():
             },
             "aggregater": [
                 {
-                    "id": "NAV21000",
+                    "id": "21000",
                     "navn": "Navn",
                     "navn-en": "Name",
                     "innhold": "Innhold",
@@ -57,6 +57,23 @@ def test_configuration_rejects_unknown_keys():
         Configuration.model_validate(config)
 
 
+def test_aggregate_id_does_not_include_nav_prefix():
+    """Krever aggregat-ID i tallformat uten NAV-prefiks."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = "NAV21000"
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_aggregate_id_integer_is_converted_to_string():
+    """Konverterer en numerisk aggregat-ID til streng."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = 21000
+
+    assert Configuration.model_validate(config).aggregater[0].id == "21000"
+
+
 def test_loads_aggregate_configurations_matching_mapper(tmp_path):
     """Leser en konfigurasjonsfil per aggregat fra mønsteret i hovedfilen."""
     aggregate_directory = tmp_path / "aggregater"
@@ -83,7 +100,7 @@ definisjon:
   navn-en: {table}
   innhold: {table} 
   innhold-en: {table}
-  id: NAV21000
+  id: 21000
   obt-tabell: OBT_TABELL
   periodisering:
     navn: Periode
@@ -149,7 +166,7 @@ definisjon:
   navn-en: dummy
   innhold: dummy 
   innhold-en: dummy
-  id: NAV21000
+  id: "21000"
   obt-tabell: OBT_TABELL
   periodisering:
     kolonne: periode

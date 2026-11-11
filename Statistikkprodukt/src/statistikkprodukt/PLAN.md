@@ -92,7 +92,7 @@ definisjon:
   navn-en: Population by age
   innhold: Befolkning fordelt etter periode og alder.
   innhold-en: Population distributed by period and age.
-  id: NAV21000
+  id: 21000
   obt-tabell: obt_befolkning
   periodisering:
     navn: Period

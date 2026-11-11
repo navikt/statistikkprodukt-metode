@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     field_validator,
@@ -50,16 +51,23 @@ def is_not_empty(value: str) -> str:
 
 
 def is_aggregate_id(value: str) -> str:
-    """Validerer at en streng ikke er tom eller bare mellomrom."""
-    if not re.match("^NAV2[1-2][0-9]{3}$", value):
-        raise ConfigError("Må være et gyldig NAV-ID, f.eks. NAV22023.")
+    """Validerer aggregat-ID uten NAV-prefiks."""
+    if not re.fullmatch(r"2[1-2][0-9]{3}", value):
+        raise ConfigError("Må være en gyldig aggregat-ID, mellom 21000-22999.")
     return value
+
+
+def normalize_aggregate_id(value: Any) -> Any:
+    """Gjør en numerisk aggregat-ID om til en streng før validering."""
+    return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
 
 
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
-AggregateId = Annotated[str, AfterValidator(is_aggregate_id)]
+AggregateId = Annotated[
+    str, BeforeValidator(normalize_aggregate_id), AfterValidator(is_aggregate_id)
+]
 
 
 class StrictModel(BaseModel):

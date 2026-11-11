@@ -179,8 +179,8 @@ Eksempel på aggregatfil:
 ```yaml
 definisjon:
   # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
-  # Format: NAV2[10000-29999]
-  id: NAV21000
+  # Format: 21000–22999
+  id: 21000
   obt-tabell: befolkning
   
   # Metadata per småaggregat, påkrevd  
