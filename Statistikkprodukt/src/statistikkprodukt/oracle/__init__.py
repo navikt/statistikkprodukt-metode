@@ -1,8 +1,11 @@
 from statistikkprodukt.oracle.metadata import (
+    AggregatResultat,
+    Kjorelogg,
     comment_statements,
     create_meta_table_statement,
     parse_metadata,
     read_metadata,
+    write_log,
     write_metadata_table,
 )
 from statistikkprodukt.oracle.operations import (
@@ -18,6 +21,8 @@ from statistikkprodukt.oracle.operations import (
 )
 
 __all__ = [
+    "AggregatResultat",
+    "Kjorelogg",
     "connect",
     "comment_statements",
     "create_meta_table_statement",
@@ -30,6 +35,7 @@ __all__ = [
     "table_exists",
     "validate_string_columns",
     "write_comments",
+    "write_log",
     "write_metadata_table",
     "write_result",
 ]
