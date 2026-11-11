@@ -3,26 +3,32 @@
 ## Prosjektlayout
 
 ```text
-pyproject.toml # specification av python prosjektet 
-uv.lock # lock-fil for avhengigheter
-src/
-  statistikkprodukt/
-    __init__.py
-    cli.py # CLI argumenter
-    oracle/
-      operations.py # connect / write_result
-      metadata.py # lese metadata (e.g. kommentarer) fra DB
-      validation.py # kompatibilitet av kolonnetyper
-    prikking.py # kjør R skriptet
-    config.py # pydantic models for konfigurasjonsfilen
-    lokal.py # lesing/skriving av csv filer
-    testenv.py # administrasjon av eksternt Oracle-testmiljø
-    app.py # syr sammen applikasjonen
-test/
-  conftest.py # start testmiljø før testene starter
-  # pytest tester her
-R/
-  dvh_prikking.R # entrypoint when python calls R
+pyproject.toml                 # Python-prosjekt og avhengigheter
+uv.lock                        # Låste Python-avhengigheter
+NavDataprodukt/                # R-pakken som inneholder prikkingsfunksjonene
+  DESCRIPTION
+  R/
+Statistikkprodukt/
+  Dockerfile                   # Bygges med repository-roten som build context
+  README.md
+  README_DEV.md
+  eksempel/                    # Eksempelkonfigurasjon og data
+  src/
+    statistikkprodukt/
+      __init__.py
+      app.py                   # Implementering av CLI modulene 
+      cli.py                   # CLI konfigurasjon og parsing av argumenter
+      config/
+        aggregate_schema.py    # Validering av konfigurasjonsfil til små-aggregater
+        app_schema.py          # Validering av konfigurasjonsfil til applikasjon
+        loader.py              # Innlasting av YAML-konfigurasjon
+      lokal.py                 # CSV-lesing og -skriving
+      oracle/                  # Oracle-tilkobling og metadata
+        metadata.py            # Lesing og skriving av kolonnekommentarer og tags
+        operations.py          # Operasjoner på Oracle-databasen
+      prikking.py              # Kall til R
+      testenv.py               # Administrasjon av Oracle-testmiljø
+  test/                        # Pytest-tester
 ```
 
 ## Utviklingsmiljø

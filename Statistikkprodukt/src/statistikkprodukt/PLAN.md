@@ -92,7 +92,7 @@ definisjon:
   navn-en: Population by age
   innhold: Befolkning fordelt etter periode og alder.
   innhold-en: Population distributed by period and age.
-  id: NAV21000
+  id: 21000
   obt-tabell: obt_befolkning
   periodisering:
     navn: Period
@@ -101,7 +101,7 @@ definisjon:
     innhold: Månedsperiode
     innhold-en: Month period
   inkrementell-strategi: overskriv_alt
-  teller:
+  tellepunkter:
     - kolonne: antall
   formula: "~ periode * alder"
   prikking: true
@@ -178,7 +178,11 @@ src/
       metadata.py # lese metadata (e.g. kommentarer) fra DB
       validation.py # kompatibilitet av kolonnetyper
     prikking.py # kjør R skriptet
-    config.py # pydantic models for konfigurasjonsfilen
+    config/
+      __init__.py # offentlig konfigurasjonsgrensesnitt
+      loader.py # leser og validerer YAML-konfigurasjon
+      app_schema.py # skjema for hovedkonfigurasjonen
+      aggregate_schema.py # Aggregate og IncrementalMode
     lokal.py # lesing/skriving av csv filer
     testenv.py # administrasjon av eksternt Oracle-testmiljø
     app.py # syr sammen applikasjonen
@@ -206,7 +210,7 @@ for sub in df[periode].unique():
     r_result = r_prikking(
         data = sub_df, 
         formula = config["formula"], 
-        tallKol = config['aggregater']['teller'][0]['kolonne'],
+        tallKol = config['aggregater']['tellepunkter'][0]['kolonne'],
         prikking = config["prikking"], 
         saerskilt = config["saerskilt"]
     )
@@ -285,20 +289,3 @@ This command must:
 When `test/conftest.py` sees `STATISTIKKPRODUKT_TESTENV_EXTERNAL=1`, it must not instantiate or start `OracleDbContainer`. It must instead use the fixed external connection settings and fail clearly if the database cannot be reached. Without the variable, tests retain the normal self-managed `OracleDbContainer` behavior for local development and CI.
 
 Document this workflow in `.github/copilot-instructions.md` and `README_DEV.md`. Agents running inside the sandbox must use `statistikkprodukt testenv pytest -- ...`, never plain pytest for integration tests.
-
-## Container and dependency updates
-
-Write a Dockerfile using an Ubuntu base image with Python and R installed. A Chainguard-based image is deferred.
-
-Set up dependabot, for github actions and uv. Create separate groups for security and version updates. Use a 14 day dependency cooldown.
-
-## Documentation and example
-
-Write three sets of documentation.
-- .github/copilot-instructions.md
-- a README.md for the non-technical audience
-- a README_DEV.md for developers.
-
-Create an `eksempel` folder containing `inputs/ost_befolkning_kjonn.csv`, `inputs/ost_befolkning_alder.csv`, `outputs/ost_befolkning_kjonn.csv`, `outputs/ost_befolkning_alder.csv`, a configuration file for the transformations, SQL files that refer to the OBT source tables, and a README explaining how to run the example locally.
-
-TODO:

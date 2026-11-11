@@ -49,7 +49,7 @@ aggregater:
     (aggregate_directory / f"{aggregate_table}.yml").write_text(
         f"""
 definisjon:
-  id: NAV21000
+  id: "21000"
   obt-tabell: {source_table}
   navn: Aggregerte verdier
   navn-en: Aggregated values
@@ -62,7 +62,7 @@ definisjon:
     innhold: Periode.
     innhold-en: Period.
   inkrementell-strategi: overskriv_alt
-  teller:
+  tellepunkter:
     - navn: Antall
       navn-en: Count
       kolonne: antall

@@ -4,9 +4,7 @@ from pydantic import ValidationError
 from statistikkprodukt.config import (
     ConfigError,
     Configuration,
-    ConfigurationSource,
-    SmallAggregate,
-    TellerVariable,
+    Tellepunkt,
     load_configuration,
     resolve_secret,
 )
@@ -24,7 +22,7 @@ def configuration():
             },
             "aggregater": [
                 {
-                    "id": "NAV21000",
+                    "id": "21000",
                     "navn": "Navn",
                     "navn-en": "Name",
                     "innhold": "Innhold",
@@ -40,7 +38,7 @@ def configuration():
                         "innhold-en": "Month period",
                     },
                     "inkrementell-strategi": "overskriv_ikke",
-                    "teller": [{"kolonne": "antall"}],
+                    "tellepunkter": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
                     "saerskilt": False,
@@ -57,6 +55,23 @@ def test_configuration_rejects_unknown_keys():
     config["unknown"] = True
     with pytest.raises(ValidationError):
         Configuration.model_validate(config)
+
+
+def test_aggregate_id_does_not_include_nav_prefix():
+    """Krever aggregat-ID i tallformat uten NAV-prefiks."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = "NAV21000"
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_aggregate_id_integer_is_converted_to_string():
+    """Konverterer en numerisk aggregat-ID til streng."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = 21000
+
+    assert Configuration.model_validate(config).aggregater[0].id == "21000"
 
 
 def test_loads_aggregate_configurations_matching_mapper(tmp_path):
@@ -85,7 +100,7 @@ definisjon:
   navn-en: {table}
   innhold: {table} 
   innhold-en: {table}
-  id: NAV21000
+  id: 21000
   obt-tabell: OBT_TABELL
   periodisering:
     navn: Periode
@@ -94,7 +109,7 @@ definisjon:
     innhold: Periode
     innhold-en: Month
   inkrementell-strategi: overskriv_ikke
-  teller:
+  tellepunkter:
     - navn: Antall
       navn-en: Count
       kolonne: antall
@@ -122,8 +137,8 @@ definisjon:
     assert aggregate.sporring_sql == "aggregater/tabell.sql"
     assert aggregate.periodisering.kolonne == "periode"
     assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
-    assert isinstance(aggregate.teller[0], TellerVariable)
-    assert aggregate.teller[0].kolonne == "antall"
+    assert isinstance(aggregate.tellepunkter[0], Tellepunkt)
+    assert aggregate.tellepunkter[0].kolonne == "antall"
 
 
 def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
@@ -151,12 +166,12 @@ definisjon:
   navn-en: dummy
   innhold: dummy 
   innhold-en: dummy
-  id: NAV21000
+  id: "21000"
   obt-tabell: OBT_TABELL
   periodisering:
     kolonne: periode
   inkrementell-strategi: overskriv_ikke
-  teller:
+  tellepunkter:
     - kolonne: antall
   formula: "~ periode * region"
   prikking: true

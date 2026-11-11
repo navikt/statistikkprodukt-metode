@@ -1,5 +1,5 @@
 definisjon:
-  id: NAV21000
+  id: 21000
   obt-tabell: obt_befolkning
 
   navn: Befolkning etter alder
@@ -14,7 +14,7 @@ definisjon:
     innhold: Månedsperiode på formatet YYYYMM.
     innhold-en: Month in YYYYMM format.
 
-  teller:
+  tellepunkter:
     - navn: Antall personer
       navn-en: Number of people
       kolonne: antall

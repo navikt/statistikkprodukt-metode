@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import oracledb
 from oracledb import Cursor
-from statistikkprodukt.config import SmallAggregate, Metadata, validate_identifier
+from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
 from statistikkprodukt.oracle.operations import table_exists
 
 LOGGER = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ def comment_statements(
 def read_metadata(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate
+        aggregate: Aggregate
 ) -> TableMetadata:
     """Fyller manglende aggregatmetadata fra Oracle-kommentarer.
 
@@ -69,7 +69,7 @@ def read_metadata(
         for variable in [
             aggregate.periodisering,
             *aggregate.variabler,
-            *aggregate.teller,
+            *aggregate.tellepunkter,
         ]:
             column = variable.kolonne
             db_metadata = _fetch_column_metadata(

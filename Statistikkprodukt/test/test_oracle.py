@@ -5,7 +5,7 @@ import oracledb
 import pandas as pd
 import pytest
 from statistikkprodukt import app, oracle
-from statistikkprodukt.config import InkrementalMode, Metadata, StorageOption
+from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption
 from statistikkprodukt.oracle import metadata
 from statistikkprodukt.oracle import (
     write_result,
@@ -495,7 +495,7 @@ def test_process_aggregate_only_masks_selected_periods(
     config.connection.schema_name = "system"
     aggregate = config.aggregater[0]
     aggregate.tabell = table
-    aggregate.inkrementell_strategi = InkrementalMode(mode)
+    aggregate.inkrementell_strategi = IncrementalMode(mode)
     (tmp_path / aggregate.sporring_sql).write_text(
         "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
         "union all select '202502', 'Oslo', 20 from dual "
