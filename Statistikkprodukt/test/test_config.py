@@ -4,9 +4,7 @@ from pydantic import ValidationError
 from statistikkprodukt.config import (
     ConfigError,
     Configuration,
-    ConfigurationSource,
-    SmallAggregate,
-    TellerVariable,
+    Tellepunkt,
     load_configuration,
     resolve_secret,
 )
@@ -40,7 +38,7 @@ def configuration():
                         "innhold-en": "Month period",
                     },
                     "inkrementell-strategi": "overskriv_ikke",
-                    "teller": [{"kolonne": "antall"}],
+                    "tellepunkter": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
                     "saerskilt": False,
@@ -94,7 +92,7 @@ definisjon:
     innhold: Periode
     innhold-en: Month
   inkrementell-strategi: overskriv_ikke
-  teller:
+  tellepunkter:
     - navn: Antall
       navn-en: Count
       kolonne: antall
@@ -122,8 +120,8 @@ definisjon:
     assert aggregate.sporring_sql == "aggregater/tabell.sql"
     assert aggregate.periodisering.kolonne == "periode"
     assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
-    assert isinstance(aggregate.teller[0], TellerVariable)
-    assert aggregate.teller[0].kolonne == "antall"
+    assert isinstance(aggregate.tellepunkter[0], Tellepunkt)
+    assert aggregate.tellepunkter[0].kolonne == "antall"
 
 
 def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
@@ -156,7 +154,7 @@ definisjon:
   periodisering:
     kolonne: periode
   inkrementell-strategi: overskriv_ikke
-  teller:
+  tellepunkter:
     - kolonne: antall
   formula: "~ periode * region"
   prikking: true

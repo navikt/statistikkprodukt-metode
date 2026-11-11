@@ -193,13 +193,13 @@ definisjon:
   periodisering:
     kolonne: periode
     # Følgende metadata kan hentes fra kolonnekommentarer i OBT-tabellen,
-    # men kan også overskrives her. Det samme gjelder for teller og variabler.
+    # men kan også overskrives her. Det samme gjelder for tellepunkter og variabler.
     navn: Periode
     navn-en: Period
     innhold: Månedsperiode
     innhold-en: Month period
   
-  teller:
+  tellepunkter:
     - kolonne: antall
       navn: Antall personer
       navn-en: Number of people
@@ -224,7 +224,7 @@ definisjon:
 
 `obt-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
 
-Metadata på `periodisering`, variabler og `teller` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
+Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
 
 - `#NAVN` for norsk navn
 - `#NAVN_EN` for engelsk navn

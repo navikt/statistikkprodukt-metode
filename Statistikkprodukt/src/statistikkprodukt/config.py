@@ -149,7 +149,7 @@ class DatabaseConnection(StrictModel):
         return value
 
 
-class Variable(StrictModel):
+class KolonneMetadata(StrictModel):
     navn: str | None = None
     navn_en: str | None = Field(default=None, alias="navn-en")
     kolonne: OracleIdentifier
@@ -164,7 +164,11 @@ class Variable(StrictModel):
         return value.strip() or None if isinstance(value, str) else value
 
 
-class TellerVariable(Variable):
+class Variable(KolonneMetadata):
+    pass
+
+
+class Tellepunkt(KolonneMetadata):
     pass
 
 
@@ -179,7 +183,7 @@ class SmallAggregate(StrictModel):
     sporring_sql: NonEmptyString
     periodisering: Variable
     inkrementell_strategi: InkrementalMode = Field(alias="inkrementell-strategi")
-    teller: list[TellerVariable] = Field(min_length=1, max_length=1)
+    tellepunkter: list[Tellepunkt] = Field(min_length=1, max_length=1)
     formula: NonEmptyString
     prikking: bool
     saerskilt: bool
@@ -229,10 +233,13 @@ class SmallAggregate(StrictModel):
             raise ConfigError("variabler kan ikke inneholde gjentatte kolonner")
         if self.periodisering.kolonne in columns:
             raise ConfigError("periodisering.kolonne kan ikke også være en variabel")
-        if any(t.kolonne in columns for t in self.teller):
-            raise ConfigError("teller kan ikke også være en variabel")
-        if any(t.kolonne == self.periodisering.kolonne in columns for t in self.teller):
-            raise ConfigError("teller.kolonne kan ikke være periodisering.kolonne")
+        if any(tellepunkt.kolonne in columns for tellepunkt in self.tellepunkter):
+            raise ConfigError("tellepunkt kan ikke også være en variabel")
+        if any(
+            tellepunkt.kolonne == self.periodisering.kolonne in columns
+            for tellepunkt in self.tellepunkter
+        ):
+            raise ConfigError("tellepunkt.kolonne kan ikke være periodisering.kolonne")
         return self
 
 

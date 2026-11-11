@@ -230,7 +230,7 @@ def _process_aggregate(
         data,
         aggregate.periodisering.kolonne,
         aggregate.formula,
-        aggregate.teller[0].kolonne,
+        aggregate.tellepunkter[0].kolonne,
         aggregate.prikking,
         aggregate.saerskilt,
     )

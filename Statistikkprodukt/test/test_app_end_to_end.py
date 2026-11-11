@@ -62,7 +62,7 @@ definisjon:
     innhold: Periode.
     innhold-en: Period.
   inkrementell-strategi: overskriv_alt
-  teller:
+  tellepunkter:
     - navn: Antall
       navn-en: Count
       kolonne: antall

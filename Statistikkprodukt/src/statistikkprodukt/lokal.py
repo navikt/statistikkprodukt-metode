@@ -31,7 +31,7 @@ def validate_columns(frame: pd.DataFrame, aggregate: SmallAggregate) -> None:
     expected = [
         aggregate.periodisering.kolonne,
         *(variable.kolonne for variable in aggregate.variabler),
-        *(teller.kolonne for teller in aggregate.teller),
+        *(tellepunkt.kolonne for tellepunkt in aggregate.tellepunkter),
     ]
     missing = [column for column in expected if column.lower() not in actual_by_lower]
     unexpected = [

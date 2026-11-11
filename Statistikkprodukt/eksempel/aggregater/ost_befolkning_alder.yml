@@ -14,7 +14,7 @@ definisjon:
     innhold: Månedsperiode på formatet YYYYMM.
     innhold-en: Month in YYYYMM format.
 
-  teller:
+  tellepunkter:
     - navn: Antall personer
       navn-en: Number of people
       kolonne: antall
