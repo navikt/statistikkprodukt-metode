@@ -8,7 +8,7 @@ import oracledb
 import pandas as pd
 from pydantic import SecretStr
 from statistikkprodukt import oracle, lokal
-from statistikkprodukt.config import Configuration, InkrementalMode, SmallAggregate, resolve_secret, StorageOption
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def installer_r_pakker() -> None:
 def _select_aggregates(
         configuration: Configuration,
         selected_tables: list[str] | None
-) -> list[SmallAggregate]:
+) -> list[Aggregate]:
     """Velger alle aggregater eller kontrollerer eksplisitte tabellvalg."""
     if not selected_tables:
         return configuration.aggregater
@@ -202,7 +202,7 @@ def _connect(configuration: Configuration) -> oracledb.Connection:
 
 def _process_aggregate(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -253,7 +253,7 @@ def _process_aggregate(
 
 def _get_periods_to_load(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -271,14 +271,14 @@ def _get_periods_to_load(
         config_directory,
         transfer,
     )
-    if aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
         return sorted(available)
 
     missing = available - existing
-    if aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_SISTE_PERIODE:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
         max_available = {max(existing)} if existing and max(existing) in available else set()
         return sorted(missing.union(max_available))
-    elif aggregate.inkrementell_strategi == InkrementalMode.OVERSKRIV_IKKE:
+    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
         return sorted(missing)
     else:
         raise NotImplementedError(
@@ -288,7 +288,7 @@ def _get_periods_to_load(
 
 def _fetch_periods(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
 ) -> tuple[set[int | str], set[int | str]]:
@@ -312,7 +312,7 @@ def _fetch_periods(
     return available, existing
 
 
-def _read_sql(aggregate: SmallAggregate, config_directory: Path) -> str:
+def _read_sql(aggregate: Aggregate, config_directory: Path) -> str:
     """Leser SQL-filen relativt til konfigurasjonen."""
     sql_path = (config_directory / aggregate.sporring_sql).resolve()
     try:
@@ -322,7 +322,7 @@ def _read_sql(aggregate: SmallAggregate, config_directory: Path) -> str:
 
 
 def _read_input(
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -347,7 +347,7 @@ def _read_input(
 
 def _write_output(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         prepub: pd.DataFrame,
         kontroll: pd.DataFrame,
         transfer: Transfer,
@@ -373,7 +373,7 @@ def _write_output(
 
 def _write_database(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         prepub: pd.DataFrame,
         kontroll: pd.DataFrame,
         transfer: Transfer,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import oracledb
 from oracledb import Cursor
-from statistikkprodukt.config import SmallAggregate, Metadata, validate_identifier
+from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def comment_statements(
 def read_metadata(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate
+        aggregate: Aggregate
 ) -> TableMetadata:
     """Fyller manglende aggregatmetadata fra Oracle-kommentarer.
 

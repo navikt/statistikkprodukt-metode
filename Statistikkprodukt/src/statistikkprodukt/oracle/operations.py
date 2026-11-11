@@ -8,7 +8,7 @@ import oracledb
 import pandas as pd
 from statistikkprodukt.config import (
     DatabaseConnection,
-    SmallAggregate,
+    Aggregate,
     validate_identifier,
 )
 from statistikkprodukt.oracle.metadata import TableMetadata, comment_statements
@@ -51,7 +51,7 @@ def _generate_in_predicate(column_name: str, elements: list[Any]) -> str:
 def read_query(
         connection: oracledb.Connection,
         sql: str,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         *,
         periods_to_load: list[int | str] | None = None,
 ) -> pd.DataFrame:
@@ -92,7 +92,7 @@ def read_periods(
 
 
 def read_target_periods(
-        connection: oracledb.Connection, schema: str, aggregate: SmallAggregate
+        connection: oracledb.Connection, schema: str, aggregate: Aggregate
 ) -> set[int | str]:
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
@@ -143,7 +143,7 @@ def validate_string_columns(
             )
 
 
-def _validate_query_string_columns(description: Any, aggregate: SmallAggregate) -> None:
+def _validate_query_string_columns(description: Any, aggregate: Aggregate) -> None:
     columns = [
         aggregate.periodisering.kolonne,
         *(variable.kolonne for variable in aggregate.variabler),
@@ -206,7 +206,7 @@ def write_comments(
 def write_result(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         table_name: str,
         frame: pd.DataFrame,
         *,

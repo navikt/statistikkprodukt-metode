@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
-from .aggregate_schema import AggregateConfiguration, ConfigError, SmallAggregate
+from .aggregate_schema import AggregateConfiguration, ConfigError, Aggregate
 from .app_schema import (
     Configuration,
     ConfigurationSource,
@@ -40,7 +40,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
     aggregate_paths = _find_aggregate_configurations(
         source.mapper, source.aggregater, path.parent
     )
-    aggregates: list[SmallAggregate] = []
+    aggregates: list[Aggregate] = []
     for aggregate_path in aggregate_paths:
         aggregate_data = _read_yaml(aggregate_path, yaml)
         if isinstance(aggregate_data, dict) and isinstance(

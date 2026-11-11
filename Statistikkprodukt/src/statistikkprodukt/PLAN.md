@@ -178,7 +178,11 @@ src/
       metadata.py # lese metadata (e.g. kommentarer) fra DB
       validation.py # kompatibilitet av kolonnetyper
     prikking.py # kjør R skriptet
-    config.py # pydantic models for konfigurasjonsfilen
+    config/
+      __init__.py # offentlig konfigurasjonsgrensesnitt
+      loader.py # leser og validerer YAML-konfigurasjon
+      app_schema.py # skjema for hovedkonfigurasjonen
+      aggregate_schema.py # Aggregate og IncrementalMode
     lokal.py # lesing/skriving av csv filer
     testenv.py # administrasjon av eksternt Oracle-testmiljø
     app.py # syr sammen applikasjonen

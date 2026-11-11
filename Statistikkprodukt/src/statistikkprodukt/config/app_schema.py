@@ -9,7 +9,7 @@ from .aggregate_schema import (
     ConfigError,
     NonEmptyString,
     OracleIdentifier,
-    SmallAggregate,
+    Aggregate,
     StrictModel,
 )
 
@@ -110,11 +110,11 @@ class ConfigurationSource(StrictModel):
 
 class Configuration(StrictModel):
     connection: DatabaseConnection
-    aggregater: list[SmallAggregate]
+    aggregater: list[Aggregate]
 
     @field_validator("aggregater")
     @classmethod
-    def validate_aggregates(cls, value: list[SmallAggregate]) -> list[SmallAggregate]:
+    def validate_aggregates(cls, value: list[Aggregate]) -> list[Aggregate]:
         """Krever aggregater med unike måltabeller."""
         if not value:
             raise ConfigError("aggregater må inneholde minst ett aggregat")

@@ -21,7 +21,7 @@ class ConfigError(ValueError):
 _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_$#]{0,127}$")
 
 
-class InkrementalMode(StrEnum):
+class IncrementalMode(StrEnum):
     OVERSKRIV_IKKE = "overskriv_ikke"
     OVERSKRIV_ALT = "overskriv_alt"
     OVERSKRIV_SISTE_PERIODE = "overskriv_siste_periode"
@@ -97,7 +97,7 @@ class Tellepunkt(KolonneMetadata):
     pass
 
 
-class SmallAggregate(StrictModel):
+class Aggregate(StrictModel):
     id: AggregateId
     navn: str
     navn_en: str = Field(alias="navn-en")
@@ -107,7 +107,7 @@ class SmallAggregate(StrictModel):
     innhold_en: str = Field(alias="innhold-en")
     sporring_sql: NonEmptyString
     periodisering: Variable
-    inkrementell_strategi: InkrementalMode = Field(alias="inkrementell-strategi")
+    inkrementell_strategi: IncrementalMode = Field(alias="inkrementell-strategi")
     tellepunkter: list[Tellepunkt] = Field(min_length=1, max_length=1)
     formula: NonEmptyString
     prikking: bool
@@ -134,7 +134,7 @@ class SmallAggregate(StrictModel):
     @classmethod
     def validate_incremental_mode(cls, value: str) -> str:
         """Kontrollerer at inkrementell modus er støttet."""
-        allowed = list(InkrementalMode)
+        allowed = list(IncrementalMode)
         if value not in allowed:
             raise ConfigError(
                 f"inkrementell-strategi må være én av {', '.join(sorted(allowed))}"
@@ -150,7 +150,7 @@ class SmallAggregate(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def validate_column_contract(self) -> SmallAggregate:
+    def validate_column_contract(self) -> Aggregate:
         """Kontrollerer at dimensjoner og måltall har unike kolonner."""
         columns = [variable.kolonne for variable in self.variabler]
         if len(columns) != len(set(columns)):
@@ -168,4 +168,4 @@ class SmallAggregate(StrictModel):
 
 
 class AggregateConfiguration(StrictModel):
-    definisjon: SmallAggregate
+    definisjon: Aggregate

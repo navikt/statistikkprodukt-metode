@@ -5,7 +5,7 @@ import oracledb
 import pandas as pd
 import pytest
 from statistikkprodukt import app, oracle
-from statistikkprodukt.config import InkrementalMode, StorageOption
+from statistikkprodukt.config import IncrementalMode, StorageOption
 from test.test_config import configuration
 
 
@@ -59,7 +59,7 @@ def test_run_passes_transfer_with_selected_modes(monkeypatch, tmp_path, kilde, m
 def test_get_periods_to_load(monkeypatch, tmp_path, mode, available, existing, expected):
     config = configuration()
     aggregate = config.aggregater[0]
-    aggregate.inkrementell_strategi = InkrementalMode(mode)
+    aggregate.inkrementell_strategi = IncrementalMode(mode)
     fetch = MagicMock(return_value=(available, existing))
     monkeypatch.setattr(app, "_fetch_periods", fetch)
 
