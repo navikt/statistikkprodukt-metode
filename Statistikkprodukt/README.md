@@ -233,6 +233,10 @@ Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekomm
 
 NB: Både periode og variabler må være streng.
 
+### Løpenummerlisten
+
+Før `last` og `skjema` kontrolleres hvert aggregat mot `lopenummer.txt` i rotmappa i repoet (eller filen i miljøvariabelen `STATISTIKKPRODUKT_LOPENUMMER`). Filen har kolonnene `Løpenummer`, `Team` og `Tabellnavn`, skilt med tabulator, semikolon, komma eller `|`. Kontrollen krever at `id` fra YAML-filen finnes som løpenummer, og at tabellnavnet i listen er det samme som aggregatets tabellnavn (filnavnet til YAML-filen). Løpenummer kan stå med eller uten `NAV`-prefiks, og store og små bokstaver i tabellnavnet spiller ingen rolle.
+
 ### Inkrementelle laster
 
 Følgende inkrementelle strategier er støttet. Inkrementelle laster baserer seg på periodekolonnen.
