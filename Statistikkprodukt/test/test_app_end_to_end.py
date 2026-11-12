@@ -163,11 +163,11 @@ group by periode, region
                 tabell=aggregate_table,
             )
             log_rows = [
-                (status, aggregat_id, table, name.read(), count, masked)
+                (status, aggregat_id, table, name, count, masked)
                 for status, aggregat_id, table, name, count, masked in cursor.fetchall()
             ]
 
-        assert meta["aggregat_id"] == "21000"
+        assert meta["id"] == "21000"
         assert meta["navn"] == "Aggregerte verdier"
         assert meta["periodisering"] == "periode"
         assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 2)]
