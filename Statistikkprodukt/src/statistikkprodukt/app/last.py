@@ -162,7 +162,31 @@ def _process_aggregate(
     prepub = prepub[list(data.columns)]
     kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
 
-    LOGGER.info("Skriver %(len)d rader til %(tab)s_prepub og %(tab)s_kontroll.", {"len": len(prepub), "tab": aggregate.tabell})
+    perioder = sorted(map(str, prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()))
+    resultat = LasteResultat(
+        id=aggregate.id,
+        tabell=aggregate.tabell,
+        perioder=perioder,
+        antall_rader=len(prepub),
+        antall_primaerprikket=int(kontroll["primary"].sum()),
+        antall_prikket=int(kontroll["suppressed"].sum()),
+        metadata=None,
+    )
+    LOGGER.info(
+        ("Resultat for tabell %(tabell)s: "
+         "%(antall_perioder)d perioder, "
+         "%(antall_rader)d rader, "
+         "%(antall_primaerprikket)d primaerprikket, "
+         "%(antall_prikket)d prikket."),
+        {
+            "tabell": aggregate.tabell,
+            "antall_perioder": len(perioder),
+            "antall_rader": resultat.antall_rader,
+            "antall_primaerprikket": resultat.antall_primaerprikket,
+            "antall_prikket": resultat.antall_prikket,
+        }
+    )
+
     metadata = _write_output(
         configuration,
         aggregate,
@@ -172,16 +196,9 @@ def _process_aggregate(
         config_directory=config_directory,
         dry_run=dry_run,
     )
+    resultat.metadata = metadata
 
-    return LasteResultat(
-        id=aggregate.id,
-        tabell=aggregate.tabell,
-        perioder=sorted(prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()),
-        antall_rader=len(prepub),
-        antall_primaerprikket=int(kontroll["primary"].sum()),
-        antall_prikket=int(kontroll["suppressed"].sum()),
-        metadata=metadata,
-    )
+    return resultat
 
 
 def _get_periods_to_load(
@@ -293,6 +310,7 @@ def _write_output(
         directory = transfer.output_directory
         csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
         csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
+        return None
     else:
         return _write_database(
             configuration,
