@@ -26,7 +26,9 @@ Statistikkprodukt/
         register.py            # StatistikkproduktRegister og lokal registerkontroll
       lokal.py                 # CSV-lesing og -skriving
       oracle/                  # Oracle-tilkobling og metadata
-        metadata.py            # Metadata, kommentarer og kjørelogg i Oracle
+        aggregate_table.py     # Aggregatmetadata og Oracle-kommentarer
+        meta_table.py          # Metadatatabeller i Oracle
+        logg_table.py          # Kjøreloggtabellen i Oracle
         operations.py          # Operasjoner på Oracle-databasen
       prikking.py              # Kall til R
       testenv.py               # Administrasjon av Oracle-testmiljø

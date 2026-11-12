@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from statistikkprodukt import app, oracle
 from statistikkprodukt.config import DATABASE_PROFILES, load_configuration, StorageOption
 from statistikkprodukt.testenv import (
@@ -11,6 +12,7 @@ from statistikkprodukt.testenv import (
 )
 
 
+@pytest.mark.r_dependent
 def test_e2e_run(
         oracle_connection, monkeypatch, tmp_path
 ):
