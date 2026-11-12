@@ -10,6 +10,8 @@ definisjon:
   kontakt: team x
   note: info url
   note-en: info url engelsk
+  notex: Egen blå boks
+  info: info som kun blir liggende i PX-fil
 
   navn: Befolkning etter alder
   navn-en: Population by age

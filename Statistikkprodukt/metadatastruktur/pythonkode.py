@@ -10,6 +10,8 @@ FIELD_MAPPING = {
     "innhold": ("contents", "PX"),
     "note": ("note", "PX"),
     "kontakt": ("contact", "PX"),
+    "notex": ("notex", "PX"),
+    "info": ("info", "PX"),
 }
 
 
