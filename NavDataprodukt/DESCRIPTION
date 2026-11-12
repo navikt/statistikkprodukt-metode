@@ -4,7 +4,7 @@ Version: 0.1.1
 Authors@R: person("Marte", "Nordin", email = "marte.nordin@nav.no", role = c("aut", "cre"))
 Description: Nav internal package for standard data suppression using SSB GaussSuppression.
 License: proprietary
-Config/roxygen2/version: 8.1.1
+Config/roxygen2/version: 8.1.2
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:

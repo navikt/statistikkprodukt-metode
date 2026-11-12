@@ -17,3 +17,12 @@ A data frame.
 \description{
 Executes a query against the established database connection.
 }
+\examples{
+\dontrun{
+# State the query to collect data from database connection
+sporring = "SELECT * FROM schema.table"
+data <- hent_data(connection = con, query = sporring)
+}
+
+
+}

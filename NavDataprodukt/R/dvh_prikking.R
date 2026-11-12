@@ -5,8 +5,8 @@
 #' @param data A data frame containing only the relevant columns for the result, that is the dimension columns and one value.
 #' @param formula A formula object or string expression defining the model structure.
 #' @param tallKol Character string indicating the numeric column to count/suppress.
-#' @param prikking Character ("ja"/"nei"). If "nei", suppression is bypassed.
-#' @param saerskilt Character ("ja"/"nei"). If "nei", normal threshold is used. If "ja", a higher threshold is used.
+#' @param prikking Character ("true"/"false"). If "false", suppression is bypassed.
+#' @param saerskilt Character ("true"/"false"). If "false", normal threshold is used. If "true", a higher threshold is used.
 #'
 #' @return The functions return two data frame with primary/secondary suppression applied, one that is cleaned, and one that contains original data with suppression flags.
 #' @export
@@ -14,12 +14,12 @@
 #' @importFrom GaussSuppression GaussSuppressionFromData
 #' @importFrom stats as.formula
 dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
-  
+
   colnames(data) <- tolower(colnames(data))
-  
+
   freqVar <- tolower(tallKol)
-  data[[freqVar]][is.na(data[[freqVar]])] <- 0 # Må legges på hvis verdikolonner kan inneholde NULL
-  
+  data[[freqVar]][is.na(data[[freqVar]])] <- 0 # Maa legges paa hvis verdikolonner kan inneholde NULL
+
   if(tolower(prikking) == 'false'){
     maxN_val     <- -1
     protectZeros <- FALSE
@@ -29,9 +29,9 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
   }else{maxN_val     <- 3
   protectZeros <- TRUE
   }
-  
+
   formula <- as.formula(tolower(format(formula)))
-  
+
   # Formula validering
   if (inherits(formula, "formula")) {
     # formula er ok
@@ -43,10 +43,10 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
       stop("Formelen ble oppgitt som tekst, men er ikke i et gyldig R-formelformat (f.eks. '~ var1 * var2').")
     })
   } else {
-    stop("Argumentet 'formula' må være et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
+    stop("Argumentet 'formula' maa vaere et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
   }
-  
-  
+
+
   prikk <- GaussSuppressionFromData(data = data,
                                     formula = formula,
                                     freqVar = freqVar,
@@ -57,7 +57,7 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
                                     extend0 = FALSE,
                                     avoidHierarchical = TRUE
   )
-  
+
 
   # Erstatt "Total" med "I alt"
   prikk[prikk == "Total"] <- "I alt"
