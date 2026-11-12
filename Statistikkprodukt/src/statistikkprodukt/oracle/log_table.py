@@ -5,6 +5,7 @@ import logging
 import oracledb
 from statistikkprodukt.app.models import Kjorelogg
 from statistikkprodukt.config import validate_identifier
+from statistikkprodukt.oracle.utils import executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -104,7 +105,9 @@ def write_log(connection: oracledb.Connection, schema: str, logg: Kjorelogg) -> 
                     "feilmelding", "innhold", "innhold_en", "sporring_sql",
                 )},
             )
-            cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+            executemany_sql(
+                cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+            )
         connection.commit()
     except Exception as exc:
         connection.rollback()

@@ -12,6 +12,8 @@ import docker
 import oracledb
 from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 
+from statistikkprodukt.oracle.utils import execute_sql
+
 CONTAINER_NAME = "statistikkprodukt-oracle-test"
 CONTAINER_IMAGE = "gvenzl/oracle-free:23-slim-faststart"
 CONTAINER_LABEL = "no.nav.statistikkprodukt.testenv"
@@ -214,7 +216,7 @@ def _grant_dictionary_access() -> None:
                 tcp_connect_timeout=5,
                 mode=oracledb.AuthMode.SYSDBA
         ) as connection, connection.cursor() as cursor:
-            cursor.execute("GRANT SELECT_CATALOG_ROLE TO SYSTEM")
+            execute_sql(cursor, "GRANT SELECT_CATALOG_ROLE TO SYSTEM")
     except oracledb.Error as exc:
         raise TestEnvironmentError(
             "Kunne ikke gi SYSTEM lesetilgang til Oracle sine DBA-visninger."

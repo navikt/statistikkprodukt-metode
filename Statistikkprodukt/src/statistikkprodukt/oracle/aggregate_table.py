@@ -7,6 +7,7 @@ import oracledb
 from oracledb import Cursor
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
+from statistikkprodukt.oracle.utils import execute_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -94,7 +95,8 @@ def _merge_metadata(column, config_metadata: Metadata, db_metadata: Metadata):
 def _fetch_column_metadata(
     schema: str, table_name: str, column: str, cursor: Cursor
 ) -> Metadata:
-    cursor.execute(
+    execute_sql(
+        cursor,
         "select comments from sys.dba_col_comments where owner = :owner "
         "and table_name = :table_name and column_name = :column_name",
         owner=schema.upper(),
@@ -106,7 +108,8 @@ def _fetch_column_metadata(
 
 
 def _fetch_table_metadata(schema: str, table_name: str, cursor: Cursor) -> Metadata:
-    cursor.execute(
+    execute_sql(
+        cursor,
         "select comments from sys.dba_tab_comments where owner = :owner "
         "and table_name = :table_name",
         owner=schema.upper(),

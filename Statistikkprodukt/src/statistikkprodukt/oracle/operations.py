@@ -13,6 +13,7 @@ from statistikkprodukt.config import (
 )
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.oracle.aggregate_table import comment_statements
+from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ def connect(configuration: DatabaseConnection) -> oracledb.Connection:
     )
 
     with connection.cursor() as cursor:
-        cursor.execute(f"ALTER SESSION SET CURRENT_SCHEMA = {configuration.schema_name}")
+        execute_sql(
+            cursor, f"ALTER SESSION SET CURRENT_SCHEMA = {configuration.schema_name}"
+        )
     return connection
 
 
@@ -66,7 +69,7 @@ def read_query(
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
 
     with connection.cursor() as cursor:
-        cursor.execute(sql, parameters)
+        execute_sql(cursor, sql, parameters)
 
         description = cursor.description or []
         _validate_query_string_columns(description, aggregate)
@@ -85,8 +88,10 @@ def read_periods(
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
     with connection.cursor() as cursor:
-        cursor.execute(
-            f"SELECT DISTINCT {period} FROM (\n{sql}\n) WHERE {period} IS NOT NULL"
+        execute_sql(
+            cursor,
+            f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
+            f"WHERE {period} IS NOT NULL",
         )
         _validate_string_type(cursor.description, period)
         return {row[0] for row in cursor.fetchall()}
@@ -106,7 +111,8 @@ def table_exists(
 ) -> bool:
     """Sjekker om en tabell finnes i det angitte Oracle-skjemaet."""
     with connection.cursor() as cursor:
-        cursor.execute(
+        execute_sql(
+            cursor,
             "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
             owner=schema.upper(),
             table_name=table_name.upper(),
@@ -122,7 +128,8 @@ def validate_string_columns(
 ) -> None:
     """Kontrollerer at periode- og variabelkolonnene i en tabell er tekstkolonner."""
     with connection.cursor() as cursor:
-        cursor.execute(
+        execute_sql(
+            cursor,
             "SELECT column_name, data_type FROM all_tab_columns "
             "WHERE owner = :owner AND table_name = :table_name",
             owner=schema.upper(),
@@ -201,7 +208,7 @@ def write_comments(
     """Oppretter eller oppdaterer tabellens og kolonnenes Oracle-kommentarer."""
     with connection.cursor() as cursor:
         for statement in comment_statements(schema, table_name, metadata):
-            cursor.execute(statement)
+            execute_sql(cursor, statement)
 
 
 def write_result(
@@ -259,7 +266,9 @@ def _delete_incremental_if_overwrite(cursor: Any, table: str,
     available_periods = frame[period_column].dropna().unique().tolist()
     if available_periods:
         predicate = _generate_in_predicate(period_column, available_periods)
-        cursor.execute(f"DELETE FROM {table} WHERE {predicate}", available_periods)
+        execute_sql(
+            cursor, f"DELETE FROM {table} WHERE {predicate}", available_periods
+        )
 
 
 def _insert_rows(cursor: Any, table: str, frame: pd.DataFrame) -> None:
@@ -274,7 +283,9 @@ def _insert_rows(cursor: Any, table: str, frame: pd.DataFrame) -> None:
         tuple(_db_value(value) for value in row)
         for row in frame.itertuples(index=False, name=None)
     ]
-    cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+    executemany_sql(
+        cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+    )
 
 
 def _db_value(value: Any) -> Any:

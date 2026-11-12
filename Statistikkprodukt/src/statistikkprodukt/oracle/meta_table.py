@@ -5,6 +5,7 @@ import logging
 import oracledb
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, validate_identifier
+from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,9 +63,11 @@ def write_metadata_table(
     try:
         with connection.cursor() as cursor:
             # DELETE i stedet for TRUNCATE: TRUNCATE er DDL og committer implisitt.
-            cursor.execute(f"DELETE FROM {table}")
+            execute_sql(cursor, f"DELETE FROM {table}")
             cursor.setinputsizes(verdi=oracledb.DB_TYPE_CLOB)
-            cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+            executemany_sql(
+                cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+            )
         connection.commit()
     except oracledb.DatabaseError as exc:
         connection.rollback()
