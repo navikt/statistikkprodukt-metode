@@ -1,4 +1,4 @@
-"""Kontroll av aggregat-ID og tabellnavn mot løpenummerlisten (Lopenr.txt)."""
+"""Kontroll av aggregat-ID og tabellnavn mot løpenummerlisten (statistikkprodukt_register.txt)."""
 from __future__ import annotations
 
 import csv
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .aggregate_schema import Aggregate, ConfigError
 
-LOPENUMMER_FILE = "Lopenr.txt"
+LOPENUMMER_FILE = "statistikkprodukt_register.txt"
 LOPENUMMER_ENV = "STATISTIKKPRODUKT_LOPENUMMER"
 
 _COLUMN_ID = "Løpenr"

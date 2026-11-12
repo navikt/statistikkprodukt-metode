@@ -235,7 +235,7 @@ NB: Både periode og variabler må være streng.
 
 ### Løpenummerlisten
 
-Før `last` og `skjema` kontrolleres hvert aggregat mot `Lopenr.txt` i rotmappa i repoet (eller filen i miljøvariabelen `STATISTIKKPRODUKT_LOPENUMMER`). Filen har kolonnene `Løpenr`, `Team` og `Statistikkprodukt`, skilt med tabulator, semikolon, komma eller `|`. Kontrollen krever at `id` fra YAML-filen finnes som løpenummer, og at tabellnavnet til statistikkproduktet i listen er det samme som aggregatets tabellnavn (filnavnet til YAML-filen). Løpenummer kan stå med eller uten `NAV`-prefiks, og store og små bokstaver i tabellnavnet spiller ingen rolle.
+Før `last` og `skjema` kontrolleres hvert aggregat mot `statistikkprodukt_register.txt` i rotmappa i repoet (eller filen i miljøvariabelen `STATISTIKKPRODUKT_LOPENUMMER`). Filen har kolonnene `Løpenr`, `Team` og `Statistikkprodukt`, skilt med tabulator, semikolon, komma eller `|`. Kontrollen krever at `id` fra YAML-filen finnes som løpenummer, og at tabellnavnet til statistikkproduktet i listen er det samme som aggregatets tabellnavn (filnavnet til YAML-filen). Løpenummer kan stå med eller uten `NAV`-prefiks, og store og små bokstaver i tabellnavnet spiller ingen rolle.
 
 ### Inkrementelle laster
 

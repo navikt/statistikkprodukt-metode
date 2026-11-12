@@ -5,7 +5,7 @@ from test.test_config import configuration
 
 
 def _write(tmp_path, text):
-    path = tmp_path / "Lopenr.txt"
+    path = tmp_path / "statistikkprodukt_register.txt"
     path.write_text(text, encoding="utf-8")
     return path
 
