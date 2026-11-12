@@ -77,18 +77,39 @@ class StrictModel(BaseModel):
 class Metadata(StrictModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    navn: str | None = None
-    navn_en: str | None = Field(default=None, alias="navn-en")
-    innhold: str | None = None
-    innhold_en: str | None = Field(default=None, alias="innhold-en")
+    navn: str | None = Field(
+        default=None, description="Navn."
+    )
+    navn_en: str | None = Field(
+        default=None,
+        alias="navn-en",
+        description="Engelsk navn.",
+    )
+    innhold: str | None = Field(
+        default=None,
+        description="Beskrivelse av innholdet.",
+    )
+    innhold_en: str | None = Field(
+        default=None,
+        alias="innhold-en",
+        description="Engelsk beskrivelse av innholdet.",
+    )
 
 
 class KolonneMetadata(StrictModel):
-    navn: str | None = None
-    navn_en: str | None = Field(default=None, alias="navn-en")
-    kolonne: OracleIdentifier
-    innhold: str | None = None
-    innhold_en: str | None = Field(default=None, alias="innhold-en")
+    navn: str | None = Field(default=None, description="Navn på kolonnen.")
+    navn_en: str | None = Field(
+        default=None, alias="navn-en", description="Engelsk navn på kolonnen."
+    )
+    kolonne: OracleIdentifier = Field(description="Navn på kolonnen i databasen.")
+    innhold: str | None = Field(
+        default=None, description="Beskrivelse av innholdet i kolonnen."
+    )
+    innhold_en: str | None = Field(
+        default=None,
+        alias="innhold-en",
+        description="Engelsk beskrivelse av innholdet i kolonnen.",
+    )
 
     @field_validator(*Metadata.model_fields.keys(), mode="before")
     @classmethod
@@ -106,21 +127,45 @@ class Tellepunkt(KolonneMetadata):
 
 
 class Aggregate(StrictModel):
-    id: AggregateId
-    navn: str
-    navn_en: str = Field(alias="navn-en")
-    tabell: OracleIdentifier
-    obt_tabell: OracleTableIdentifier = Field(alias="obt-tabell")
-    innhold: str
-    innhold_en: str = Field(alias="innhold-en")
-    sporring_sql: NonEmptyString
-    periodisering: Variable
-    inkrementell_strategi: IncrementalMode = Field(alias="inkrementell-strategi")
-    tellepunkter: list[Tellepunkt] = Field(min_length=1, max_length=1)
-    formula: NonEmptyString
-    prikking: bool
-    saerskilt: bool
-    variabler: list[Variable]
+    id: AggregateId = Field(description="Aggregatets ID.")
+    navn: str = Field(description="Navn på aggregatet.")
+    navn_en: str = Field(alias="navn-en", description="Engelsk navn på aggregatet.")
+    tabell: OracleIdentifier = Field(description="Navn på måltabellen.")
+    obt_tabell: OracleTableIdentifier = Field(
+        alias="obt-tabell",
+        description="Kildetabellen som brukes til å hente metadata.",
+    )
+    innhold: str = Field(description="Beskrivelse av innholdet i aggregatet.")
+    innhold_en: str = Field(
+        alias="innhold-en",
+        description="Engelsk beskrivelse av innholdet i aggregatet.",
+    )
+    periodisering: Variable = Field(
+        description="Kolonne med perioden dataene gjelder for."
+    )
+    inkrementell_strategi: IncrementalMode = Field(
+        alias="inkrementell-strategi",
+        description="Bestemmer hvordan perioder i påløpende data overskrives.",
+    )
+    tellepunkter: list[Tellepunkt] = Field(
+        min_length=1,
+        max_length=1,
+        description="Måltallskolonnen som inneholder tellingen.",
+    )
+    formula: NonEmptyString = Field(
+        description="R-formelen som brukes til prikking."
+    )
+    prikking: bool = Field(description="Angir om dataene skal prikkes.")
+    saerskilt: bool = Field(
+        description="Angir om særskilt behandling skal brukes ved prikking."
+    )
+    variabler: list[Variable] = Field(
+        description="Dimensjonskolonner aggregatet fordeles på."
+    )
+
+    sporring_sql: NonEmptyString = Field(
+        description="Sti til SQL-filen som henter data, relativt til konfigurasjonen. Internt."
+    )
 
     @field_validator(*Metadata.model_fields.keys(), mode="before")
     @classmethod
@@ -176,4 +221,4 @@ class Aggregate(StrictModel):
 
 
 class AggregateConfiguration(StrictModel):
-    definisjon: Aggregate
+    definisjon: Aggregate = Field(description="Definisjonen av ett aggregat.")
