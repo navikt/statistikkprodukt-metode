@@ -48,6 +48,7 @@ def read_metadata(
         table_parts[0],
     )
     with connection.cursor() as cursor:
+        LOGGER.debug("Leser metadata for %s fra %s.%s.", aggregate.tabell, owner, table_name)
         db_metadata = _fetch_table_metadata(owner, table_name, cursor)
         config_metadata = Metadata.model_validate(
             aggregate.model_dump(include=set(Metadata.model_fields))

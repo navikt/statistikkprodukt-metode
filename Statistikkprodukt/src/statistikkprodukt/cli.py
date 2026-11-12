@@ -160,12 +160,15 @@ def main() -> None:
 
     logging.basicConfig(level=getattr(args, "log_level", "INFO"), format="%(levelname)s %(name)s: %(message)s")
 
+    LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, getattr(args, "log_level", "INFO"))
+
     try:
         if args.command == "testenv":
             _run_testenv(args, parser)
 
         elif args.command == "last":
             config_path = args.config
+            LOGGER.debug("Kjører 'last' med konfigurasjon %s.", config_path)
             configuration, config_directory = load_configuration(
                 config_path, ingen_id_validering=args.ingen_id_validering
             )
@@ -183,6 +186,7 @@ def main() -> None:
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":
+            LOGGER.debug("Kjører 'skjema opprett' med konfigurasjon %s (db=%s).", args.config, args.db)
             configuration, config_directory = load_configuration(
                 args.config, ingen_id_validering=args.ingen_id_validering
             )
@@ -196,6 +200,7 @@ def main() -> None:
                 create_in_database=args.db,
             )
         elif args.command == "installer-r-pakker":
+            LOGGER.debug("Kjører 'installer-r-pakker'.")
             installer_r_pakker.installer_r_pakker()
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)

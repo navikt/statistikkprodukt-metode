@@ -28,6 +28,10 @@ _STRING_TYPE_CODES = (
 def connect(configuration: DatabaseConnection) -> oracledb.Connection:
     """Kobler til konfigurert Oracle-database og velger skjema."""
     host, port, service = configuration.oracle_parameters()
+    LOGGER.info(
+        "Kobler til Oracle: host=%s, port=%s, tjeneste=%s, bruker=%s, skjema=%s, tidsfrist=%s.",
+        host, port, service, configuration.user, configuration.schema_name, configuration.timeout,
+    )
     connection = oracledb.connect(
         user=configuration.user,
         password=configuration.password.get_secret_value(),
@@ -67,6 +71,7 @@ def read_query(
         parameters = [_db_value(value) for value in periods_to_load]
         predicate = _generate_in_predicate(period, parameters)
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
+        LOGGER.debug("Begrenser spørringen for %s til %d perioder.", aggregate.tabell, len(parameters))
 
     with connection.cursor() as cursor:
         try:
@@ -82,6 +87,7 @@ def read_query(
         rows = cursor.fetchall()
 
     frame = pd.DataFrame(rows, columns=columns)
+    LOGGER.debug("Spørringen for %s ga %d rader med kolonnene %s.", aggregate.tabell, len(frame), columns)
     return frame
 
 
@@ -107,7 +113,9 @@ def read_periods(
                 _raise_friendly_source_sql_error(exc)
             raise
         _validate_string_type(cursor.description, period)
-        return {row[0] for row in cursor.fetchall()}
+        periods = {row[0] for row in cursor.fetchall()}
+    LOGGER.debug("Fant %d perioder i %s.", len(periods), "kildespørringen" if source_query else "måltabellen")
+    return periods
 
 
 def read_target_periods(
@@ -151,7 +159,9 @@ def table_exists(
             owner=schema.upper(),
             table_name=table_name.upper(),
         )
-        return cursor.fetchone() is not None
+        exists = cursor.fetchone() is not None
+    LOGGER.debug("Tabellen %s.%s finnes: %s.", schema, table_name, exists)
+    return exists
 
 
 def validate_string_columns(
@@ -281,10 +291,13 @@ def write_result(
 
     try:
         with connection.cursor() as cursor:
+            LOGGER.debug("Skriver %d rader til %s (periodekolonne=%s).", len(frame), qualified_table_name, period_column)
             _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
             _insert_rows(cursor, qualified_table_name, frame)
         connection.commit()
+        LOGGER.debug("Committet skriving til %s.", qualified_table_name)
     except Exception:
+        LOGGER.debug("Feil ved skriving til %s; ruller tilbake.", qualified_table_name)
         connection.rollback()
         raise
 
@@ -299,6 +312,7 @@ def _delete_incremental_if_overwrite(cursor: Any, table: str,
     # frame is already only containing those periods that should be inserted, prefiltered for incremental mode
     available_periods = frame[period_column].dropna().unique().tolist()
     if available_periods:
+        LOGGER.debug("Sletter eksisterende rader i %s for perioder %s.", table, available_periods)
         predicate = _generate_in_predicate(period_column, available_periods)
         execute_sql(
             cursor, f"DELETE FROM {table} WHERE {predicate}", available_periods

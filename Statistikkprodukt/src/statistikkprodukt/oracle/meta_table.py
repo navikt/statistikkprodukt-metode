@@ -58,6 +58,7 @@ def write_metadata_table(
     """Overskriver hele {tabell}_meta med gjeldende metadata i én transaksjon."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.meta_tabell)}"
     rows = metadata_rows(aggregate, metadata)
+    LOGGER.debug("Skriver %d metadatarader til %s.", len(rows), table)
     names = ", ".join(META_COLUMNS)
     binds = ", ".join(f":{name}" for name in META_COLUMNS)
     try:
@@ -70,6 +71,7 @@ def write_metadata_table(
             )
         connection.commit()
     except oracledb.DatabaseError as exc:
+        LOGGER.debug("Feil ved skriving av %s; ruller tilbake: %r.", table, exc)
         connection.rollback()
         (error,) = exc.args
         if getattr(error, "code", None) == 942:  # ORA-00942: tabellen finnes ikke

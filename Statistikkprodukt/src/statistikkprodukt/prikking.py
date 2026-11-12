@@ -1,6 +1,8 @@
 import pandas as pd
 import logging
 
+LOGGER = logging.getLogger(__name__)
+
 
 def prikking(
         data: pd.DataFrame,
@@ -19,6 +21,10 @@ def prikking(
     from rpy2.robjects import pandas2ri
     from rpy2.robjects.conversion import localconverter
 
+    LOGGER.debug(
+        "Starter prikking: %d rader, periodekolonne=%s, formel=%s, tallkolonne=%s, prikking=%s, særskilt=%s.",
+        len(data), periode, formula, tall_kolonne, prikking, saerskilt,
+    )
     if periode not in data.columns:
         raise ValueError(f"Periodekolonnen {periode} finnes ikke i datasettet.")
 
@@ -30,6 +36,7 @@ def prikking(
             "R-pakken 'NavDataprodukt' er ikke installert. Kjør 'statistikkprodukt installer-r-pakker' for å installere den."
         ) from exc
 
+    LOGGER.debug("R-pakken 'NavDataprodukt' er lastet.")
     r_prikking = robjects.r('dvh_prikking')
 
     all_results_smalt = []
@@ -40,6 +47,7 @@ def prikking(
             subset = data[data[periode].isna()]
         else:
             subset = data[data[periode] == period]
+        LOGGER.debug("Kjører R-prikking for periode %s (%d rader).", period, len(subset))
 
         # localconverter konverterer automatisk fra R til pandas data frames
         with localconverter(robjects.default_converter + pandas2ri.converter):
@@ -59,11 +67,13 @@ def prikking(
         all_results_kontroll.append(df_kontroll)
 
     if not all_results_smalt:
+        LOGGER.debug("Ingen perioder å prikke; returnerer tomme resultater.")
         empty_df = data.iloc[0:0].copy()
         return empty_df, empty_df.copy()
 
     final_smalt = pd.concat(all_results_smalt, ignore_index=True)
     final_kontroll = pd.concat(all_results_kontroll, ignore_index=True)
 
+    LOGGER.debug("Prikking ferdig: %d rader i resultatet, %d i kontrollen.", len(final_smalt), len(final_kontroll))
     # Returner DataFrames som tuple
     return final_smalt, final_kontroll
