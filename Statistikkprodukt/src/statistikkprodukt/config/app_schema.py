@@ -28,14 +28,35 @@ class StorageOption(StrEnum):
 
 
 class DatabaseConnection(StrictModel):
-    database: str | None = None
-    host: NonEmptyString | None = None
-    port: int | None = Field(default=None, gt=0, le=65535)
-    service: NonEmptyString | None = None
-    schema_name: OracleIdentifier = Field(alias="schema")
-    user: NonEmptyString
-    password: SecretStr
-    timeout: int = Field(default=30, gt=0)
+    database: str | None = Field(
+        default=None,
+        description="Navn på en forhåndsdefinert databaseprofil.",
+    )
+    host: NonEmptyString | None = Field(
+        default=None, description="Vertsnavn for Oracle-databasen."
+    )
+    port: int | None = Field(
+        default=None,
+        gt=0,
+        le=65535,
+        description="Port for Oracle-databasen.",
+    )
+    service: NonEmptyString | None = Field(
+        default=None, description="Tjenestenavn for Oracle-databasen."
+    )
+    schema_name: OracleIdentifier = Field(
+        alias="schema",
+        description="Skjema som brukes som standard ved tilkobling.",
+    )
+    user: NonEmptyString = Field(
+        description="Brukernavn eller referanse til en hemmelighet."
+    )
+    password: SecretStr = Field(
+        description="Referanse til passordet, kan begynne med terminal:// env:// eller gsm://."
+    )
+    timeout: int = Field(
+        default=30, gt=0, description="Tidsavbrudd for databaseoperasjoner i sekunder."
+    )
 
     @field_validator("database")
     @classmethod
@@ -85,9 +106,15 @@ class DatabaseConnection(StrictModel):
 
 
 class ConfigurationSource(StrictModel):
-    connection: DatabaseConnection
-    mapper: list[NonEmptyString]
-    aggregater: list[OracleIdentifier]
+    connection: DatabaseConnection = Field(
+        description="Tilkoblingsinnstillinger for databasen."
+    )
+    mapper: list[NonEmptyString] = Field(
+        description="Mønster for å finne mapper med aggregatsdefinisjoner."
+    )
+    aggregater: list[OracleIdentifier] = Field(
+        description="Navn på aggregatene som skal lastes."
+    )
 
     @field_validator("mapper")
     @classmethod
@@ -109,8 +136,12 @@ class ConfigurationSource(StrictModel):
 
 
 class Configuration(StrictModel):
-    connection: DatabaseConnection
-    aggregater: list[Aggregate]
+    connection: DatabaseConnection = Field(
+        description="Tilkoblingsinnstillinger for databasen."
+    )
+    aggregater: list[Aggregate] = Field(
+        description="Aggregatdefinisjonene som skal behandles."
+    )
 
     @field_validator("aggregater")
     @classmethod

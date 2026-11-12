@@ -13,6 +13,25 @@
 #' @return A data frame with primary/secondary suppression applied.
 #' @export
 #'
+#' @examples
+#' \dontrun{
+#' # Create dummy dataset
+#' data <- data.frame(
+#'   AAR_KVARTAL_BESK_KORT = c("2024K1", "2024K1", "2024K2", "2024K2"),
+#'   NAVARENDE_FYLKE_NR_NAVN = c("Oslo", "Viken", "Oslo", "Viken"),
+#'   KJONN_FLERTALL_BESK = c("Mann", "Kvinne", "Mann", "Kvinne"),
+#'   KONTANTSTOTTE_ANTALL_MOTTAKERE = c(2, 15, 10, 4)
+#' )
+#' varKol = c("AAR_KVARTAL_BESK_KORT","NAVARENDE_FYLKE_NR_NAVN","KJONN_FLERTALL_BESK") 
+#' tallKol = "KONTANTSTOTTE_ANTALL_MOTTAKERE"
+#' formula = ~ AAR_KVARTAL_BESK_KORT : (NAVARENDE_FYLKE_NR_NAVN+ KJONN_FLERTALL_BESK)
+#' prikking = "ja"
+#' saerskilt = "nei"
+#' se_prikk = "ja"
+#' prikket <-Prikking(data = data, varKol = varKol,formula = formula, tallKol = tallKol, 
+#'                   prikking = prikking,saerskilt = saerskilt, se_prikk = se_prikk)
+#' }
+#'
 #' @importFrom GaussSuppression GaussSuppressionFromData
 #' @importFrom stats as.formula
 
@@ -25,7 +44,14 @@ Prikking <- function(data, varKol,formula, tallKol, prikking,saerskilt,se_prikk)
 
   sub_data <- data[utvalgte_kolonner]
 
-  sub_data[[tallKol]][is.na(sub_data[[tallKol]])] <- 0 # Maa legges paa hvis verdikolonner kan inneholde NULL
+  sub_data[[tallKol]][is.na(sub_data[[tallKol]])] <- 0 # Må legges på hvis verdikolonner kan inneholde NULL
+
+  # Valider ja/nei argumenter
+  if (!tolower(prikking) %in% c("ja", "nei") ||
+      !tolower(saerskilt) %in% c("ja", "nei") ||
+      !tolower(se_prikk) %in% c("ja", "nei")) {
+    stop("Argumentene 'prikking', 'saerskilt' og 'se_prikk' må være 'ja' eller 'nei'.", call. = FALSE)
+  }
 
   if(tolower(prikking) == 'nei'){
     maxN_val     <- -1
@@ -48,7 +74,7 @@ Prikking <- function(data, varKol,formula, tallKol, prikking,saerskilt,se_prikk)
       stop("Formelen ble oppgitt som tekst, men er ikke i et gyldig R-formelformat (f.eks. '~ var1 * var2').")
     })
   } else {
-    stop("Argumentet 'formula' maa vaere et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
+    stop("Argumentet 'formula' må vaere et formelobjekt eller en tekststreng (f.eks. '~ var1 * var2').")
   }
 
 

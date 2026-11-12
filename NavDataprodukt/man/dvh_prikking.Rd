@@ -13,9 +13,9 @@ dvh_prikking(data, formula, tallKol, prikking, saerskilt)
 
 \item{tallKol}{Character string indicating the numeric column to count/suppress.}
 
-\item{prikking}{Character ("ja"/"nei"). If "nei", suppression is bypassed.}
+\item{prikking}{Character ("true"/"false"). If "false", suppression is bypassed.}
 
-\item{saerskilt}{Character ("ja"/"nei"). If "nei", normal threshold is used. If "ja", a higher threshold is used.}
+\item{saerskilt}{Character ("true"/"false"). If "false", normal threshold is used. If "true", a higher threshold is used.}
 }
 \value{
 The functions return two data frame with primary/secondary suppression applied, one that is cleaned, and one that contains original data with suppression flags.
