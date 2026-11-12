@@ -10,6 +10,7 @@ from statistikkprodukt.oracle.operations import (
     read_query,
     read_target_periods,
     table_exists,
+    validate_string_columns,
     write_comments,
     write_result,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "read_query",
     "read_target_periods",
     "table_exists",
+    "validate_string_columns",
     "write_comments",
     "write_result",
 ]

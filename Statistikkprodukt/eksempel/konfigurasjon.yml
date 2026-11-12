@@ -9,6 +9,6 @@ connection:
 mapper:
   - aggregater/**
 
-smale_aggregater:
+aggregater:
   - ost_befolkning_alder
   - ost_befolkning_kjonn

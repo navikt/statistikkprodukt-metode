@@ -1,7 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from statistikkprodukt.config import ConfigError, Configuration, load_configuration, resolve_secret
+from statistikkprodukt.config import (
+    ConfigError,
+    Configuration,
+    Tellepunkt,
+    load_configuration,
+    resolve_secret,
+)
 
 
 def configuration():
@@ -14,23 +20,29 @@ def configuration():
                 "user": "testuser",
                 "password": "env://TEST_PASSWORD",
             },
-            "smale_aggregater": [
+            "aggregater": [
                 {
-                    "nav_id": "NAV21000",
+                    "id": "21000",
                     "navn": "Navn",
-                    "navn_en": "Name",
+                    "navn-en": "Name",
                     "innhold": "Innhold",
-                    "innhold_en": "Content",
+                    "innhold-en": "Content",
                     "tabell": "TABELL",
-                    "obt_tabell": "OBT_TABELL",
+                    "obt-tabell": "OBT_TABELL",
                     "sporring_sql": "select.sql",
-                    "periodisering": "periode",
-                    "inkrementell": "overskriv_ikke",
-                    "tallkolonne": {"kolonne": "antall"},
+                    "periodisering": {
+                        "navn": "Periodisering",
+                        "navn-en": "Periodization",
+                        "kolonne": "periode",
+                        "innhold": "Månedsperiode",
+                        "innhold-en": "Month period",
+                    },
+                    "inkrementell-strategi": "overskriv_ikke",
+                    "tellepunkter": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
                     "saerskilt": False,
-                    "variabler": [{"kolonne": "periode"}, {"kolonne": "region"}],
+                    "variabler": [{"kolonne": "region"}],
                 }
             ],
         }
@@ -39,10 +51,27 @@ def configuration():
 
 def test_configuration_rejects_unknown_keys():
     """Sikrer at ukjente konfigurasjonsnøkler avvises."""
-    config = configuration().model_dump()
+    config = configuration().model_dump(by_alias=True)
     config["unknown"] = True
     with pytest.raises(ValidationError):
         Configuration.model_validate(config)
+
+
+def test_aggregate_id_does_not_include_nav_prefix():
+    """Krever aggregat-ID i tallformat uten NAV-prefiks."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = "NAV21000"
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_aggregate_id_integer_is_converted_to_string():
+    """Konverterer en numerisk aggregat-ID til streng."""
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = 21000
+
+    assert Configuration.model_validate(config).aggregater[0].id == "21000"
 
 
 def test_loads_aggregate_configurations_matching_mapper(tmp_path):
@@ -58,7 +87,7 @@ connection:
   password: env://TEST_PASSWORD
 mapper:
   - aggregater/**
-smale_aggregater:
+aggregater:
   - tabell
 """,
         encoding="utf-8",
@@ -68,21 +97,33 @@ smale_aggregater:
             f"""
 definisjon:
   navn: {table}
-  navn_en: {table}
+  navn-en: {table}
   innhold: {table} 
-  innhold_en: {table}
-  nav_id: NAV21000
-  obt_tabell: OBT_TABELL
-  periodisering: periode
-  inkrementell: overskriv_ikke
-  tallkolonne:
-    kolonne: antall
+  innhold-en: {table}
+  id: 21000
+  obt-tabell: OBT_TABELL
+  periodisering:
+    navn: Periode
+    navn-en: Period
+    kolonne: periode
+    innhold: Periode
+    innhold-en: Month
+  inkrementell-strategi: overskriv_ikke
+  tellepunkter:
+    - navn: Antall
+      navn-en: Count
+      kolonne: antall
+      innhold: Antall i gruppen
+      innhold-en: Count in group
   formula: "~ periode * region"
   prikking: true
   saerskilt: false
   variabler:
-    - kolonne: periode
-    - kolonne: region
+    - navn: Region
+      navn-en: Region
+      kolonne: region
+      innhold: Område
+      innhold-en: Area
 """,
             encoding="utf-8",
         )
@@ -90,9 +131,14 @@ definisjon:
     config, config_directory = load_configuration(tmp_path / "konfigurasjon.yml")
 
     assert config_directory == tmp_path
-    assert [aggregate.tabell for aggregate in config.smale_aggregater] == ["tabell"]
-    assert config.smale_aggregater[0].obt_tabell == "obt_tabell"
-    assert config.smale_aggregater[0].sporring_sql == "aggregater/tabell.sql"
+    assert [aggregate.tabell for aggregate in config.aggregater] == ["tabell"]
+    aggregate = config.aggregater[0]
+    assert aggregate.obt_tabell == "obt_tabell"
+    assert aggregate.sporring_sql == "aggregater/tabell.sql"
+    assert aggregate.periodisering.kolonne == "periode"
+    assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
+    assert isinstance(aggregate.tellepunkter[0], Tellepunkt)
+    assert aggregate.tellepunkter[0].kolonne == "antall"
 
 
 def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
@@ -108,7 +154,7 @@ connection:
   password: env://TEST_PASSWORD
 mapper:
   - aggregater/**
-smale_aggregater:
+aggregater:
   - annet_navn
 """,
         encoding="utf-8",
@@ -117,20 +163,20 @@ smale_aggregater:
         """
 definisjon:
   navn: dummy
-  navn_en: dummy
+  navn-en: dummy
   innhold: dummy 
-  innhold_en: dummy
-  nav_id: NAV21000
-  obt_tabell: OBT_TABELL
-  periodisering: periode
-  inkrementell: overskriv_ikke
-  tallkolonne:
-    kolonne: antall
+  innhold-en: dummy
+  id: "21000"
+  obt-tabell: OBT_TABELL
+  periodisering:
+    kolonne: periode
+  inkrementell-strategi: overskriv_ikke
+  tellepunkter:
+    - kolonne: antall
   formula: "~ periode * region"
   prikking: true
   saerskilt: false
   variabler:
-    - kolonne: periode
     - kolonne: region
 """,
         encoding="utf-8",
@@ -138,8 +184,8 @@ definisjon:
 
     config, _ = load_configuration(tmp_path / "konfigurasjon.yml")
 
-    assert config.smale_aggregater[0].tabell == "annet_navn"
-    assert config.smale_aggregater[0].sporring_sql == "aggregater/annet_navn.sql"
+    assert config.aggregater[0].tabell == "annet_navn"
+    assert config.aggregater[0].sporring_sql == "aggregater/annet_navn.sql"
 
 
 def test_aggregate_names_must_be_unique_across_search_paths(tmp_path):
@@ -158,7 +204,7 @@ connection:
 mapper:
   - første/**
   - andre/**
-smale_aggregater:
+aggregater:
   - tabell
 """,
         encoding="utf-8",

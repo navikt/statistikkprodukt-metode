@@ -8,7 +8,7 @@ import oracledb
 import pandas as pd
 from pydantic import SecretStr
 from statistikkprodukt import oracle, lokal
-from statistikkprodukt.config import Configuration, InkrementalMode, SmallAggregate, resolve_secret, StorageOption
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -128,6 +128,14 @@ def create_tables(
                 with connection.cursor() as cursor:
                     for statement in statements:
                         cursor.execute(statement)
+                string_columns = [
+                    aggregate.periodisering.kolonne,
+                    *(variable.kolonne for variable in aggregate.variabler),
+                ]
+                for table_name, _ in missing:
+                    oracle.validate_string_columns(
+                        connection, schema, table_name, string_columns
+                    )
                 LOGGER.info(
                     "Opprettet tabellene %s.",
                     ", ".join(f"{schema}.{name}" for name, _ in missing),
@@ -140,36 +148,35 @@ def create_tables(
 
 def installer_r_pakker() -> None:
     """Installerer R-pakker som kreves for prikking."""
-    import rpy2.robjects.packages as rpackages
+    import rpy2.robjects
+    import rpy2.robjects.packages
+    import rpy2.rinterface
     from rpy2.robjects.vectors import StrVector
 
-    # Bootstrap the 'pak' installation if it doesn't exist in your R library
-    if not rpackages.isinstalled('pak'):
-        LOGGER.info("Installere 'pak' pakken...")
-        utils = rpackages.importr('utils')
-        # Cannot use CRAN directly in KNAST, need a proxy
-        utils.chooseCRANmirror(ind=1)
-        utils.install_packages(StrVector(['pak']))
+    pkg_dir = Path(__file__).parents[3] / "NavDataprodukt"
 
-    pak = rpackages.importr('pak')
-
-    # Install the prikking package from GitHub
-    LOGGER.info("Insatllere 'NavDataprodukt' fra github...")
-    pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt", upgrade=True)
+    LOGGER.info("Installere 'NavDataprodukt'...")
+    utils = rpy2.robjects.packages.importr('utils')
+    utils.install_packages(StrVector(['SSBtools', 'GaussSuppression', 'openxlsx', 'readxl', 'DBI', 'odbc', 'rstudioapi']), dependencies=True)
+    utils.install_packages(
+        StrVector([str(pkg_dir)]),
+        repos=rpy2.rinterface.NULL,
+        type="source"
+        )
 
 
 def _select_aggregates(
         configuration: Configuration,
         selected_tables: list[str] | None
-) -> list[SmallAggregate]:
+) -> list[Aggregate]:
     """Velger alle aggregater eller kontrollerer eksplisitte tabellvalg."""
     if not selected_tables:
-        return configuration.smale_aggregater
+        return configuration.aggregater
 
     wanted = {name.lower() for name in selected_tables}
     aggregates = [
         aggregate
-        for aggregate in configuration.smale_aggregater
+        for aggregate in configuration.aggregater
         if aggregate.tabell.lower() in wanted
     ]
     unknown = wanted - {aggregate.tabell.lower() for aggregate in aggregates}
@@ -195,7 +202,7 @@ def _connect(configuration: Configuration) -> oracledb.Connection:
 
 def _process_aggregate(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -221,9 +228,9 @@ def _process_aggregate(
     LOGGER.info("Prikker %d rader for %s.", len(data), aggregate.tabell)
     prepub, kontroll = prikking(
         data,
-        aggregate.periodisering,
+        aggregate.periodisering.kolonne,
         aggregate.formula,
-        aggregate.tallkolonne.kolonne,
+        aggregate.tellepunkter[0].kolonne,
         aggregate.prikking,
         aggregate.saerskilt,
     )
@@ -246,7 +253,7 @@ def _process_aggregate(
 
 def _get_periods_to_load(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -264,22 +271,24 @@ def _get_periods_to_load(
         config_directory,
         transfer,
     )
-    if aggregate.inkrementell == InkrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
         return sorted(available)
 
     missing = available - existing
-    if aggregate.inkrementell == InkrementalMode.OVERSKRIV_SISTE_PERIODE:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
         max_available = {max(existing)} if existing and max(existing) in available else set()
         return sorted(missing.union(max_available))
-    elif aggregate.inkrementell == InkrementalMode.OVERSKRIV_IKKE:
+    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
         return sorted(missing)
     else:
-        raise NotImplementedError("Ukjent inkrementell modus: {aggregate.inkrementell}")
+        raise NotImplementedError(
+            f"Ukjent inkrementell modus: {aggregate.inkrementell_strategi}"
+        )
 
 
 def _fetch_periods(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
 ) -> tuple[set[int | str], set[int | str]]:
@@ -289,10 +298,12 @@ def _fetch_periods(
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
         data = lokal.read_csv(directory, aggregate)
-        available = set(data[aggregate.periodisering].dropna().tolist())
+        available = set(data[aggregate.periodisering.kolonne].dropna().tolist())
     else:
         available = oracle.read_periods(
-            transfer.connection, _read_sql(aggregate, config_directory), aggregate.periodisering
+            transfer.connection,
+            _read_sql(aggregate, config_directory),
+            aggregate.periodisering.kolonne,
         )
 
     existing = oracle.read_target_periods(
@@ -301,7 +312,7 @@ def _fetch_periods(
     return available, existing
 
 
-def _read_sql(aggregate: SmallAggregate, config_directory: Path) -> str:
+def _read_sql(aggregate: Aggregate, config_directory: Path) -> str:
     """Leser SQL-filen relativt til konfigurasjonen."""
     sql_path = (config_directory / aggregate.sporring_sql).resolve()
     try:
@@ -311,7 +322,7 @@ def _read_sql(aggregate: SmallAggregate, config_directory: Path) -> str:
 
 
 def _read_input(
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
         *,
@@ -322,7 +333,7 @@ def _read_input(
         directory = transfer.input_directory
         data = lokal.read_csv(directory, aggregate)
         if periods_to_load is not None:
-            data = data[data[aggregate.periodisering].isin(periods_to_load)]
+            data = data[data[aggregate.periodisering.kolonne].isin(periods_to_load)]
         return data
     else:
         if transfer.connection is None:
@@ -336,7 +347,7 @@ def _read_input(
 
 def _write_output(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         prepub: pd.DataFrame,
         kontroll: pd.DataFrame,
         transfer: Transfer,
@@ -362,7 +373,7 @@ def _write_output(
 
 def _write_database(
         configuration: Configuration,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         prepub: pd.DataFrame,
         kontroll: pd.DataFrame,
         transfer: Transfer,

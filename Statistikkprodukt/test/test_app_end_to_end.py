@@ -41,7 +41,7 @@ connection:
   password: env://STATISTIKKPRODUKT_E2E_PASSWORD
 mapper:
   - aggregater/**
-smale_aggregater:
+aggregater:
   - {aggregate_table}
 """,
         encoding="utf-8",
@@ -49,34 +49,34 @@ smale_aggregater:
     (aggregate_directory / f"{aggregate_table}.yml").write_text(
         f"""
 definisjon:
-  nav_id: NAV21000
-  obt_tabell: {source_table}
+  id: "21000"
+  obt-tabell: {source_table}
   navn: Aggregerte verdier
-  navn_en: Aggregated values
+  navn-en: Aggregated values
   innhold: Verdier gruppert etter periode og region.
-  innhold_en: Values grouped by period and region.
-  periodisering: periode
-  inkrementell: overskriv_alt
-  tallkolonne:
-    navn: Antall
-    navn_en: Count
-    kolonne: antall
-    innhold: Summert antall.
-    innhold_en: Summed count.
+  innhold-en: Values grouped by period and region.
+  periodisering:
+    navn: Periode
+    navn-en: Period
+    kolonne: periode
+    innhold: Periode.
+    innhold-en: Period.
+  inkrementell-strategi: overskriv_alt
+  tellepunkter:
+    - navn: Antall
+      navn-en: Count
+      kolonne: antall
+      innhold: Summert antall.
+      innhold-en: Summed count.
   formula: "~ periode / region"
   prikking: true
   saerskilt: false
   variabler:
-    - navn: Periode
-      navn_en: Period
-      kolonne: periode
-      innhold: Periode.
-      innhold_en: Period.
     - navn: Region
-      navn_en: Region
+      navn-en: Region
       kolonne: region
       innhold: Geografisk område.
-      innhold_en: Geographic area.
+      innhold-en: Geographic area.
 """,
         encoding="utf-8",
     )

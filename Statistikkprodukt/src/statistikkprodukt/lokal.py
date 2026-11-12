@@ -2,12 +2,12 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-from statistikkprodukt.config import SmallAggregate, InkrementalMode
+from statistikkprodukt.config import Aggregate, IncrementalMode
 
 LOGGER = logging.getLogger(__name__)
 
 
-def read_csv(directory: Path, aggregate: SmallAggregate) -> pd.DataFrame:
+def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
     """Leser og validerer aggregatets CSV-inndata."""
     path = directory / f"{aggregate.tabell}.csv"
     try:
@@ -22,16 +22,17 @@ def read_csv(directory: Path, aggregate: SmallAggregate) -> pd.DataFrame:
     return frame
 
 
-def validate_columns(frame: pd.DataFrame, aggregate: SmallAggregate) -> None:
+def validate_columns(frame: pd.DataFrame, aggregate: Aggregate) -> None:
     """Kontrollerer at CSV-kolonnene stemmer med aggregatkonfigurasjonen."""
     actual_by_lower = {str(column).lower(): column for column in frame.columns}
     if len(actual_by_lower) != len(frame.columns):
         raise ValueError(f"CSV-filen for {aggregate.tabell} har kolonner med like navn.")
 
     expected = [
-                   variable.kolonne
-                   for variable in aggregate.variabler
-               ] + [aggregate.tallkolonne.kolonne]
+        aggregate.periodisering.kolonne,
+        *(variable.kolonne for variable in aggregate.variabler),
+        *(tellepunkt.kolonne for tellepunkt in aggregate.tellepunkter),
+    ]
     missing = [column for column in expected if column.lower() not in actual_by_lower]
     unexpected = [
         column for column in frame.columns
@@ -55,7 +56,7 @@ def validate_columns(frame: pd.DataFrame, aggregate: SmallAggregate) -> None:
 def write_csv(
         frame: pd.DataFrame,
         directory: Path,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         name: str,
         *,
         dry_run: bool,
@@ -66,9 +67,9 @@ def write_csv(
         print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 
-    if aggregate.inkrementell != InkrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi != IncrementalMode.OVERSKRIV_ALT:
         LOGGER.warning("CSV filer overskrives også når inkrementell modus er satt til %s.",
-                       aggregate.inkrementell.value)
+                       aggregate.inkrementell_strategi.value)
 
     if dry_run:
         print(f"Ville skrevet {len(frame)} rader til {path}.")

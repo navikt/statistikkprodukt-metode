@@ -35,7 +35,7 @@ override-dependencies = [
 ]
 
 [tool.uv.build-backend]
-wheel-include = ["R/*.R"]
+wheel-include = ["NavDataprodukt/R/*.R"]
 module-root = "Statistikkprodukt/src"
 
 [dependency-groups]

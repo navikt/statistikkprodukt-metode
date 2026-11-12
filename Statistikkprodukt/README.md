@@ -160,7 +160,7 @@ mapper:
   - aggregater/**
 
 # Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `mapper`.
-smale_aggregater:
+aggregater:
   - ost_befolkning_alder
   - ost_befolkning_kjonn
 ```
@@ -179,50 +179,59 @@ Eksempel på aggregatfil:
 ```yaml
 definisjon:
   # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
-  # Format: NAV2[10000-29999]
-  nav_id: NAV21000
+  # Format: 21000–22999
+  id: 21000
+  obt-tabell: befolkning
+  
   # Metadata per småaggregat, påkrevd  
   navn: "Kort navn på norsk"
-  navn_en: "Short name in English"
+  navn-en: "Short name in English"
   innhold: "Beskrivelse av innhold på norsk"
-  innhold_en: "Description of content in English"
+  innhold-en: "Description of content in English"
   
   # Konfigurasjon av aggregat
-  obt_tabell: befolkning
-  periodisering: periode  # kolonnenavn for periodisering
-  inkrementell: overskriv_alt  # overskriv_ikke, overskriv_alt, overskriv_siste_periode
-  tallkolonne:
-    kolonne: antall
+  periodisering:
+    kolonne: periode
+    # Følgende metadata kan hentes fra kolonnekommentarer i OBT-tabellen,
+    # men kan også overskrives her. Det samme gjelder for tellepunkter og variabler.
+    navn: Periode
+    navn-en: Period
+    innhold: Månedsperiode
+    innhold-en: Month period
+  
+  tellepunkter:
+    - kolonne: antall
+      navn: Antall personer
+      navn-en: Number of people
+      innhold: Antall personer i gruppen.
+      innhold-en: Number of people in the group.
+    
+  variabler:
+    - kolonne: alder
+      navn: Alder
+      navn-en: Age
+      innhold: Alder på personene i gruppen.
+      innhold-en: Age of the people in the group.
+    
+  # Konfigurasjon av last
+  inkrementell-strategi: overskriv_alt  # overskriv_ikke, overskriv_alt, overskriv_siste_periode
+  
+  # Konfigurasjon av prikking
   formula: "~ periode * alder"
   prikking: true
   saerskilt: false
-  variabler:
-    - kolonne: periode
-    - kolonne: alder
 ```
 
-`obt_tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata.
+`obt-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
 
-Metadata på variabler og tallkolonne kommer fra kolonnekommentarer med tags:
+Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
+
 - `#NAVN` for norsk navn
 - `#NAVN_EN` for engelsk navn
 - `#INNHOLD` for norsk beskrivelse
 - `#INNHOLD_EN` for engelsk beskrivelse
 
-De kan overskrives med:
-```yaml
-# ...
-  tallkolonne:
-    kolonne: antall
-    navn: "Navn på norsk"
-    navn_en: "Name in English"
-    innhold: "Beskrivelse på norsk"
-    innhold_en: "Description in English"
-  variabler:
-    - kolonne: periode
-      navn: "Navn på norsk"
-      # ...
-```
+NB: Både periode og variabler må være streng.
 
 ### Inkrementelle laster
 

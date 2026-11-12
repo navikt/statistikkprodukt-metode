@@ -8,12 +8,19 @@ import oracledb
 import pandas as pd
 from statistikkprodukt.config import (
     DatabaseConnection,
-    SmallAggregate,
+    Aggregate,
     validate_identifier,
 )
 from statistikkprodukt.oracle.metadata import TableMetadata, comment_statements
 
 LOGGER = logging.getLogger(__name__)
+
+_STRING_TYPE_CODES = (
+    oracledb.DB_TYPE_CHAR,
+    oracledb.DB_TYPE_NCHAR,
+    oracledb.DB_TYPE_NVARCHAR,
+    oracledb.DB_TYPE_VARCHAR,
+)
 
 
 def connect(configuration: DatabaseConnection) -> oracledb.Connection:
@@ -44,7 +51,7 @@ def _generate_in_predicate(column_name: str, elements: list[Any]) -> str:
 def read_query(
         connection: oracledb.Connection,
         sql: str,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         *,
         periods_to_load: list[int | str] | None = None,
 ) -> pd.DataFrame:
@@ -52,7 +59,7 @@ def read_query(
     sql = sql.strip().removesuffix(";").rstrip()
     parameters = []
     if periods_to_load is not None:
-        period = validate_identifier(aggregate.periodisering)
+        period = validate_identifier(aggregate.periodisering.kolonne)
         parameters = [_db_value(value) for value in periods_to_load]
         predicate = _generate_in_predicate(period, parameters)
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
@@ -61,6 +68,7 @@ def read_query(
         cursor.execute(sql, parameters)
 
         description = cursor.description or []
+        _validate_query_string_columns(description, aggregate)
         columns = [column[0].lower() for column in description]
 
         rows = cursor.fetchall()
@@ -79,15 +87,16 @@ def read_periods(
         cursor.execute(
             f"SELECT DISTINCT {period} FROM (\n{sql}\n) WHERE {period} IS NOT NULL"
         )
+        _validate_string_type(cursor.description, period)
         return {row[0] for row in cursor.fetchall()}
 
 
 def read_target_periods(
-        connection: oracledb.Connection, schema: str, aggregate: SmallAggregate
+        connection: oracledb.Connection, schema: str, aggregate: Aggregate
 ) -> set[int | str]:
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
-    period = validate_identifier(aggregate.periodisering)
+    period = validate_identifier(aggregate.periodisering.kolonne)
     return read_periods(connection, f"SELECT {period} FROM {table}", period)
 
 
@@ -102,6 +111,62 @@ def table_exists(
             table_name=table_name.upper(),
         )
         return cursor.fetchone() is not None
+
+
+def validate_string_columns(
+        connection: oracledb.Connection,
+        schema: str,
+        table_name: str,
+        columns: list[str],
+) -> None:
+    """Kontrollerer at periode- og variabelkolonnene i en tabell er tekstkolonner."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT column_name, data_type FROM all_tab_columns "
+            "WHERE owner = :owner AND table_name = :table_name",
+            owner=schema.upper(),
+            table_name=table_name.upper(),
+        )
+        column_types = {
+            column_name.lower(): data_type.upper()
+            for column_name, data_type in cursor.fetchall()
+        }
+
+    for column in columns:
+        data_type = column_types.get(column.lower())
+        if data_type not in {"CHAR", "VARCHAR2", "NCHAR", "NVARCHAR2"}:
+            actual_type = data_type or "mangler"
+            raise ValueError(
+                f"Kolonnen {column} i tabellen {schema}.{table_name} må være en "
+                f"tekstkolonne (CHAR, VARCHAR2, NCHAR eller NVARCHAR2), "
+                f"men er {actual_type}."
+            )
+
+
+def _validate_query_string_columns(description: Any, aggregate: Aggregate) -> None:
+    columns = [
+        aggregate.periodisering.kolonne,
+        *(variable.kolonne for variable in aggregate.variabler),
+    ]
+    description_by_name = {
+        column[0].lower(): column for column in (description or [])
+    }
+    for name in columns:
+        column = description_by_name.get(name.lower())
+        if column is None:
+            raise ValueError(f"Kolonnen {name} mangler i resultatet fra SQL-spørringen.")
+        _validate_string_type([column], name)
+
+
+def _validate_string_type(description: Any, name: str) -> None:
+    column = description[0] if description else None
+    type_code = column[1] if column and len(column) > 1 else None
+    if type_code not in _STRING_TYPE_CODES:
+        actual_type = getattr(type_code, "name", str(type_code))
+        raise ValueError(
+            f"Kolonnen {name} i resultatet fra SQL-spørringen må være en tekstkolonne, "
+            f"men er {actual_type}."
+        )
 
 
 def create_table_statement(
@@ -141,7 +206,7 @@ def write_comments(
 def write_result(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: SmallAggregate,
+        aggregate: Aggregate,
         table_name: str,
         frame: pd.DataFrame,
         *,
@@ -166,9 +231,11 @@ def write_result(
         f"{validate_identifier(table_name)}"
     )
 
-    period_column = aggregate.periodisering.lower()
+    period_column = aggregate.periodisering.kolonne.lower()
     if period_column not in frame.columns:
-        raise ValueError(f"Periodekolonnen {aggregate.periodisering} mangler i resultatet.")
+        raise ValueError(
+            f"Periodekolonnen {aggregate.periodisering.kolonne} mangler i resultatet."
+        )
 
     try:
         with connection.cursor() as cursor:
