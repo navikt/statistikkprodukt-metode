@@ -1,8 +1,10 @@
 FROM ubuntu:26.04
 
+ARG COMMIT_SHA
 ENV DEBIAN_FRONTEND=noninteractive \
     R_HOME=/usr/lib/R \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    STATISTIKKPRODUKT_COMMIT_SHA=${COMMIT_SHA}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \

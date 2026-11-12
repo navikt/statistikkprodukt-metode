@@ -16,20 +16,28 @@ Statistikkprodukt/
   src/
     statistikkprodukt/
       __init__.py
-      app.py                   # Implementering av CLI modulene 
-      cli.py                   # CLI konfigurasjon og parsing av argumenter
+      app.py                   # Applikasjonsflyt for lasting og skjemahåndtering
+      app_models.py            # Metadata, lasteresultat og kjørelogg
+      cli.py                   # CLI-konfigurasjon og argumentbehandling
       config/
-        aggregate_schema.py    # Validering av konfigurasjonsfil til små-aggregater
-        app_schema.py          # Validering av konfigurasjonsfil til applikasjon
+        aggregate_schema.py    # Validering av småaggregater
+        app_schema.py          # Validering av hovedkonfigurasjonen
         loader.py              # Innlasting av YAML-konfigurasjon
+        register.py            # StatistikkproduktRegister og lokal registerkontroll
       lokal.py                 # CSV-lesing og -skriving
       oracle/                  # Oracle-tilkobling og metadata
-        metadata.py            # Lesing og skriving av kolonnekommentarer og tags
+        metadata.py            # Metadata, kommentarer og kjørelogg i Oracle
         operations.py          # Operasjoner på Oracle-databasen
       prikking.py              # Kall til R
       testenv.py               # Administrasjon av Oracle-testmiljø
   test/                        # Pytest-tester
 ```
+
+## Commit-hash i kjøreloggen
+
+`commit_hash` i `ost_logg` inneholder først commit-hashen fra Git i lokal checkout. Hvis Git ikke er tilgjengelig, brukes `STATISTIKKPRODUKT_COMMIT_SHA`, og deretter commit-hashen fra VCS-installasjonens `direct_url.json`. For containerbygg uten `.git`, bruk `docker build --build-arg COMMIT_SHA="$(git rev-parse HEAD)" -f Statistikkprodukt/Dockerfile .`. Byggargumentet settes som `STATISTIKKPRODUKT_COMMIT_SHA` i bildet. Hvis ingen commit-hash er tilgjengelig, lagres `NULL`.
+
+Eksisterende metadatatabeller og loggtabeller oppgraderes ikke automatisk. Endring fra tidligere VARCHAR2-kolonner til LOB/JSON og fra per-subject-logg til `ost_logg` krever en eksplisitt migrering før lasting.
 
 ## Utviklingsmiljø
 

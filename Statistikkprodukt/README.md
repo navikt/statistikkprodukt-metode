@@ -10,7 +10,7 @@ For hver aggregat::
 - Lagre resultatet i Oracle/CSV
 - Les metadata fra en bredt aggregat tabell (obt), oppdater fra konfigurasjonsfilen, skriv som databasekommentarer-
 
-For hver aggregat lages to resultattabeller: `{tabell}_prepub` med de prikkede dataene, og `{tabell}_kontroll` med kontrolldata for feilsøking.
+For hvert aggregat lages `{tabell}_prepub` med prikkede data, `{tabell}_kontroll` med kontrolldata og `{tabell}_meta` med metadata. Databasekjøringer logges i én felles tabell, `ost_logg`.
 
 Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerhåndbok.
 
@@ -34,9 +34,12 @@ Kjør eksempelet, som leser to CSV-filer fra `eksempel/data_inn` og skriver resu
 cd Statistikkprodukt/eksempel
 uv run statistikkprodukt last \
   --config konfigurasjon.yml \
+  --ingen-id-validering \
   --kilde=csv \
   --maal=csv
 ```
+
+Eksemplene bruker test-ID-ene `00000` og `00001`, som krever `--ingen-id-validering`. Ved databaseskriving varsles det om at disse dataene må fjernes før publisering.
 
 Konfigurasjonsmuligheter:
 - `--dry-run` viser planlagte endringer uten å modifisere data.
@@ -51,7 +54,7 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml ost_befolkning_alder ost_befolkning_kjonn
+uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering ost_befolkning_alder ost_befolkning_kjonn
 ```
 
 ### Mot databasen
@@ -68,20 +71,16 @@ connection:
   password: terminal://
 ```
 
-Opprett småaggregat-tabellene i Oracle med følgende kommando:
-- ost_befolkning_alder_prepub
-- ost_befolkning_alder_kontroll
-- ost_befolkning_kjonn_prepub
-- ost_befolkning_kjonn_kontroll
+Opprett resultat- og metadatatabellene og den felles loggtabellen i Oracle:
 
 ```shell
 cd Statistikkprodukt/eksempel
-statistikkprodukt skjema opprett --config konfigurasjon.yml
+statistikkprodukt skjema opprett --config konfigurasjon.yml --ingen-id-validering --db
 ```
 
 Kjør lasten fra databasen til csv:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml --maal=csv
+uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
 ```
 
 CSV filene i `data_ut` overskrives, men de skal ikke endre seg, siden eksempelet er ekvivalent med lasten fra csv til csv.
@@ -89,7 +88,7 @@ Du kan slette de for å verifisere at data kommer inn det.
 
 Kjør lasten fra databasen til databasen:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml
+uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
 ```
 
 Sjekk resultatene i Oracle:
@@ -100,7 +99,7 @@ select * from ost_befolkning_alder_kontroll;
 
 # System dokumentasjon
 ## Databaseskjema 
-Databasetabeller kan opprettes som følger:
+Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppslag i Oracle dictionary. Vanlig `last` oppretter eller endrer ikke tabellstrukturen.
 
 ```sh
 # For alle aggregater i konfigurasjonen
@@ -110,7 +109,7 @@ uv run statistikkprodukt skjema opprett --config konfigurasjon.yml
 uv run statistikkprodukt skjema opprett --config konfigurasjon.yml ost_2 ost_1
 ```
 
-Det opprettes to tabeller per aggregat.
+Tabellene per aggregat:
 ```sql
 create table ost_1_kontroll (
   -- Fra SQL spørringen:
@@ -134,7 +133,52 @@ create table ost_1_prepub (
   -- nan når det er prikket
   tall_kolonne number
 );
+
+CREATE TABLE ost_1_meta (
+  felt               VARCHAR2(128 CHAR) NOT NULL,
+  verdi              CLOB,
+  dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
 ```
+
+Logg tabell:
+
+```sql
+
+
+CREATE TABLE ost_logg (
+  kjoring_id            VARCHAR2(36 CHAR) NOT NULL,
+  starttid              TIMESTAMP NOT NULL,
+  sluttid               TIMESTAMP NOT NULL,
+  status                VARCHAR2(10 CHAR) NOT NULL,  -- OK, FEILET
+  db_bruker             VARCHAR2(128 CHAR) DEFAULT SYS_CONTEXT('USERENV', 'SESSION_USER'),
+  commit_hash           VARCHAR2(64 CHAR),
+  konfigurasjon         CLOB CHECK (konfigurasjon IS JSON), -- hele yml konfigurasjonsfil som json
+  kilde                 VARCHAR2(10 CHAR),
+  maal                  VARCHAR2(10 CHAR),
+  antall_aggregater     NUMBER,
+  feilmelding           CLOB,
+  aggregat_id           VARCHAR2(5 CHAR) NOT NULL,
+  tabell                VARCHAR2(128 CHAR) NOT NULL,
+  navn                  VARCHAR2(4000 CHAR),
+  navn_en               VARCHAR2(4000 CHAR),
+  innhold               CLOB,
+  innhold_en            CLOB,
+  obt_tabell            VARCHAR2(261 CHAR),
+  periodisering         VARCHAR2(128 CHAR),
+  inkrementell          VARCHAR2(30 CHAR),
+  formula               VARCHAR2(4000 CHAR),
+  prikking              NUMBER(1),
+  saerskilt             NUMBER(1),
+  sporring_sql          CLOB,
+  perioder              CLOB CHECK (perioder IS JSON), -- alle behandlete perioder
+  antall_rader          NUMBER,
+  antall_primaerprikket NUMBER,
+  antall_prikket        NUMBER,
+  dvh_sist_oppdatert    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
+```
+
 
 ## Konfigurasjon
 
@@ -178,8 +222,7 @@ Eksempel på aggregatfil:
 
 ```yaml
 definisjon:
-  # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
-  # Format: 21000–22999
+  # Registrer en unik id (21000–22999); test-ID-er '00000'–'09999' krever --ingen-id-validering.
   id: 21000
   obt-tabell: befolkning
   
@@ -233,9 +276,13 @@ Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekomm
 
 NB: Både periode og variabler må være streng.
 
-### Løpenummerlisten
+### Statistikkproduktregisteret
 
-Før `last` og `skjema` kontrolleres hvert aggregat mot `statistikkprodukt_register.txt` i rotmappa i repoet (eller filen i miljøvariabelen `STATISTIKKPRODUKT_LOPENUMMER`). Filen har kolonnene `Løpenr`, `Team` og `Statistikkprodukt`, skilt med tabulator, semikolon, komma eller `|`. Kontrollen krever at `id` fra YAML-filen finnes som løpenummer, og at tabellnavnet til statistikkproduktet i listen er det samme som aggregatets tabellnavn (filnavnet til YAML-filen). Løpenummer kan stå med eller uten `NAV`-prefiks, og store og små bokstaver i tabellnavnet spiller ingen rolle.
+Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 21000 og 22999, uten `NAV`-prefiks. 
+
+Til utvikling kan du bruke `'00000'` til `'09999'` med `--ingen-id-validering`. Oppgi test-ID-er som strenger i YAML for å bevare innledende nuller.
+
+Alle aggregater i samme konfigurasjon må ha unik `id`, også ved bruk av test-ID-er.
 
 ### Inkrementelle laster
 

@@ -5,6 +5,7 @@ import oracledb
 import pandas as pd
 import pytest
 from statistikkprodukt import app, oracle
+from statistikkprodukt.app_models import LasteResultat
 from statistikkprodukt.config import IncrementalMode, StorageOption
 from test.test_config import configuration
 
@@ -39,6 +40,48 @@ def test_run_passes_transfer_with_selected_modes(monkeypatch, tmp_path, kilde, m
         connection.close.assert_called_once()
     else:
         connect.assert_not_called()
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_run_logs_outcome_and_configuration_without_password(monkeypatch, tmp_path, fails):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    connection = MagicMock()
+    monkeypatch.setattr(app, "_connect", lambda _: connection)
+    failure = ValueError("Lasting feilet")
+    process = MagicMock(
+        side_effect=failure if fails else None,
+        return_value=LasteResultat(aggregate.id, aggregate.tabell, ["202501"], 10, 1, 2),
+    )
+    captured = []
+    monkeypatch.setattr(app, "_process_aggregate", process)
+    monkeypatch.setattr(oracle, "write_log", lambda _connection, _schema, logg: captured.append(logg))
+
+    if fails:
+        with pytest.raises(ValueError, match="Lasting feilet"):
+            app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+    else:
+        app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+
+    logg, = captured
+    assert logg.status == ("FEILET" if fails else "OK")
+    assert logg.feilmelding == ("Lasting feilet" if fails else None)
+    assert "password" not in logg.konfigurasjon["connection"]
+    assert logg.konfigurasjon["aggregater"][0]["id"] == aggregate.id
+    assert logg.sluttid is not None
+    connection.close.assert_called_once()
+
+
+def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
+    config = configuration()
+    connection = MagicMock()
+    monkeypatch.setattr(app, "_connect", lambda _: connection)
+    monkeypatch.setattr(app, "_process_aggregate", MagicMock(side_effect=ValueError("Lasting feilet")))
+    monkeypatch.setattr(oracle, "write_log", MagicMock(side_effect=RuntimeError("Logging feilet")))
+
+    with pytest.raises(ValueError, match="Lasting feilet"):
+        app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+    connection.close.assert_called_once()
 
 
 @pytest.mark.parametrize(

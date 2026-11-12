@@ -8,7 +8,8 @@ import oracledb
 import pandas as pd
 from pydantic import SecretStr
 from statistikkprodukt import oracle, lokal
-from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, resolve_secret, StorageOption
+from statistikkprodukt.app_models import Kjorelogg, LasteResultat, TableMetadata
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, is_test_id, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -69,8 +70,10 @@ def run(
         dry_run=dry_run,
     )
 
-    logg = oracle.Kjorelogg(
-        konfigurasjon=str(config_directory),
+    logg = Kjorelogg(
+        konfigurasjon=configuration.model_dump(
+            mode="json", by_alias=True, exclude={"connection": {"password"}}
+        ),
         kilde=str(source),
         maal=str(target),
         aggregater=aggregates,
@@ -87,11 +90,11 @@ def run(
             )
             logg.resultater.append(resultat)
     except BaseException as exc:
-        logg.fullfor(exc)
+        logg.fullfor_feil(exc)
         _write_log(configuration, transfer, logg, dry_run=dry_run)
         raise
     else:
-        logg.fullfor()
+        logg.fullfor_suksess()
         _write_log(configuration, transfer, logg, dry_run=dry_run)
     finally:
         if transfer.connection is not None:
@@ -101,7 +104,7 @@ def run(
 def _write_log(
         configuration: Configuration,
         transfer: Transfer,
-        logg: oracle.Kjorelogg,
+        logg: Kjorelogg,
         *,
         dry_run: bool,
 ) -> None:
@@ -130,10 +133,10 @@ def create_tables(
     connection = _connect(configuration)
     try:
         schema = configuration.connection.schema_name
+        _create_log_and_meta_tables(
+            connection, schema, aggregates, create_in_database=create_in_database
+        )
         for aggregate in aggregates:
-            _create_meta_table(
-                connection, schema, aggregate, create_in_database=create_in_database
-            )
             tables = [
                 (aggregate.prepub_tabell, False),
                 (aggregate.kontroll_tabell, True),
@@ -184,25 +187,35 @@ def create_tables(
         connection.close()
 
 
-def _create_meta_table(
+def _create_log_and_meta_tables(
         connection: oracledb.Connection,
         schema: str,
-        aggregate: Aggregate,
+        aggregates: list[Aggregate],
         *,
         create_in_database: bool,
 ) -> None:
-    """Viser DDL for metadatatabellen ({tabell}_meta) eller oppretter den i Oracle."""
-    table_name = aggregate.meta_tabell
-    if oracle.table_exists(connection, schema, table_name):
-        LOGGER.info("Tabellen %s.%s finnes allerede; hopper over.", schema, table_name)
-        return
-    statement = oracle.create_meta_table_statement(schema, table_name)
-    if create_in_database:
-        with connection.cursor() as cursor:
-            cursor.execute(statement)
-        LOGGER.info("Opprettet tabellen %s.%s.", schema, table_name)
-    else:
-        print(statement + ";")
+    """Sjekker dictionary før DDL for én loggtabell og aggregatenes metadatatabeller."""
+    statements = {
+        oracle.LOG_TABLE: oracle.create_log_table_statement(schema),
+        **{
+            aggregate.meta_tabell: oracle.create_meta_table_statement(schema, aggregate.meta_tabell)
+            for aggregate in aggregates
+        },
+    }
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT table_name FROM all_tables WHERE owner = :owner",
+            owner=schema.upper(),
+        )
+        existing = {row[0].lower() for row in cursor.fetchall()}
+        for table_name, statement in statements.items():
+            if table_name in existing:
+                LOGGER.info("Tabellen %s.%s finnes allerede; hopper over.", schema, table_name)
+            elif create_in_database:
+                cursor.execute(statement)
+                LOGGER.info("Opprettet tabellen %s.%s.", schema, table_name)
+            else:
+                print(statement + ";")
 
 
 def installer_r_pakker() -> None:
@@ -266,7 +279,7 @@ def _process_aggregate(
         transfer: Transfer,
         *,
         dry_run: bool,
-) -> oracle.AggregatResultat:
+) -> LasteResultat:
     """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
     LOGGER.info("Leser data for %s.", aggregate.tabell)
     periods_to_load = _get_periods_to_load(
@@ -299,7 +312,7 @@ def _process_aggregate(
     kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
 
     LOGGER.info("Skriver %(len)d rader til %(tab)s_prepub og %(tab)s_kontroll.", {"len": len(prepub), "tab": aggregate.tabell})
-    _write_output(
+    metadata = _write_output(
         configuration,
         aggregate,
         prepub,
@@ -309,12 +322,14 @@ def _process_aggregate(
         dry_run=dry_run,
     )
 
-    return oracle.AggregatResultat(
-        nav_id=aggregate.id,
+    return LasteResultat(
+        id=aggregate.id,
+        tabell=aggregate.tabell,
         perioder=sorted(prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()),
         antall_rader=len(prepub),
         antall_primaerprikket=int(kontroll["primary"].sum()),
         antall_prikket=int(kontroll["suppressed"].sum()),
+        metadata=metadata,
     )
 
 
@@ -421,14 +436,14 @@ def _write_output(
         *,
         config_directory: Path,
         dry_run: bool,
-) -> None:
+) -> TableMetadata | None:
     """Sender prikkede data og kontrolldata til CSV eller Oracle."""
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
         lokal.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
         lokal.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
     else:
-        _write_database(
+        return _write_database(
             configuration,
             aggregate,
             prepub,
@@ -446,7 +461,7 @@ def _write_database(
         transfer: Transfer,
         *,
         dry_run: bool,
-) -> None:
+) -> TableMetadata | None:
     """Skriver prepub- og kontrolltabellen til Oracle."""
     schema = configuration.connection.schema_name
     connection = transfer.connection
@@ -469,6 +484,13 @@ def _write_database(
 
     metadata = None
     if not dry_run:
+        if is_test_id(aggregate.id):
+            LOGGER.warning(
+                "Data for %s legges inn uten gyldig NAV-ID (id='%s'). "
+                "Disse dataene må fjernes før publisering.",
+                aggregate.tabell,
+                aggregate.id,
+            )
         metadata = oracle.read_metadata(connection, schema, aggregate)
 
     for table_name, frame in results:
@@ -487,3 +509,4 @@ def _write_database(
     if not dry_run:
         LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
         oracle.write_metadata_table(connection, schema, aggregate, metadata)
+    return metadata

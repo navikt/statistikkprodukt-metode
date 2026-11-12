@@ -10,6 +10,8 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    ValidationInfo,
+    ValidatorFunctionWrapHandler,
     field_validator,
     model_validator,
 )
@@ -53,8 +55,16 @@ def is_not_empty(value: str) -> str:
 def is_aggregate_id(value: str) -> str:
     """Validerer aggregat-ID uten NAV-prefiks."""
     if not re.fullmatch(r"2[1-2][0-9]{3}", value):
-        raise ConfigError("Må være en gyldig aggregat-ID, mellom 21000-22999.")
+        raise ConfigError(
+            "id må være mellom 21000 og 22999 uten NAV-prefiks. "
+            "Bruk --ingen-id-validering for å tillate test-ID-er fra '00000' til '09999'."
+        )
     return value
+
+
+def is_test_id(value: Any) -> bool:
+    """Gjenkjenner femsifrede test-ID-er fra 00000 til 09999."""
+    return isinstance(value, str) and re.fullmatch(r"0[0-9]{4}", value) is not None
 
 
 def normalize_aggregate_id(value: Any) -> Any:
@@ -121,6 +131,24 @@ class Aggregate(StrictModel):
     prikking: bool
     saerskilt: bool
     variabler: list[Variable]
+
+    @field_validator("tabell")
+    @classmethod
+    def validate_derived_table_names(cls, value: str) -> str:
+        """Sikrer at alle navngitte tabeller med suffiks er gyldige Oracle-navn."""
+        if len(value) + len("_kontroll") > 128:
+            raise ValueError(f"Må være et gyldig Oracle-navn, er: {value!r}")
+        return value
+
+    @field_validator("id", mode="wrap")
+    @classmethod
+    def allow_development_id(
+        cls, value: Any, handler: ValidatorFunctionWrapHandler, info: ValidationInfo
+    ) -> str:
+        """Tillater utviklings-ID bare når brukeren uttrykkelig har valgt det."""
+        if is_test_id(value) and (info.context or {}).get("ingen_id_validering"):
+            return value
+        return handler(value)
 
     @field_validator(*Metadata.model_fields.keys(), mode="before")
     @classmethod

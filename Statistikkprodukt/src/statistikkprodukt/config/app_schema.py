@@ -115,10 +115,13 @@ class Configuration(StrictModel):
     @field_validator("aggregater")
     @classmethod
     def validate_aggregates(cls, value: list[Aggregate]) -> list[Aggregate]:
-        """Krever aggregater med unike måltabeller."""
+        """Krever aggregater med unike måltabeller og ID-er."""
         if not value:
             raise ConfigError("aggregater må inneholde minst ett aggregat")
         tables = [item.tabell.upper() for item in value]
         if len(tables) != len(set(tables)):
             raise ConfigError("tabellnavn må være unike")
+        ids = [item.id for item in value]
+        if len(ids) != len(set(ids)):
+            raise ConfigError("id må være unike, også for test-ID-er")
         return value

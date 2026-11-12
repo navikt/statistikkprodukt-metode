@@ -18,7 +18,7 @@ def test_e2e_run(
     suffix = uuid4().hex[:12]
     source_table = f"obt_e2e_{suffix}"
     aggregate_table = f"ost_e2e{suffix}_agg"
-    log_table = f"ost_e2e{suffix}_logg"
+    log_table = oracle.LOG_TABLE
     aggregate_directory = tmp_path / "aggregater"
     aggregate_directory.mkdir()
 
@@ -94,7 +94,7 @@ group by periode, region
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{source_table} ("
-                "periode varchar2(6), region VARCHAR2(100), antall NUMBER)"
+                "periode varchar2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER)"
             )
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{source_table} VALUES (:1, :2, :3)",
@@ -154,14 +154,18 @@ group by periode, region
 
         with oracle_connection.cursor() as cursor:
             cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate_table}_meta")
-            meta = dict(cursor.fetchall())
+            meta = {field: value.read() if value is not None else None for field, value in cursor.fetchall()}
             cursor.execute(
-                "SELECT status, nav_id, tabell, navn, antall_rader, antall_prikket "
-                f"FROM SYSTEM.{log_table}"
+                "SELECT status, aggregat_id, tabell, navn, antall_rader, antall_prikket "
+                f"FROM SYSTEM.{log_table} WHERE tabell = :tabell",
+                tabell=aggregate_table,
             )
-            log_rows = cursor.fetchall()
+            log_rows = [
+                (status, aggregat_id, table, name.read(), count, masked)
+                for status, aggregat_id, table, name, count, masked in cursor.fetchall()
+            ]
 
-        assert meta["nav_id"] == "21000"
+        assert meta["aggregat_id"] == "21000"
         assert meta["navn"] == "Aggregerte verdier"
         assert meta["periodisering"] == "periode"
         assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 2)]
@@ -171,8 +175,13 @@ group by periode, region
                 f"{aggregate_table}_prepub",
                 f"{aggregate_table}_kontroll",
                 f"{aggregate_table}_meta",
-                log_table,
                 source_table,
             ):
                 if oracle.table_exists(oracle_connection, "SYSTEM", table):
                     cursor.execute(f"DROP TABLE SYSTEM.{table} PURGE")
+            if oracle.table_exists(oracle_connection, "SYSTEM", log_table):
+                cursor.execute(
+                    f"DELETE FROM SYSTEM.{log_table} WHERE tabell = :tabell",
+                    tabell=aggregate_table,
+                )
+                oracle_connection.commit()

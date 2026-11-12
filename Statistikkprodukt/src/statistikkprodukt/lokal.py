@@ -47,10 +47,10 @@ def validate_columns(frame: pd.DataFrame, aggregate: Aggregate) -> None:
             details.append(f"ukjente: {', '.join(map(str, unexpected))}")
         raise ValueError(f"Kolonnene i {aggregate.tabell}.csv stemmer ikke ({'; '.join(details)}).")
 
-    frame.rename(
-        columns={actual_by_lower[column.lower()]: column for column in expected},
-        inplace=True,
-    )
+    rename_columns = {
+        actual_by_lower[column.lower()]: column for column in expected
+    }
+    frame.columns = [rename_columns.get(column, column) for column in frame.columns]
 
 
 def write_csv(

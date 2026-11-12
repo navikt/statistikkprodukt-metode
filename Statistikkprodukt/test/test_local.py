@@ -15,6 +15,14 @@ def test_csv_columns_include_periodisering_separately():
     validate_columns(frame, configuration().aggregater[0])
 
 
+def test_validate_columns_normalizes_names_without_pandas_rename():
+    frame = pd.DataFrame(columns=["PERIODE", "Region", "ANTALL"])
+
+    validate_columns(frame, configuration().aggregater[0])
+
+    assert list(frame.columns) == ["periode", "region", "antall"]
+
+
 def test_csv_masked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()

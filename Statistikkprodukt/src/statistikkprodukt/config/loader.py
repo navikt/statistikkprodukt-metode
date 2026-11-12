@@ -17,7 +17,9 @@ from .app_schema import (
 )
 
 
-def load_configuration(config_path: str | Path | None) -> tuple[Configuration, Path]:
+def load_configuration(
+    config_path: str | Path | None, *, ingen_id_validering: bool = False
+) -> tuple[Configuration, Path]:
     """Leser fellesinnstillinger og aggregatdefinisjoner fra separate YAML-filer."""
 
     if config_path is None:
@@ -51,7 +53,9 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
                 os.path.relpath(aggregate_path.with_suffix(".sql"), path.parent)
             ).as_posix()
         try:
-            aggregate_config = AggregateConfiguration.model_validate(aggregate_data)
+            aggregate_config = AggregateConfiguration.model_validate(
+                aggregate_data, context={"ingen_id_validering": ingen_id_validering}
+            )
         except ValidationError as exc:
             raise ConfigError(
                 f"Konfigurasjonen i {aggregate_path} er ugyldig:\n"
