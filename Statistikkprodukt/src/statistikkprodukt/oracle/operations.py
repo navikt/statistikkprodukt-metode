@@ -69,7 +69,11 @@ def read_query(
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
 
     with connection.cursor() as cursor:
-        execute_sql(cursor, sql, parameters)
+        try:
+            execute_sql(cursor, sql, parameters)
+        except oracledb.DatabaseError as exc:
+            _raise_friendly_source_sql_error(exc)
+            raise
 
         description = cursor.description or []
         _validate_query_string_columns(description, aggregate)
@@ -82,17 +86,26 @@ def read_query(
 
 
 def read_periods(
-        connection: oracledb.Connection, sql: str, period: str
+        connection: oracledb.Connection,
+        sql: str,
+        period: str,
+        *,
+        source_query: bool = True,
 ) -> set[int | str]:
     """Henter bare unike, ikke-tomme perioder fra en kildespørring."""
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
     with connection.cursor() as cursor:
-        execute_sql(
-            cursor,
-            f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
-            f"WHERE {period} IS NOT NULL",
-        )
+        try:
+            execute_sql(
+                cursor,
+                f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
+                f"WHERE {period} IS NOT NULL",
+            )
+        except oracledb.DatabaseError as exc:
+            if source_query:
+                _raise_friendly_source_sql_error(exc)
+            raise
         _validate_string_type(cursor.description, period)
         return {row[0] for row in cursor.fetchall()}
 
@@ -103,7 +116,28 @@ def read_target_periods(
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
     period = validate_identifier(aggregate.periodisering.kolonne)
-    return read_periods(connection, f"SELECT {period} FROM {table}", period)
+    return read_periods(
+        connection, f"SELECT {period} FROM {table}", period, source_query=False
+    )
+
+
+def _raise_friendly_source_sql_error(exc: oracledb.DatabaseError) -> None:
+    """Gir forståelige meldinger for kjente feil i aggregatets kildespørring."""
+    error = exc.args[0] if exc.args else None
+    code = getattr(error, "code", getattr(exc, "code", None))
+    if code == 942:
+        raise ValueError(
+            "En tabell eller visning i aggregatets SQL-spørring finnes ikke, "
+            "eller databasebrukeren mangler tilgang. Kontroller navn og "
+            "tilganger i SQL-filen. Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
+        ) from exc
+    if code == 32034:
+        raise ValueError(
+            "Oracle kan ikke bruke aggregatets SQL-spørring som en underspørring. "
+            "Dette kan skyldes en WITH-spørring; omskriv SQL-filen slik at "
+            "spørringen kan brukes som underspørring.  Du kan se hele spørringen som kjørte "
+            "ved å bruke --log-level=DEBUG."
+        ) from exc
 
 
 def table_exists(

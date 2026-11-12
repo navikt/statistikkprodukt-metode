@@ -1,5 +1,6 @@
 from pathlib import Path
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import oracledb
 import pandas as pd
@@ -297,6 +298,45 @@ def test_read_periods_only_selects_distinct_periods():
     cursor.execute.assert_called_once_with(
         "SELECT DISTINCT periode FROM (\nselect * from kilde\n) WHERE periode IS NOT NULL"
     )
+
+
+def test_read_query_reports_friendly_missing_source_table(oracle_connection):
+    missing_table = f"missing_{uuid4().hex}"
+    sql = (
+        f"select '202501' as periode, 'Oslo' as region, 1 as antall "
+        f"from {missing_table}"
+    )
+
+    with pytest.raises(ValueError, match="tabell eller visning.*finnes ikke"):
+        oracle.read_query(
+            oracle_connection, sql, configuration().aggregater[0]
+        )
+
+
+def test_read_periods_reports_friendly_with_subquery_error(oracle_connection):
+    sql = (
+        "WITH data AS (SELECT '202501' AS periode FROM dual) "
+        "SELECT periode FROM data "
+        "UNION ALL "
+        "WITH other_data AS (SELECT '202502' AS periode FROM dual) "
+        "SELECT periode FROM other_data"
+    )
+    with pytest.raises(ValueError, match="WITH-spørring"):
+        oracle.read_periods(oracle_connection, sql, "periode")
+
+
+def test_read_target_periods_preserves_database_errors(oracle_connection):
+    aggregate = configuration().aggregater[0].model_copy(
+        update={"tabell": f"missing_{uuid4().hex}"}
+    )
+
+    with pytest.raises(oracledb.DatabaseError) as exc_info:
+        oracle.read_target_periods(
+            oracle_connection, "SYSTEM", aggregate
+        )
+
+    (error,) = exc_info.value.args
+    assert error.code == 942
 
 
 @pytest.mark.parametrize("identifier", ["periode) OR 1=1 --", "test.tabell", "'periode'"])

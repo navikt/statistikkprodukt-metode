@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from pathlib import Path
 
 import oracledb
@@ -37,14 +38,7 @@ def last(
         dry_run=dry_run,
     )
 
-    logg = Kjorelogg(
-        konfigurasjon=configuration.model_dump(
-            mode="json", by_alias=True, exclude={"connection": {"password"}}
-        ),
-        kilde=str(source),
-        maal=str(target),
-        aggregater=aggregates,
-    )
+    logg = _initialize_kjorelogg(aggregates, configuration, source, target)
 
     try:
         for aggregate in aggregates:
@@ -66,6 +60,24 @@ def last(
     finally:
         if transfer.connection is not None:
             transfer.connection.close()
+
+
+def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configuration, source: StorageOption,
+                          target: StorageOption) -> Kjorelogg:
+    konfigurasjon_json = configuration.model_dump(
+        mode="json", by_alias=True, exclude={"connection": {"password"}}
+    )
+    konfigurasjon_json_str = json.dumps(konfigurasjon_json, ensure_ascii=False)
+    if "password" in konfigurasjon_json_str or configuration.connection.password.get_secret_value() in konfigurasjon_json_str:
+        raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
+
+    logg = Kjorelogg(
+        konfigurasjon=konfigurasjon_json,
+        kilde=str(source),
+        maal=str(target),
+        aggregater=aggregates,
+    )
+    return logg
 
 
 def _write_log(
