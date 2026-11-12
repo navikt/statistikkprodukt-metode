@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from statistikkprodukt import app, oracle
 from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption
-from statistikkprodukt.oracle import metadata
+from statistikkprodukt.oracle import aggregate_table, meta_table
 from statistikkprodukt.oracle import (
     write_result,
     parse_metadata,
@@ -52,12 +52,12 @@ def test_read_metadata_uses_obt_table(monkeypatch):
             innhold_en=f"DB {column}",
         )
 
-    monkeypatch.setattr(metadata, "_fetch_table_metadata", fetch_table)
-    monkeypatch.setattr(metadata, "_fetch_column_metadata", fetch_column)
+    monkeypatch.setattr(aggregate_table, "_fetch_table_metadata", fetch_table)
+    monkeypatch.setattr(aggregate_table, "_fetch_column_metadata", fetch_column)
 
     aggregate = configuration().aggregater[0]
     aggregate.obt_tabell = "obt.obt_kilde"
-    result = metadata.read_metadata(Connection(), "TEST", aggregate)
+    result = aggregate_table.read_metadata(Connection(), "TEST", aggregate)
 
     assert calls == [
         ("table", "obt", "obt_kilde"),
@@ -68,7 +68,7 @@ def test_read_metadata_uses_obt_table(monkeypatch):
     assert result.columns["periode"].navn == "Periodisering"
     period_comment = next(
         statement
-        for statement in metadata.comment_statements("TEST", "target_prepub", result)
+        for statement in aggregate_table.comment_statements("TEST", "target_prepub", result)
         if statement.startswith("COMMENT ON COLUMN test.target_prepub.periode")
     )
     assert period_comment == (
@@ -85,10 +85,10 @@ def test_read_metadata_defaults_to_obt_and_overrides_only_yaml_fields(monkeypatc
     db_metadata = Metadata(
         navn="OBT navn", navn_en="OBT name", innhold="OBT innhold", innhold_en="OBT content"
     )
-    monkeypatch.setattr(metadata, "_fetch_table_metadata", lambda *_: db_metadata)
-    monkeypatch.setattr(metadata, "_fetch_column_metadata", lambda *_: db_metadata)
+    monkeypatch.setattr(aggregate_table, "_fetch_table_metadata", lambda *_: db_metadata)
+    monkeypatch.setattr(aggregate_table, "_fetch_column_metadata", lambda *_: db_metadata)
 
-    resolved = metadata.read_metadata(MagicMock(), "TEST", aggregate)
+    resolved = aggregate_table.read_metadata(MagicMock(), "TEST", aggregate)
     assert resolved.table.model_dump() == {
         "navn": "OBT navn", "navn_en": "OBT name",
         "innhold": "OBT innhold", "innhold_en": "YAML override",
@@ -196,7 +196,7 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
             meta = {name: value.read() for name, value in cursor.fetchall()}
             assert meta["navn"] == "Oppdatert"
             assert meta["innhold"] == long_text
-            assert len(meta) == len(metadata.META_FIELDS)
+            assert len(meta) == len(meta_table.META_FIELDS)
 
             cursor.execute(
                 "SELECT status, db_bruker, commit_hash, konfigurasjon, perioder, feilmelding, "

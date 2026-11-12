@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from statistikkprodukt.app import run
 from statistikkprodukt.config import StorageOption
 from statistikkprodukt.lokal import validate_columns
@@ -23,6 +24,7 @@ def test_validate_columns_normalizes_names_without_pandas_rename():
     assert list(frame.columns) == ["periode", "region", "antall"]
 
 
+@pytest.mark.r_dependent
 def test_csv_masked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()
@@ -64,6 +66,7 @@ def test_csv_masked(tmp_path):
     assert sorted(kontroll.to_dict("records"), key=sort_fn) == expected_kontroll
 
 
+@pytest.mark.r_dependent
 def test_csv_unmasked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()

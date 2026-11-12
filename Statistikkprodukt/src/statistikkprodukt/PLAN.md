@@ -177,7 +177,9 @@ src/
     cli.py # CLI argumenter
     oracle/
       operations.py # connect / write_result
-      metadata.py # lese metadata (e.g. kommentarer) fra DB
+      aggregate_table.py # lese og skrive aggregatmetadata og kommentarer
+      meta_table.py # opprette og oppdatere metadatatabeller
+      logg_table.py # opprette og oppdatere loggtabellen
       validation.py # kompatibilitet av kolonnetyper
     prikking.py # kjør R skriptet
     config/
