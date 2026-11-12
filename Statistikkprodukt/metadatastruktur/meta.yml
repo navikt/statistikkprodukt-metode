@@ -1,0 +1,54 @@
+definisjon:
+  id: 21000
+  obt-tabell: obt_ab_befolkning_periode
+
+
+  subject: test
+  subject-code: ab
+  subject-area: arbeid
+  subject-kort: langdrygd
+  kontakt: team x
+  note: info url
+  note-en: info url engelsk
+
+  navn: Befolkning etter alder
+  navn-en: Population by age
+  innhold: Befolkning fordelt etter periode og alder.
+  innhold-en: Population by period and age.
+
+  periodisering:
+    navn: Periode
+    navn-en: Period
+    kolonne: periode
+    innhold: Månedsperiode på formatet YYYYMM.
+    innhold-en: Month in YYYYMM format.
+    timeval: periode
+
+  tellepunkter:
+    - navn: Antall personer
+      navn-en: Number of people
+      kolonne: antall
+      innhold: Antall personer i gruppen.
+      innhold-en: Number of people in the group.
+      unit: stk
+      unit-en: stk
+      sq: -24
+
+  variabler:
+    - navn: Alder
+      navn-en: Age
+      kolonne: alder
+      innhold: Alder i ettårige grupper.
+      innhold-en: Age in single-year groups.
+      sq: 12
+    - navn: Kjønn
+      navn-en: Gender
+      kolonne: kjonn
+      innhold: kjonn.
+      innhold-en: gender.
+      sq: 3
+
+  inkrementell-strategi: overskriv_alt
+  formula: "~ periode : alder"
+  prikking: true
+  saerskilt: false
