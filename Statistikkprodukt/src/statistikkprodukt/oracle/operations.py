@@ -77,7 +77,7 @@ def read_query(
         try:
             execute_sql(cursor, sql, parameters)
         except oracledb.DatabaseError as exc:
-            _raise_friendly_source_sql_error(exc)
+            _raise_friendly_sql_error(exc, source_query=True)
             raise
 
         description = cursor.description or []
@@ -109,8 +109,7 @@ def read_periods(
                 f"WHERE {period} IS NOT NULL",
             )
         except oracledb.DatabaseError as exc:
-            if source_query:
-                _raise_friendly_source_sql_error(exc)
+            _raise_friendly_sql_error(exc, source_query=source_query)
             raise
         _validate_string_type(cursor.description, period)
         periods = {row[0] for row in cursor.fetchall()}
@@ -129,23 +128,30 @@ def read_target_periods(
     )
 
 
-def _raise_friendly_source_sql_error(exc: oracledb.DatabaseError) -> None:
+def _raise_friendly_sql_error(exc: oracledb.DatabaseError, source_query: bool) -> None:
     """Gir forståelige meldinger for kjente feil i aggregatets kildespørring."""
     error = exc.args[0] if exc.args else None
     code = getattr(error, "code", getattr(exc, "code", None))
-    if code == 942:
-        raise ValueError(
-            "En tabell eller visning i aggregatets SQL-spørring finnes ikke, "
-            "eller databasebrukeren mangler tilgang. Kontroller navn og "
-            "tilganger i SQL-filen. Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
-        ) from exc
-    if code == 32034:
-        raise ValueError(
-            "Oracle kan ikke bruke aggregatets SQL-spørring som en underspørring. "
-            "Dette kan skyldes en WITH-spørring; omskriv SQL-filen slik at "
-            "spørringen kan brukes som underspørring.  Du kan se hele spørringen som kjørte "
-            "ved å bruke --log-level=DEBUG."
-        ) from exc
+    if source_query:
+        if code == 942:
+            raise ValueError(
+                "En tabell eller visning i aggregatets SQL-spørring finnes ikke, "
+                "eller databasebrukeren mangler tilgang. Kontroller navn og "
+                "tilganger i SQL-filen. Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
+            ) from exc
+        if code == 32034:
+            raise ValueError(
+                "Oracle kan ikke bruke aggregatets SQL-spørring som en underspørring. "
+                "Dette kan skyldes en WITH-spørring; omskriv SQL-filen slik at "
+                "spørringen kan brukes som underspørring.  Du kan se hele spørringen som kjørte "
+                "ved å bruke --log-level=DEBUG."
+            ) from exc
+    else:
+        if code == 942:
+            raise ValueError(
+                "Måltabellen finnes ikke, eller databasebrukeren mangler tilgang. "
+                "Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
+            ) from exc
 
 
 def table_exists(

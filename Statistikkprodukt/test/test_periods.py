@@ -330,13 +330,10 @@ def test_read_target_periods_preserves_database_errors(oracle_connection):
         update={"tabell": f"missing_{uuid4().hex}"}
     )
 
-    with pytest.raises(oracledb.DatabaseError) as exc_info:
+    with pytest.raises(ValueError, match="tabellen finnes ikke") as exc_info:
         oracle.read_target_periods(
             oracle_connection, "SYSTEM", aggregate
         )
-
-    (error,) = exc_info.value.args
-    assert error.code == 942
 
 
 @pytest.mark.parametrize("identifier", ["periode) OR 1=1 --", "test.tabell", "'periode'"])
