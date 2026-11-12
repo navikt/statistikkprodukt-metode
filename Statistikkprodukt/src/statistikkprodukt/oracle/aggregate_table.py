@@ -5,7 +5,7 @@ import re
 
 import oracledb
 from oracledb import Cursor
-from statistikkprodukt.app_models import TableMetadata
+from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
 
 LOGGER = logging.getLogger(__name__)

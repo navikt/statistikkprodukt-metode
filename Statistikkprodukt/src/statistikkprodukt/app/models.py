@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import oracledb
 import pytz
-from statistikkprodukt.config import Aggregate, Metadata
+from statistikkprodukt.config import Aggregate, Metadata, StorageOption, Configuration
 
 
 def oslo_now() -> datetime:
@@ -21,7 +22,7 @@ def oslo_now() -> datetime:
 
 
 def _program_commit() -> str | None:
-    repository = Path(__file__).resolve().parents[3]
+    repository = Path(__file__).resolve().parents[4]
     try:
         result = subprocess.run(
             ["git", "-C", str(repository), "rev-parse", "HEAD"],
@@ -130,3 +131,37 @@ class Kjorelogg:
                 "antall_prikket": resultat.antall_prikket if resultat else None,
             })
         return rows
+
+
+@dataclass
+class Transfer:
+    """Samler innstillinger og tilstand for overføring av ett eller flere aggregater."""
+    connection: oracledb.Connection | None
+    source: StorageOption
+    target: StorageOption
+    input_directory: Path
+    output_directory: Path
+
+    @staticmethod
+    def from_options(
+            configuration: Configuration,
+            source: StorageOption,
+            target: StorageOption,
+            input_directory: Path|str,
+            output_directory: Path|str,
+            *,
+            dry_run: bool = False
+    ) -> Transfer:
+        """Oppretter en Transfer med tilkobling bare når kilden eller målet trenger den."""
+        from statistikkprodukt.app.last import _connect
+
+        needs_db_connection = source == StorageOption.DB or (target == StorageOption.DB and not dry_run)
+        connection = _connect(configuration) if needs_db_connection else None
+
+        return Transfer(
+            connection=connection,
+            input_directory=Path(input_directory),
+            output_directory=Path(output_directory),
+            source=source,
+            target=target,
+        )

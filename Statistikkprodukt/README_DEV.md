@@ -16,22 +16,26 @@ Statistikkprodukt/
   src/
     statistikkprodukt/
       __init__.py
-      app.py                   # Applikasjonsflyt for lasting og skjemahåndtering
-      app_models.py            # Metadata, lasteresultat og kjørelogg
+      app/
+        __init__.py            # Tom pakkefil
+        models.py              # Metadata, overføring, lasteresultat og kjørelogg
+        last.py                # Leser, prikker og lagrer aggregater
+        skjema.py              # Viser DDL eller oppretter aggregattabeller
+        installer_r_pakker.py  # Installerer nødvendige R-pakker
+        testenv.py             # Administrasjon av Oracle-testmiljø
       cli.py                   # CLI-konfigurasjon og argumentbehandling
       config/
         aggregate_schema.py    # Validering av småaggregater
         app_schema.py          # Validering av hovedkonfigurasjonen
         loader.py              # Innlasting av YAML-konfigurasjon
         register.py            # StatistikkproduktRegister og lokal registerkontroll
-      lokal.py                 # CSV-lesing og -skriving
+      csv.py                   # CSV-lesing og -skriving
       oracle/                  # Oracle-tilkobling og metadata
         aggregate_table.py     # Aggregatmetadata og Oracle-kommentarer
         meta_table.py          # Metadatatabeller i Oracle
-        logg_table.py          # Kjøreloggtabellen i Oracle
+        log_table.py           # Kjøreloggtabellen i Oracle
         operations.py          # Operasjoner på Oracle-databasen
       prikking.py              # Kall til R
-      testenv.py               # Administrasjon av Oracle-testmiljø
   test/                        # Pytest-tester
 ```
 

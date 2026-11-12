@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 import oracledb
-from statistikkprodukt.app_models import TableMetadata
+from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, validate_identifier
 
 LOGGER = logging.getLogger(__name__)

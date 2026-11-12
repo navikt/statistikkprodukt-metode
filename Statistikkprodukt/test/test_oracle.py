@@ -5,7 +5,9 @@ from uuid import uuid4
 import oracledb
 import pandas as pd
 import pytest
-from statistikkprodukt import app, oracle
+import statistikkprodukt.app.last as app
+import statistikkprodukt.app.skjema as table_app
+from statistikkprodukt import oracle
 from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption
 from statistikkprodukt.oracle import aggregate_table, meta_table
 from statistikkprodukt.oracle import (
@@ -15,9 +17,8 @@ from statistikkprodukt.oracle import (
     read_query,
     read_target_periods,
 )
-from statistikkprodukt.app_models import Kjorelogg, LasteResultat, TableMetadata
+from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata
 from test.test_config import configuration
-
 
 def test_read_metadata_uses_obt_table(monkeypatch):
     """Leser tabell- og kolonnemetadata fra OBT-tabellen."""
@@ -154,7 +155,7 @@ def test_auxiliary_schema_creation_checks_dictionary_and_reuses_cursor():
     aggregate = configuration().aggregater[0]
     cursor.fetchall.return_value = [(oracle.LOG_TABLE.upper(),), (aggregate.meta_tabell.upper(),)]
 
-    app._create_log_and_meta_tables(connection, "TEST", [aggregate], create_in_database=True)
+    table_app._create_log_and_meta_tables(connection, "TEST", [aggregate], create_in_database=True)
 
     connection.cursor.assert_called_once()
     cursor.execute.assert_called_once_with(
@@ -182,7 +183,7 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
         with oracle_connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE SYSTEM.{oracle.LOG_TABLE} PURGE")
     try:
-        app._create_log_and_meta_tables(
+        table_app._create_log_and_meta_tables(
             oracle_connection, "SYSTEM", [aggregate], create_in_database=True
         )
         oracle.write_metadata_table(oracle_connection, "SYSTEM", aggregate, table_metadata)
@@ -302,7 +303,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
     expected_table_comment = (
         "#NAVN Tabell #NAVN_EN Table #INNHOLD Tabellinnhold #INNHOLD_EN Table content"
     )
-    monkeypatch.setattr(app, "_connect", lambda _: ConnectionProxy())
+    monkeypatch.setattr(table_app, "_connect", lambda _: ConnectionProxy())
     monkeypatch.setattr(
         oracle,
         "read_metadata",
@@ -311,7 +312,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
     tables = [aggregate.prepub_tabell, aggregate.kontroll_tabell]
 
     try:
-        app.create_tables(config, tmp_path, create_in_database=True)
+        table_app.create_tables(config, tmp_path, create_in_database=True)
 
         for table_name in tables:
             with oracle_connection.cursor() as cursor:

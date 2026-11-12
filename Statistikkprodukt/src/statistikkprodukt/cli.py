@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from statistikkprodukt import app
+from statistikkprodukt.app import installer_r_pakker, last, skjema
 from statistikkprodukt.config import (
     ConfigError,
     StorageOption,
@@ -172,7 +172,7 @@ def main() -> None:
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering
             )
-            app.run(
+            last.last(
                 configuration,
                 config_directory,
                 args.kilde,
@@ -189,14 +189,14 @@ def main() -> None:
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering
             )
-            app.create_tables(
+            skjema.create_tables(
                 configuration,
                 config_directory,
                 selected_tables=args.aggregater,
                 create_in_database=args.db,
             )
         elif args.command == "installer-r-pakker":
-            app.installer_r_pakker()
+            installer_r_pakker.installer_r_pakker()
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)
     except ConfigError as exc:
@@ -215,7 +215,7 @@ def main() -> None:
 
 def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     """Utfører valgt testmiljøkommando."""
-    from statistikkprodukt import testenv
+    from statistikkprodukt.app import testenv
 
     if args.testenv_command == "setup":
         testenv.setup()

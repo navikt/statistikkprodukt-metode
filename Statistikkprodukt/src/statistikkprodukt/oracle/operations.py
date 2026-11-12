@@ -11,7 +11,7 @@ from statistikkprodukt.config import (
     Aggregate,
     validate_identifier,
 )
-from statistikkprodukt.app_models import TableMetadata
+from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.oracle.aggregate_table import comment_statements
 
 LOGGER = logging.getLogger(__name__)

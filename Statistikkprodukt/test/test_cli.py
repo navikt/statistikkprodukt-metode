@@ -41,8 +41,8 @@ def _configure(tmp_path, monkeypatch, agg_id):
 def test_cli_gates_development_id(tmp_path, monkeypatch, command, allow_development_id, agg_id):
     path = _configure(tmp_path, monkeypatch, agg_id)
     execute = Mock()
-    monkeypatch.setattr(app, "run", execute)
-    monkeypatch.setattr(app, "create_tables", execute)
+    monkeypatch.setattr(app.last, "last", execute)
+    monkeypatch.setattr(app.skjema, "create_tables", execute)
     flags = ["--ingen-id-validering"] if allow_development_id else []
     monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path), *flags])
 
@@ -60,7 +60,7 @@ def test_cli_gates_development_id(tmp_path, monkeypatch, command, allow_developm
 def test_cli_flag_does_not_skip_other_id_checks(tmp_path, monkeypatch, agg_id):
     path = _configure(tmp_path, monkeypatch, agg_id)
     execute = Mock()
-    monkeypatch.setattr(app, "run", execute)
+    monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(
         sys, "argv",
         ["statistikkprodukt", "last", "--config", str(path), "--ingen-id-validering"],
@@ -76,8 +76,8 @@ def test_cli_flag_does_not_skip_other_id_checks(tmp_path, monkeypatch, agg_id):
 def test_cli_accepts_id_registered_in_pipe_table(tmp_path, monkeypatch, command):
     path = _configure(tmp_path, monkeypatch, "21000")
     execute = Mock()
-    monkeypatch.setattr(app, "run", execute)
-    monkeypatch.setattr(app, "create_tables", execute)
+    monkeypatch.setattr(app.last, "last", execute)
+    monkeypatch.setattr(app.skjema, "create_tables", execute)
     monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path)])
 
     cli.main()
@@ -95,7 +95,7 @@ def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, s
     config["aggregater"].append("annen")
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
     execute = Mock()
-    monkeypatch.setattr(app, "run", execute)
+    monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(
         sys, "argv",
         ["statistikkprodukt", "last", "--config", str(path), "--ingen-id-validering"],

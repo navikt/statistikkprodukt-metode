@@ -2,9 +2,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from statistikkprodukt import app, oracle
+from statistikkprodukt import oracle
+from statistikkprodukt.app.last import last
+from statistikkprodukt.app.skjema import create_tables
 from statistikkprodukt.config import DATABASE_PROFILES, load_configuration, StorageOption
-from statistikkprodukt.testenv import (
+from statistikkprodukt.app.testenv import (
     CONTAINER_PORT,
     ORACLE_PASSWORD,
     ORACLE_SERVICE,
@@ -113,10 +115,10 @@ group by periode, region
             tmp_path / "konfigurasjon.yml"
         )
 
-        app.create_tables(
+        create_tables(
             configuration, config_directory, create_in_database=True
         )
-        app.run(configuration, config_directory, StorageOption.DB, StorageOption.DB, Path("dummy"), Path("dummy"), dry_run=False)
+        last(configuration, config_directory, StorageOption.DB, StorageOption.DB, Path("dummy"), Path("dummy"), dry_run=False)
 
         with oracle_connection.cursor() as cursor:
             cursor.execute(

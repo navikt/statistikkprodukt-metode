@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 import pytz
-from statistikkprodukt import app_models
-from statistikkprodukt.app_models import Kjorelogg, LasteResultat
+from statistikkprodukt.app import models as app_models
+from statistikkprodukt.app.models import Kjorelogg, LasteResultat
 from test.test_config import configuration
 
 

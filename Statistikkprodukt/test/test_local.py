@@ -3,9 +3,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from statistikkprodukt.app import run
+from statistikkprodukt.app.last import last
 from statistikkprodukt.config import StorageOption
-from statistikkprodukt.lokal import validate_columns
+from statistikkprodukt.csv import validate_columns
 from test.test_config import configuration
 
 
@@ -35,7 +35,7 @@ def test_csv_masked(tmp_path):
         {"periode": [202501], "region": ["Oslo"], "antall": [3]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
-    run(
+    last(
         config,
         tmp_path,
         StorageOption.CSV,
@@ -77,7 +77,7 @@ def test_csv_unmasked(tmp_path):
         {"periode": [202501], "region": ["Oslo"], "antall": [12]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
-    run(
+    last(
         config,
         tmp_path,
         StorageOption.CSV,

@@ -4,11 +4,11 @@ from unittest.mock import MagicMock
 import oracledb
 import pandas as pd
 import pytest
-from statistikkprodukt import app, oracle
-from statistikkprodukt.app_models import LasteResultat
+import statistikkprodukt.app.last as app
+from statistikkprodukt import oracle
+from statistikkprodukt.app.models import LasteResultat
 from statistikkprodukt.config import IncrementalMode, StorageOption
 from test.test_config import configuration
-
 
 @pytest.mark.parametrize(
     ("kilde", "maal"),
@@ -29,7 +29,7 @@ def test_run_passes_transfer_with_selected_modes(monkeypatch, tmp_path, kilde, m
         ),
     )
 
-    app.run(config, tmp_path, StorageOption(kilde), StorageOption(maal), Path("data_inn"), Path("data_ut"), dry_run=False)
+    app.last(config, tmp_path, StorageOption(kilde), StorageOption(maal), Path("data_inn"), Path("data_ut"), dry_run=False)
 
     assert len(transfers) == 1
     transfer = transfers[0]
@@ -59,9 +59,9 @@ def test_run_logs_outcome_and_configuration_without_password(monkeypatch, tmp_pa
 
     if fails:
         with pytest.raises(ValueError, match="Lasting feilet"):
-            app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+            app.last(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
     else:
-        app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+        app.last(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
 
     logg, = captured
     assert logg.status == ("FEILET" if fails else "OK")
@@ -80,7 +80,7 @@ def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(oracle, "write_log", MagicMock(side_effect=RuntimeError("Logging feilet")))
 
     with pytest.raises(ValueError, match="Lasting feilet"):
-        app.run(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
+        app.last(config, tmp_path, StorageOption.DB, StorageOption.DB, tmp_path, tmp_path)
     connection.close.assert_called_once()
 
 

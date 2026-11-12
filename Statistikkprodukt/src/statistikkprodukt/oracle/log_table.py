@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 import oracledb
-from statistikkprodukt.app_models import Kjorelogg
+from statistikkprodukt.app.models import Kjorelogg
 from statistikkprodukt.config import validate_identifier
 
 LOGGER = logging.getLogger(__name__)
