@@ -4,7 +4,7 @@ import socket
 import oracledb
 import pytest
 from sqlalchemy.engine import make_url
-from statistikkprodukt.testenv import (
+from statistikkprodukt.app.testenv import (
     CONTAINER_IMAGE,
     CONTAINER_NAME,
     CONTAINER_PORT,

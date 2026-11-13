@@ -13,10 +13,16 @@ dependencies = [
     "rpy2[pandas]>=3.6.5",
     "docker>=7.1.0",
     "google-cloud-secret-manager>=2.26.0",
+    "pytz>=2026.6",
 ]
 
 [project.scripts]
 statistikkprodukt = "statistikkprodukt.cli:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "r_dependent: tester som krever et fungerende R-miljø",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]

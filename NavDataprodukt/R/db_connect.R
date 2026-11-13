@@ -8,12 +8,32 @@
 #' @return A DBIConnection object.
 #' @export
 #'
+#' @examples
+#' \dontrun{
+#' # Connect to a database, with password prompt
+#' database <- 'db'
+#' brukernavn <- 'ABC123'
+#' con <- db_connect(database = database, uid = brukernavn)
+#'
+#' # Always remember to disconnect when finished
+#' DBI::dbDisconnect(con)
+#' }
+#'
 #' @importFrom odbc dbConnect odbc
 #' @importFrom rstudioapi askForPassword
 
 db_connect <- function(database = "DWHI", uid = NULL, dwhi_cred = c("x","y","z")) {
 
   # TODO: Plasser dsn, uid og pwd i keyvault
+
+  if (!requireNamespace("odbc", quietly = TRUE)) {
+    stop(
+      "Pakken 'odbc' er nødvendig for at denne funksjonen skal kjøre. ",
+      "Vennligst installer pakken med å kjøre: install.packages('odbc')",
+      call. = FALSE
+    )
+  }
+  
 
   # DWHI der alle i Nav har tilgang
   if (tolower(database) == "dwhi") {

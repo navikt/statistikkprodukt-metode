@@ -16,6 +16,7 @@ from .aggregate_schema import (
     Variable,
     is_aggregate_id,
     is_not_empty,
+    is_test_id,
     validate_identifier,
     validate_table_identifier,
 )
@@ -27,6 +28,7 @@ from .app_schema import (
     StorageOption,
 )
 from .loader import format_validation_error, load_configuration, resolve_secret
+from .register import StatistikkproduktRegister
 
 __all__ = [
     "AggregateConfiguration",
@@ -47,9 +49,11 @@ __all__ = [
     "StrictModel",
     "Tellepunkt",
     "Variable",
+    "StatistikkproduktRegister",
     "format_validation_error",
     "is_aggregate_id",
     "is_not_empty",
+    "is_test_id",
     "load_configuration",
     "resolve_secret",
     "validate_identifier",

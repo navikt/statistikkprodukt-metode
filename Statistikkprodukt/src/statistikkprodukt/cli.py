@@ -5,8 +5,13 @@ import logging
 import os
 from pathlib import Path
 
-from statistikkprodukt import app
-from statistikkprodukt.config import load_configuration, ConfigError, StorageOption
+from statistikkprodukt.app import installer_r_pakker, last, skjema
+from statistikkprodukt.config import (
+    ConfigError,
+    StorageOption,
+    StatistikkproduktRegister,
+    load_configuration,
+)
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
 LOGGER = logging.getLogger(__name__)
@@ -70,7 +75,16 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         metavar="MAPPE",
         help="Mappe for CSV-filer når --maal=csv (standard: data_ut).",
     )
+    _add_id_validation_option(parser)
     _add_logging_options(parser)
+
+
+def _add_id_validation_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--ingen-id-validering",
+        action="store_true",
+        help="Tillat test-ID-er fra '00000' til '09999'. Dataene må fjernes før publisering.",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,6 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Opprett tabellene i Oracle i stedet for å skrive DDL til standard output.",
     )
+    _add_id_validation_option(create)
     _add_logging_options(create)
 
     installer_r_pakker = commands.add_parser(
@@ -151,9 +166,13 @@ def main() -> None:
 
         elif args.command == "last":
             config_path = args.config
-            configuration, config_directory = load_configuration(config_path)
-
-            app.run(
+            configuration, config_directory = load_configuration(
+                config_path, ingen_id_validering=args.ingen_id_validering
+            )
+            StatistikkproduktRegister().valider(
+                configuration.aggregater, ingen_id_validering=args.ingen_id_validering
+            )
+            last.last(
                 configuration,
                 config_directory,
                 args.kilde,
@@ -164,15 +183,20 @@ def main() -> None:
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":
-            configuration, config_directory = load_configuration(args.config)
-            app.create_tables(
+            configuration, config_directory = load_configuration(
+                args.config, ingen_id_validering=args.ingen_id_validering
+            )
+            StatistikkproduktRegister().valider(
+                configuration.aggregater, ingen_id_validering=args.ingen_id_validering
+            )
+            skjema.create_tables(
                 configuration,
                 config_directory,
                 selected_tables=args.aggregater,
                 create_in_database=args.db,
             )
         elif args.command == "installer-r-pakker":
-            app.installer_r_pakker()
+            installer_r_pakker.installer_r_pakker()
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)
     except ConfigError as exc:
@@ -191,7 +215,7 @@ def main() -> None:
 
 def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     """Utfører valgt testmiljøkommando."""
-    from statistikkprodukt import testenv
+    from statistikkprodukt.app import testenv
 
     if args.testenv_command == "setup":
         testenv.setup()

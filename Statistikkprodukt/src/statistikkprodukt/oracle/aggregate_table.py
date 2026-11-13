@@ -2,19 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
 
 import oracledb
 from oracledb import Cursor
+from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class TableMetadata:
-    table: Metadata
-    columns: dict[str, Metadata]
 
 
 def _format_comment(metadata: Metadata) -> str:
@@ -25,7 +19,7 @@ def _format_comment(metadata: Metadata) -> str:
 
 
 def comment_statements(
-        schema: str, table_name: str, metadata: TableMetadata
+    schema: str, table_name: str, metadata: TableMetadata
 ) -> list[str]:
     """Lager Oracle-setninger for kommentarer på tabellen og kolonnene."""
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
@@ -39,9 +33,9 @@ def comment_statements(
 
 
 def read_metadata(
-        connection: oracledb.Connection,
-        schema: str,
-        aggregate: Aggregate
+    connection: oracledb.Connection,
+    schema: str,
+    aggregate: Aggregate,
 ) -> TableMetadata:
     """Fyller manglende aggregatmetadata fra Oracle-kommentarer.
 
@@ -66,9 +60,7 @@ def read_metadata(
             *aggregate.tellepunkter,
         ]:
             column = variable.kolonne
-            db_metadata = _fetch_column_metadata(
-                owner, table_name, column, cursor
-            )
+            db_metadata = _fetch_column_metadata(owner, table_name, column, cursor)
             config_metadata = Metadata.model_validate(
                 variable.model_dump(include=set(Metadata.model_fields))
             )
@@ -91,8 +83,7 @@ def _merge_metadata(column, config_metadata: Metadata, db_metadata: Metadata):
             LOGGER.info("%s.%s hentes fra databasekommentar.", column, tag)
         else:
             raise ValueError(
-                f"Metadatafeltet {tag} mangler for {column}; angi det i YAML "
-                "eller legg det til som databasekommentar."
+                f"Metadatafeltet {tag} mangler for {column}; angi det i YAML."
             )
         LOGGER.debug("%s.%s = %s", column, tag, value)
         setattr(result, tag, value)
@@ -100,7 +91,9 @@ def _merge_metadata(column, config_metadata: Metadata, db_metadata: Metadata):
     return result
 
 
-def _fetch_column_metadata(schema: str, table_name: str, column: str, cursor: Cursor) -> Metadata:
+def _fetch_column_metadata(
+    schema: str, table_name: str, column: str, cursor: Cursor
+) -> Metadata:
     cursor.execute(
         "select comments from sys.dba_col_comments where owner = :owner "
         "and table_name = :table_name and column_name = :column_name",

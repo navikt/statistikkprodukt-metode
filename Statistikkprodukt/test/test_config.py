@@ -74,6 +74,73 @@ def test_aggregate_id_integer_is_converted_to_string():
     assert Configuration.model_validate(config).aggregater[0].id == "21000"
 
 
+@pytest.mark.parametrize("agg_id", [
+    "00000", "00001", "09999", "0", "0000", "000000", "10000",
+    "NAV00001", "NAV21000", "nav21000", "20000", "23000",
+])
+@pytest.mark.parametrize("allow_development_id", [False, True])
+def test_aggregate_id_validation_only_bypasses_development_id(agg_id, allow_development_id):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = agg_id
+    context = {"ingen_id_validering": allow_development_id}
+
+    if agg_id in {"00000", "00001", "09999"} and allow_development_id:
+        assert Configuration.model_validate(config, context=context).aggregater[0].id == agg_id
+    else:
+        with pytest.raises(ValidationError, match="uten NAV-prefiks"):
+            Configuration.model_validate(config, context=context)
+
+
+@pytest.mark.parametrize("agg_id", ["00000", "00001", "09999", "21000"])
+def test_configuration_rejects_duplicate_ids_including_test_series(agg_id):
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    aggregate["id"] = agg_id
+    config["aggregater"].append({**aggregate, "tabell": "annen"})
+
+    with pytest.raises(ValidationError, match="id må være unike"):
+        Configuration.model_validate(config, context={"ingen_id_validering": True})
+
+
+def test_configuration_accepts_distinct_test_and_registered_ids():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    config["aggregater"] = [
+        {**aggregate, "id": aggregat_id, "tabell": f"tabell_{index}"}
+        for index, aggregat_id in enumerate(["00000", "00001", "09999", "21000"])
+    ]
+
+    result = Configuration.model_validate(config, context={"ingen_id_validering": True})
+    assert [item.id for item in result.aggregater] == ["00000", "00001", "09999", "21000"]
+
+
+def test_aggregate_metadata_is_required():
+    for field in ("navn", "navn-en", "innhold", "innhold-en"):
+        incomplete = configuration().model_dump(by_alias=True)
+        incomplete["aggregater"][0].pop(field)
+        with pytest.raises(ValidationError):
+            Configuration.model_validate(incomplete)
+
+
+def test_column_metadata_is_optional():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    columns = [aggregate["periodisering"], *aggregate["tellepunkter"], *aggregate["variabler"]]
+    for column in columns:
+        for field in ("navn", "navn-en", "innhold", "innhold-en"):
+            column.pop(field)
+
+    Configuration.model_validate(config)
+
+
+def test_aggregate_rejects_names_too_long_for_derived_tables():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = "a" * 120
+
+    with pytest.raises(ValidationError, match="Oracle-navn"):
+        Configuration.model_validate(config)
+
+
 def test_loads_aggregate_configurations_matching_mapper(tmp_path):
     """Leser en konfigurasjonsfil per aggregat fra mønsteret i hovedfilen."""
     aggregate_directory = tmp_path / "aggregater"
