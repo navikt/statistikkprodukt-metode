@@ -1,52 +1,21 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import json
 from pathlib import Path
 
 import oracledb
 import pandas as pd
 from pydantic import SecretStr
-from statistikkprodukt import oracle, lokal
-from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, resolve_secret, StorageOption
+from statistikkprodukt import oracle, csv
+from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, is_test_id, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
 
 
-@dataclass
-class Transfer:
-    """Samler innstillinger og tilstand for overføring av ett eller flere aggregater."""
-    connection: oracledb.Connection | None
-    source: StorageOption
-    target: StorageOption
-    input_directory: Path
-    output_directory: Path
-
-    @staticmethod
-    def from_options(
-            configuration: Configuration,
-            source: StorageOption,
-            target: StorageOption,
-            input_directory: Path|str,
-            output_directory: Path|str,
-            *,
-            dry_run: bool = False
-    ) -> Transfer:
-        """Oppretter en Transfer med tilkobling bare når kilden eller målet trenger den."""
-        needs_db_connection = source == StorageOption.DB or (target == StorageOption.DB and not dry_run)
-        connection = _connect(configuration) if needs_db_connection else None
-
-        return Transfer(
-            connection=connection,
-            input_directory=Path(input_directory),
-            output_directory=Path(output_directory),
-            source=source,
-            target=target,
-        )
-
-
-def run(
+def last(
         configuration: Configuration,
         config_directory: Path,
         source: StorageOption,
@@ -55,10 +24,16 @@ def run(
         output_directory: Path,
         *,
         selected_tables: list[str] | None = None,
+        selected_periods: list[str] | None = None,
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
+    LOGGER.debug(
+        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, valgte tabeller=%s.",
+        source, target, dry_run, selected_tables or "alle",
+    )
     aggregates = _select_aggregates(configuration, selected_tables)
+    LOGGER.debug("Behandler %d aggregater: %s.", len(aggregates), [a.tabell for a in aggregates])
 
     transfer = Transfer.from_options(
         configuration,
@@ -69,100 +44,72 @@ def run(
         dry_run=dry_run,
     )
 
+    logg = _initialize_kjorelogg(aggregates, configuration, source, target)
+
     try:
         for aggregate in aggregates:
-            _process_aggregate(
+            resultat = _process_aggregate(
                 configuration,
                 aggregate,
                 config_directory,
                 transfer,
+                selected_periods=selected_periods,
                 dry_run=dry_run,
             )
+            logg.resultater.append(resultat)
+    except BaseException as exc:
+        LOGGER.debug("Kjøringen feilet: %r.", exc)
+        logg.fullfor_feil(exc)
+        _write_log(configuration, transfer, logg, dry_run=dry_run)
+        raise
+    else:
+        LOGGER.debug("Kjøringen fullført uten feil.")
+        logg.fullfor_suksess()
+        _write_log(configuration, transfer, logg, dry_run=dry_run)
     finally:
         if transfer.connection is not None:
+            LOGGER.debug("Lukker databasetilkoblingen.")
             transfer.connection.close()
 
 
-def create_tables(
+def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configuration, source: StorageOption,
+                          target: StorageOption) -> Kjorelogg:
+    konfigurasjon_json = configuration.model_dump(
+        mode="json", by_alias=True, exclude={"connection": {"password"}}
+    )
+    konfigurasjon_json_str = json.dumps(konfigurasjon_json, ensure_ascii=False)
+    if "password" in konfigurasjon_json_str or configuration.connection.password.get_secret_value() in konfigurasjon_json_str:
+        raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
+
+    logg = Kjorelogg(
+        konfigurasjon=konfigurasjon_json,
+        kilde=str(source),
+        maal=str(target),
+        aggregater=aggregates,
+    )
+    return logg
+
+
+def _write_log(
         configuration: Configuration,
-        config_directory: Path,
+        transfer: Transfer,
+        logg: Kjorelogg,
         *,
-        selected_tables: list[str] | None = None,
-        create_in_database: bool = False,
+        dry_run: bool,
 ) -> None:
-    """Viser DDL for tomme småaggregattabeller eller oppretter dem i Oracle."""
-    aggregates = _select_aggregates(configuration, selected_tables)
-    connection = _connect(configuration)
+    """Skriver kjøreloggen til Oracle når kjøringen skriver til databasen."""
+    if transfer.target != StorageOption.DB or dry_run or transfer.connection is None:
+        LOGGER.debug("Hopper over skriving av kjørelogg (mål=%s, dry_run=%s).", transfer.target, dry_run)
+        return
+    LOGGER.debug("Skriver kjørelogg med status %s.", logg.status)
     try:
-        schema = configuration.connection.schema_name
-        for aggregate in aggregates:
-            tables = [
-                (aggregate.prepub_tabell, False),
-                (aggregate.kontroll_tabell, True),
-            ]
-            missing = []
-            for table_name, with_markers in tables:
-                if oracle.table_exists(connection, schema, table_name):
-                    LOGGER.info(
-                        "Tabellen %s.%s finnes allerede; hopper over.",
-                        schema,
-                        table_name,
-                    )
-                else:
-                    missing.append((table_name, with_markers))
-            if not missing:
-                continue
-
-            metadata = oracle.read_metadata(connection, schema, aggregate)
-            sql = _read_sql(aggregate, config_directory)
-            statements = []
-            for table_name, with_markers in missing:
-                statements.append(
-                    oracle.create_table_statement(
-                        schema, table_name, sql, with_markers=with_markers
-                    )
-                )
-                statements.extend(oracle.comment_statements(schema, table_name, metadata))
-
-            if create_in_database:
-                with connection.cursor() as cursor:
-                    for statement in statements:
-                        cursor.execute(statement)
-                string_columns = [
-                    aggregate.periodisering.kolonne,
-                    *(variable.kolonne for variable in aggregate.variabler),
-                ]
-                for table_name, _ in missing:
-                    oracle.validate_string_columns(
-                        connection, schema, table_name, string_columns
-                    )
-                LOGGER.info(
-                    "Opprettet tabellene %s.",
-                    ", ".join(f"{schema}.{name}" for name, _ in missing),
-                )
-            else:
-                print(";\n".join(statements) + ";")
-    finally:
-        connection.close()
-
-
-def installer_r_pakker() -> None:
-    """Installerer R-pakker som kreves for prikking."""
-    import rpy2.robjects
-    import rpy2.robjects.packages
-    import rpy2.rinterface
-    from rpy2.robjects.vectors import StrVector
-
-    pkg_dir = Path(__file__).parents[3] / "NavDataprodukt"
-
-    LOGGER.info("Installere 'NavDataprodukt'...")
-    utils = rpy2.robjects.packages.importr('utils')
-    utils.install_packages(StrVector(['SSBtools', 'GaussSuppression', 'openxlsx', 'readxl', 'DBI', 'odbc', 'rstudioapi']), dependencies=True)
-    utils.install_packages(
-        StrVector([str(pkg_dir)]),
-        repos=rpy2.rinterface.NULL,
-        type="source"
-        )
+        oracle.write_log(transfer.connection, configuration.connection.schema_name, logg)
+    except Exception:
+        # En feil i loggingen skal ikke skjule feilen fra selve kjøringen.
+        if logg.status == "FEILET":
+            LOGGER.exception("Kunne ikke skrive kjøreloggen.")
+        else:
+            raise
 
 
 def _select_aggregates(
@@ -171,6 +118,7 @@ def _select_aggregates(
 ) -> list[Aggregate]:
     """Velger alle aggregater eller kontrollerer eksplisitte tabellvalg."""
     if not selected_tables:
+        LOGGER.debug("Ingen tabeller valgt; bruker alle aggregater i konfigurasjonen.")
         return configuration.aggregater
 
     wanted = {name.lower() for name in selected_tables}
@@ -187,6 +135,7 @@ def _select_aggregates(
 
 def _connect(configuration: Configuration) -> oracledb.Connection:
     """Oppretter Oracle-tilkobling bare når kilden eller målet trenger den."""
+    LOGGER.debug("Kobler til Oracle (skjema=%s).", configuration.connection.schema_name)
     user = resolve_secret(configuration.connection.user)
     password = resolve_secret(
         configuration.connection.password.get_secret_value(), password=True
@@ -206,18 +155,26 @@ def _process_aggregate(
         config_directory: Path,
         transfer: Transfer,
         *,
+        selected_periods: list[str] | None = None,
         dry_run: bool,
-) -> None:
-    """Leser, prikker og lagrer ett småaggregat."""
-    LOGGER.info("Leser data for %s.", aggregate.tabell)
+) -> LasteResultat:
+    """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
+    LOGGER.debug(
+        "Aggregat %s: id=%s, inkrementell strategi=%s, prikking=%s, særskilt=%s.",
+        aggregate.tabell, aggregate.id, aggregate.inkrementell_strategi.value,
+        aggregate.prikking, aggregate.saerskilt,
+    )
     periods_to_load = _get_periods_to_load(
         configuration,
         aggregate,
         config_directory,
         transfer,
+        selected_periods=selected_periods,
         dry_run=dry_run,
     )
 
+    antall_perioder_str = str(len(periods_to_load)) if periods_to_load is not None else "alle"
+    LOGGER.info("Behandler aggregat %s (id %s), leser %s perioder.", aggregate.tabell, aggregate.id, antall_perioder_str)
     data = _read_input(
         aggregate,
         config_directory,
@@ -225,7 +182,9 @@ def _process_aggregate(
         periods_to_load=periods_to_load,
     )
 
-    LOGGER.info("Prikker %d rader for %s.", len(data), aggregate.tabell)
+    perioder_str = ", ".join(sorted(map(str, data[aggregate.periodisering.kolonne].dropna().unique().tolist())))
+    LOGGER.info("%s: Prikker %s perioder (%s).", aggregate.id, antall_perioder_str, perioder_str)
+    LOGGER.debug("Kolonner for %s: %s.", aggregate.tabell, list(data.columns))
     prepub, kontroll = prikking(
         data,
         aggregate.periodisering.kolonne,
@@ -239,8 +198,33 @@ def _process_aggregate(
     prepub = prepub[list(data.columns)]
     kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
 
-    LOGGER.info("Skriver %(len)d rader til %(tab)s_prepub og %(tab)s_kontroll.", {"len": len(prepub), "tab": aggregate.tabell})
-    _write_output(
+    perioder = sorted(map(str, prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()))
+    LOGGER.debug("Perioder i resultatet for %s: %s.", aggregate.tabell, perioder)
+    resultat = LasteResultat(
+        id=aggregate.id,
+        tabell=aggregate.tabell,
+        perioder=perioder,
+        antall_rader=len(prepub),
+        antall_primaerprikket=int(kontroll["primary"].sum()),
+        antall_prikket=int(kontroll["suppressed"].sum()),
+        metadata=None,
+    )
+    LOGGER.info(
+        ("%(id)s: Lastet "
+         "%(antall_perioder)d perioder, "
+         "%(antall_rader)d rader, "
+         "%(antall_prikket)d prikket, "
+         "derav %(antall_primaerprikket)d primærprikket."),
+        {
+            "id": aggregate.id,
+            "antall_perioder": len(perioder),
+            "antall_rader": resultat.antall_rader,
+            "antall_primaerprikket": resultat.antall_primaerprikket,
+            "antall_prikket": resultat.antall_prikket,
+        }
+    )
+
+    metadata = _write_output(
         configuration,
         aggregate,
         prepub,
@@ -249,6 +233,9 @@ def _process_aggregate(
         config_directory=config_directory,
         dry_run=dry_run,
     )
+    resultat.metadata = metadata
+
+    return resultat
 
 
 def _get_periods_to_load(
@@ -257,10 +244,15 @@ def _get_periods_to_load(
         config_directory: Path,
         transfer: Transfer,
         *,
+        selected_periods: list[str] | None = None,
         dry_run: bool,
-) -> list[int | str] | None:
+) -> list[str] | None:
     """Velger perioder før innlesing; None betyr alle, en tom liste betyr ingen."""
+    if selected_periods is not None:
+        LOGGER.debug("Bruker eksplisitt valgte perioder for %s: %s.", aggregate.tabell, selected_periods)
+        return selected_periods
     if transfer.target == StorageOption.CSV or dry_run:
+        LOGGER.debug("Leser alle perioder for %s (mål=%s, dry_run=%s).", aggregate.tabell, transfer.target, dry_run)
         return None
     if transfer.connection is None:
         raise RuntimeError("Databasetilkobling mangler.")
@@ -271,19 +263,25 @@ def _get_periods_to_load(
         config_directory,
         transfer,
     )
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
-        return sorted(available)
-
+    LOGGER.debug(
+        "Perioder for %s: tilgjengelige=%s, eksisterende=%s, strategi=%s.",
+        aggregate.tabell, sorted(available), sorted(existing),
+        aggregate.inkrementell_strategi.value,
+    )
     missing = available - existing
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
+        periods = sorted(available)
+    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
         max_available = {max(existing)} if existing and max(existing) in available else set()
-        return sorted(missing.union(max_available))
+        periods = sorted(missing.union(max_available))
     elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
-        return sorted(missing)
+        periods = sorted(missing)
     else:
         raise NotImplementedError(
             f"Ukjent inkrementell modus: {aggregate.inkrementell_strategi}"
         )
+    LOGGER.debug("Perioder som skal lastes for %s: %s.", aggregate.tabell, periods)
+    return periods
 
 
 def _fetch_periods(
@@ -291,14 +289,14 @@ def _fetch_periods(
         aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
-) -> tuple[set[int | str], set[int | str]]:
+) -> tuple[set[str], set[str]]:
     """Henter tilgjengelige perioder fra datakilden og måltabellen."""
     assert transfer.connection is not None, "Databasetilkobling mangler."
 
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
-        data = lokal.read_csv(directory, aggregate)
-        available = set(data[aggregate.periodisering.kolonne].dropna().tolist())
+        data = csv.read_csv(directory, aggregate)
+        available = set(data[aggregate.periodisering.kolonne].dropna())
     else:
         available = oracle.read_periods(
             transfer.connection,
@@ -315,6 +313,7 @@ def _fetch_periods(
 def _read_sql(aggregate: Aggregate, config_directory: Path) -> str:
     """Leser SQL-filen relativt til konfigurasjonen."""
     sql_path = (config_directory / aggregate.sporring_sql).resolve()
+    LOGGER.debug("Leser SQL-fil %s.", sql_path)
     try:
         return sql_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -326,14 +325,19 @@ def _read_input(
         config_directory: Path,
         transfer: Transfer,
         *,
-        periods_to_load: list[int | str] | None = None,
+        periods_to_load: list[str] | None = None,
 ) -> pd.DataFrame:
     """Leser aggregatdata fra CSV eller Oracle."""
+    LOGGER.debug(
+        "Leser inndata for %s fra %s; perioder=%s.",
+        aggregate.tabell, transfer.source, "alle" if periods_to_load is None else periods_to_load,
+    )
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
-        data = lokal.read_csv(directory, aggregate)
+        data = csv.read_csv(directory, aggregate)
         if periods_to_load is not None:
             data = data[data[aggregate.periodisering.kolonne].isin(periods_to_load)]
+        LOGGER.debug("Leste %d rader fra CSV for %s.", len(data), aggregate.tabell)
         return data
     else:
         if transfer.connection is None:
@@ -354,14 +358,19 @@ def _write_output(
         *,
         config_directory: Path,
         dry_run: bool,
-) -> None:
+) -> TableMetadata | None:
     """Sender prikkede data og kontrolldata til CSV eller Oracle."""
+    LOGGER.debug(
+        "Skriver resultat for %s til %s (prepub=%d rader, kontroll=%d rader).",
+        aggregate.tabell, transfer.target, len(prepub), len(kontroll),
+    )
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
-        lokal.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
-        lokal.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
+        csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
+        csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
+        return None
     else:
-        _write_database(
+        return _write_database(
             configuration,
             aggregate,
             prepub,
@@ -379,7 +388,7 @@ def _write_database(
         transfer: Transfer,
         *,
         dry_run: bool,
-) -> None:
+) -> TableMetadata | None:
     """Skriver prepub- og kontrolltabellen til Oracle."""
     schema = configuration.connection.schema_name
     connection = transfer.connection
@@ -402,6 +411,14 @@ def _write_database(
 
     metadata = None
     if not dry_run:
+        LOGGER.debug("Leser metadata for %s.", aggregate.tabell)
+        if is_test_id(aggregate.id):
+            LOGGER.warning(
+                "Data for %s legges inn uten gyldig NAV-ID (id='%s'). "
+                "Disse dataene må fjernes før publisering.",
+                aggregate.tabell,
+                aggregate.id,
+            )
         metadata = oracle.read_metadata(connection, schema, aggregate)
 
     for table_name, frame in results:
@@ -416,3 +433,8 @@ def _write_database(
         if not dry_run:
             LOGGER.info("Oppdaterer kommentarer for %s.", table_name)
             oracle.write_comments(connection, schema, table_name, metadata)
+
+    if not dry_run:
+        LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
+        oracle.write_metadata_table(connection, schema, aggregate, metadata)
+    return metadata

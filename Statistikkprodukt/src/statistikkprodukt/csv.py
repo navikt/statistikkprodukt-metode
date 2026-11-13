@@ -10,6 +10,7 @@ LOGGER = logging.getLogger(__name__)
 def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
     """Leser og validerer aggregatets CSV-inndata."""
     path = directory / f"{aggregate.tabell}.csv"
+    LOGGER.debug("Leser CSV-fil %s.", path)
     try:
         frame = pd.read_csv(path)
     except OSError as exc:
@@ -17,7 +18,11 @@ def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
     except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as exc:
         raise ValueError(f"CSV-filen {path} har et ugyldig format.") from exc
 
+    LOGGER.debug("Leste %d rader og %d kolonner fra %s.", len(frame), len(frame.columns), path)
     validate_columns(frame, aggregate)
+    frame[aggregate.periodisering.kolonne] = frame[
+        aggregate.periodisering.kolonne
+    ].astype("string")
 
     return frame
 
@@ -39,6 +44,7 @@ def validate_columns(frame: pd.DataFrame, aggregate: Aggregate) -> None:
         if str(column).lower() not in {name.lower() for name in expected}
     ]
 
+    LOGGER.debug("Validerer kolonner for %s: forventet=%s, faktisk=%s.", aggregate.tabell, expected, list(frame.columns))
     if missing or unexpected:
         details = []
         if missing:
@@ -47,10 +53,10 @@ def validate_columns(frame: pd.DataFrame, aggregate: Aggregate) -> None:
             details.append(f"ukjente: {', '.join(map(str, unexpected))}")
         raise ValueError(f"Kolonnene i {aggregate.tabell}.csv stemmer ikke ({'; '.join(details)}).")
 
-    frame.rename(
-        columns={actual_by_lower[column.lower()]: column for column in expected},
-        inplace=True,
-    )
+    rename_columns = {
+        actual_by_lower[column.lower()]: column for column in expected
+    }
+    frame.columns = [rename_columns.get(column, column) for column in frame.columns]
 
 
 def write_csv(
@@ -71,6 +77,7 @@ def write_csv(
         LOGGER.warning("CSV filer overskrives også når inkrementell modus er satt til %s.",
                        aggregate.inkrementell_strategi.value)
 
+    LOGGER.debug("Skriver %d rader til %s (dry_run=%s).", len(frame), path, dry_run)
     if dry_run:
         print(f"Ville skrevet {len(frame)} rader til {path}.")
         return

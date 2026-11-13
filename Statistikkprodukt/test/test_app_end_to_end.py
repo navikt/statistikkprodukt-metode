@@ -1,9 +1,12 @@
 from pathlib import Path
 from uuid import uuid4
 
-from statistikkprodukt import app, oracle
+import pytest
+from statistikkprodukt import oracle
+from statistikkprodukt.app.last import last
+from statistikkprodukt.app.skjema import create_tables
 from statistikkprodukt.config import DATABASE_PROFILES, load_configuration, StorageOption
-from statistikkprodukt.testenv import (
+from statistikkprodukt.app.testenv import (
     CONTAINER_PORT,
     ORACLE_PASSWORD,
     ORACLE_SERVICE,
@@ -11,13 +14,15 @@ from statistikkprodukt.testenv import (
 )
 
 
+@pytest.mark.r_dependent
 def test_e2e_run(
         oracle_connection, monkeypatch, tmp_path
 ):
     """Oppretter og fyller ett småaggregat fra en OBT-tabell."""
     suffix = uuid4().hex[:12]
     source_table = f"obt_e2e_{suffix}"
-    aggregate_table = f"agg_e2e_{suffix}"
+    aggregate_table = f"ost_e2e{suffix}_agg"
+    log_table = oracle.LOG_TABLE
     aggregate_directory = tmp_path / "aggregater"
     aggregate_directory.mkdir()
 
@@ -93,7 +98,7 @@ group by periode, region
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{source_table} ("
-                "periode varchar2(6), region VARCHAR2(100), antall NUMBER)"
+                "periode varchar2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER)"
             )
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{source_table} VALUES (:1, :2, :3)",
@@ -110,10 +115,10 @@ group by periode, region
             tmp_path / "konfigurasjon.yml"
         )
 
-        app.create_tables(
+        create_tables(
             configuration, config_directory, create_in_database=True
         )
-        app.run(configuration, config_directory, StorageOption.DB, StorageOption.DB, Path("dummy"), Path("dummy"), dry_run=False)
+        last(configuration, config_directory, StorageOption.DB, StorageOption.DB, Path("dummy"), Path("dummy"), dry_run=False)
 
         with oracle_connection.cursor() as cursor:
             cursor.execute(
@@ -150,12 +155,37 @@ group by periode, region
 
         assert sorted(prepub_rows) == sorted(expected_prepub)
         assert sorted(kontroll_rows) == sorted(expected_kontroll)
+
+        with oracle_connection.cursor() as cursor:
+            cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate_table}_meta")
+            meta = {field: value.read() if value is not None else None for field, value in cursor.fetchall()}
+            cursor.execute(
+                "SELECT status, aggregat_id, tabell, navn, antall_rader, antall_prikket "
+                f"FROM SYSTEM.{log_table} WHERE tabell = :tabell",
+                tabell=aggregate_table,
+            )
+            log_rows = [
+                (status, aggregat_id, table, name, count, masked)
+                for status, aggregat_id, table, name, count, masked in cursor.fetchall()
+            ]
+
+        assert meta["id"] == "21000"
+        assert meta["navn"] == "Aggregerte verdier"
+        assert meta["periodisering"] == "periode"
+        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 2)]
     finally:
         with oracle_connection.cursor() as cursor:
             for table in (
                 f"{aggregate_table}_prepub",
                 f"{aggregate_table}_kontroll",
+                f"{aggregate_table}_meta",
                 source_table,
             ):
                 if oracle.table_exists(oracle_connection, "SYSTEM", table):
                     cursor.execute(f"DROP TABLE SYSTEM.{table} PURGE")
+            if oracle.table_exists(oracle_connection, "SYSTEM", log_table):
+                cursor.execute(
+                    f"DELETE FROM SYSTEM.{log_table} WHERE tabell = :tabell",
+                    tabell=aggregate_table,
+                )
+                oracle_connection.commit()

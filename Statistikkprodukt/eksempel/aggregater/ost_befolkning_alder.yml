@@ -1,5 +1,6 @@
 definisjon:
-  id: 21000
+  # Registrer en unik id (21000–22999); test-ID-er '00000'–'09999' krever --ingen-id-validering.
+  id: '00000'
   obt-tabell: obt_befolkning
 
   navn: Befolkning etter alder

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import getpass
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -16,8 +17,12 @@ from .app_schema import (
     ConfigurationSource,
 )
 
+LOGGER = logging.getLogger(__name__)
 
-def load_configuration(config_path: str | Path | None) -> tuple[Configuration, Path]:
+
+def load_configuration(
+    config_path: str | Path | None, *, ingen_id_validering: bool = False
+) -> tuple[Configuration, Path]:
     """Leser fellesinnstillinger og aggregatdefinisjoner fra separate YAML-filer."""
 
     if config_path is None:
@@ -28,6 +33,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
     import yaml
 
     path = Path(config_path).expanduser().resolve()
+    LOGGER.debug("Leser hovedkonfigurasjon %s.", path)
     data = _read_yaml(path, yaml)
     try:
         source = ConfigurationSource.model_validate(data)
@@ -42,6 +48,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
     )
     aggregates: list[Aggregate] = []
     for aggregate_path in aggregate_paths:
+        LOGGER.debug("Leser aggregatkonfigurasjon %s.", aggregate_path)
         aggregate_data = _read_yaml(aggregate_path, yaml)
         if isinstance(aggregate_data, dict) and isinstance(
             aggregate_data.get("definisjon"), dict
@@ -51,7 +58,9 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
                 os.path.relpath(aggregate_path.with_suffix(".sql"), path.parent)
             ).as_posix()
         try:
-            aggregate_config = AggregateConfiguration.model_validate(aggregate_data)
+            aggregate_config = AggregateConfiguration.model_validate(
+                aggregate_data, context={"ingen_id_validering": ingen_id_validering}
+            )
         except ValidationError as exc:
             raise ConfigError(
                 f"Konfigurasjonen i {aggregate_path} er ugyldig:\n"
@@ -70,6 +79,7 @@ def load_configuration(config_path: str | Path | None) -> tuple[Configuration, P
             "Konfigurasjonen er ugyldig:\n"
             + "\n".join(format_validation_error(error) for error in exc.errors())
         ) from exc
+    LOGGER.debug("Konfigurasjonen er lastet med %d aggregater.", len(aggregates))
     return config, path.parent
 
 
@@ -138,6 +148,7 @@ def _find_aggregate_configurations(
             )
         paths_by_name[name] = path
 
+    LOGGER.debug("Fant aggregatkonfigurasjoner: %s.", sorted(paths_by_name))
     missing = [name for name in aggregate_names if name not in paths_by_name]
     if missing:
         raise ConfigError(
@@ -169,6 +180,7 @@ def resolve_secret(reference: str, *, password: bool = False) -> str:
         return reference
 
     parsed = urlsplit(reference)
+    LOGGER.debug("Løser hemmelighetsreferanse med skjema %s://.", parsed.scheme)
     if parsed.scheme == "env":
         key = parsed.netloc or parsed.path.lstrip("/")
         value = os.environ.get(key)

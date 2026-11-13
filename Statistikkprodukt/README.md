@@ -10,7 +10,7 @@ For hver aggregat::
 - Lagre resultatet i Oracle/CSV
 - Les metadata fra en bredt aggregat tabell (obt), oppdater fra konfigurasjonsfilen, skriv som databasekommentarer-
 
-For hver aggregat lages to resultattabeller: `{tabell}_prepub` med de prikkede dataene, og `{tabell}_kontroll` med kontrolldata for feilsøking.
+For hvert aggregat lages `{tabell}_prepub` med prikkede data, `{tabell}_kontroll` med kontrolldata og `{tabell}_meta` med metadata. Databasekjøringer logges i én felles tabell, `ost_logg`.
 
 Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerhåndbok.
 
@@ -28,20 +28,24 @@ KNAST har allerede R installert. For å installere eller oppdatere R avhengighet
 uv run statistikkprodukt installer-r-pakker
 ```
 
-Kjør eksempelet, som leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`, uten Oracle-tilkobling eller hemmeligheter:
+Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 
 ```sh
 cd Statistikkprodukt/eksempel
 uv run statistikkprodukt last \
   --config konfigurasjon.yml \
+  --ingen-id-validering \
   --kilde=csv \
   --maal=csv
 ```
 
 Konfigurasjonsmuligheter:
+- `--ingen-id-validering` tillater bruk av test-ID-er (00000–09999) som ikke finnes i registeret.
 - `--dry-run` viser planlagte endringer uten å modifisere data.
 - `--kilde`/`--maal` er enten `db` (default) eller `csv`
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
+- `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
+- `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger. 
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.
@@ -51,10 +55,10 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml ost_befolkning_alder ost_befolkning_kjonn
+uv run statistikkprodukt last --maal=. ost_befolkning_alder ost_befolkning_kjonn
 ```
 
-### Mot databasen
+### Kjør mot databasen
 
 Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test obt tabell.
 
@@ -68,28 +72,25 @@ connection:
   password: terminal://
 ```
 
-Opprett småaggregat-tabellene i Oracle med følgende kommando:
-- ost_befolkning_alder_prepub
-- ost_befolkning_alder_kontroll
-- ost_befolkning_kjonn_prepub
-- ost_befolkning_kjonn_kontroll
+Opprett logg, resultat- og metadatatabellene (se [Databaseskjema](#databaseskjema) for detaljer):
 
 ```shell
 cd Statistikkprodukt/eksempel
-statistikkprodukt skjema opprett --config konfigurasjon.yml
+statistikkprodukt skjema opprett --config konfigurasjon.yml --ingen-id-validering --db
 ```
+
+Uten `--db` vises bare DDL.
 
 Kjør lasten fra databasen til csv:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml --maal=csv
+uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
 ```
 
-CSV filene i `data_ut` overskrives, men de skal ikke endre seg, siden eksempelet er ekvivalent med lasten fra csv til csv.
-Du kan slette de for å verifisere at data kommer inn det.
+CSV filene i `data_ut` overskrives. Du kan slette de for å verifisere at data kommer inn det.
 
 Kjør lasten fra databasen til databasen:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml
+uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
 ```
 
 Sjekk resultatene i Oracle:
@@ -100,17 +101,17 @@ select * from ost_befolkning_alder_kontroll;
 
 # System dokumentasjon
 ## Databaseskjema 
-Databasetabeller kan opprettes som følger:
+Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppslag i Oracle dictionary. Vanlig `last` oppretter eller endrer ikke tabellstrukturen.
 
 ```sh
 # For alle aggregater i konfigurasjonen
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db
 
 # For enkelte aggregater
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml ost_2 ost_1
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db ost_2 ost_1
 ```
 
-Det opprettes to tabeller per aggregat.
+Tabellene per aggregat:
 ```sql
 create table ost_1_kontroll (
   -- Fra SQL spørringen:
@@ -134,7 +135,52 @@ create table ost_1_prepub (
   -- nan når det er prikket
   tall_kolonne number
 );
+
+CREATE TABLE ost_1_meta (
+  felt               VARCHAR2(128 CHAR) NOT NULL,
+  verdi              CLOB,
+  dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
 ```
+
+Logg tabell:
+
+```sql
+
+
+CREATE TABLE ost_logg (
+  kjoring_id            VARCHAR2(36 CHAR) NOT NULL,
+  starttid              TIMESTAMP NOT NULL,
+  sluttid               TIMESTAMP NOT NULL,
+  status                VARCHAR2(10 CHAR) NOT NULL,  -- OK, FEILET
+  db_bruker             VARCHAR2(128 CHAR) DEFAULT SYS_CONTEXT('USERENV', 'SESSION_USER'),
+  commit_hash           VARCHAR2(64 CHAR),
+  konfigurasjon         CLOB CHECK (konfigurasjon IS JSON), -- hele yml konfigurasjonsfil som json
+  kilde                 VARCHAR2(10 CHAR),
+  maal                  VARCHAR2(10 CHAR),
+  antall_aggregater     NUMBER,
+  feilmelding           CLOB,
+  aggregat_id           VARCHAR2(5 CHAR) NOT NULL,
+  tabell                VARCHAR2(128 CHAR) NOT NULL,
+  navn                  VARCHAR2(4000 CHAR),
+  navn_en               VARCHAR2(4000 CHAR),
+  innhold               CLOB,
+  innhold_en            CLOB,
+  obt_tabell            VARCHAR2(261 CHAR),
+  periodisering         VARCHAR2(128 CHAR),
+  inkrementell          VARCHAR2(30 CHAR),
+  formula               VARCHAR2(4000 CHAR),
+  prikking              NUMBER(1),
+  saerskilt             NUMBER(1),
+  sporring_sql          CLOB,
+  perioder              CLOB CHECK (perioder IS JSON), -- alle behandlete perioder
+  antall_rader          NUMBER,
+  antall_primaerprikket NUMBER,
+  antall_prikket        NUMBER,
+  dvh_sist_oppdatert    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
+```
+
 
 ## Konfigurasjon
 
@@ -173,13 +219,13 @@ Per småaggregat må det lages:
 - `{aggregatnavn}.yml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
+For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
 
-Eksempel på aggregatfil:
+Eksempel på aggregatkonfigurasjon:
 
 ```yaml
 definisjon:
-  # Globalt unik id for aggregatet, få den tildelt fra Statistikk og Metode
-  # Format: 21000–22999
+  # Registrer en unik id (21000–22999); test-ID-er '00000'–'09999' krever --ingen-id-validering.
   id: 21000
   obt-tabell: befolkning
   
@@ -232,6 +278,14 @@ Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekomm
 - `#INNHOLD_EN` for engelsk beskrivelse
 
 NB: Både periode og variabler må være streng.
+
+### Statistikkproduktregisteret
+
+Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 21000 og 22999, uten `NAV`-prefiks. 
+
+Til utvikling kan du bruke `'00000'` til `'09999'` med `--ingen-id-validering`. Oppgi test-ID-er som strenger i YAML for å bevare innledende nuller.
+
+Alle aggregater i samme konfigurasjon må ha unik `id`, også ved bruk av test-ID-er.
 
 ### Inkrementelle laster
 

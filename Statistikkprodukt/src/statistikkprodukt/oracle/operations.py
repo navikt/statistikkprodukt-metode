@@ -11,7 +11,9 @@ from statistikkprodukt.config import (
     Aggregate,
     validate_identifier,
 )
-from statistikkprodukt.oracle.metadata import TableMetadata, comment_statements
+from statistikkprodukt.app.models import TableMetadata
+from statistikkprodukt.oracle.aggregate_table import comment_statements
+from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +28,10 @@ _STRING_TYPE_CODES = (
 def connect(configuration: DatabaseConnection) -> oracledb.Connection:
     """Kobler til konfigurert Oracle-database og velger skjema."""
     host, port, service = configuration.oracle_parameters()
+    LOGGER.info(
+        "Kobler til Oracle: host=%s, port=%s, tjeneste=%s, bruker=%s, skjema=%s, tidsfrist=%s.",
+        host, port, service, configuration.user, configuration.schema_name, configuration.timeout,
+    )
     connection = oracledb.connect(
         user=configuration.user,
         password=configuration.password.get_secret_value(),
@@ -34,7 +40,9 @@ def connect(configuration: DatabaseConnection) -> oracledb.Connection:
     )
 
     with connection.cursor() as cursor:
-        cursor.execute(f"ALTER SESSION SET CURRENT_SCHEMA = {configuration.schema_name}")
+        execute_sql(
+            cursor, f"ALTER SESSION SET CURRENT_SCHEMA = {configuration.schema_name}"
+        )
     return connection
 
 
@@ -53,7 +61,7 @@ def read_query(
         sql: str,
         aggregate: Aggregate,
         *,
-        periods_to_load: list[int | str] | None = None,
+        periods_to_load: list[str] | None = None,
 ) -> pd.DataFrame:
     """Kjører aggregatspørringen og returnerer resultatet."""
     sql = sql.strip().removesuffix(";").rstrip()
@@ -63,9 +71,14 @@ def read_query(
         parameters = [_db_value(value) for value in periods_to_load]
         predicate = _generate_in_predicate(period, parameters)
         sql = f"SELECT * FROM (\n{sql}\n) WHERE {predicate}"
+        LOGGER.debug("Begrenser spørringen for %s til %d perioder.", aggregate.tabell, len(parameters))
 
     with connection.cursor() as cursor:
-        cursor.execute(sql, parameters)
+        try:
+            execute_sql(cursor, sql, parameters)
+        except oracledb.DatabaseError as exc:
+            _raise_friendly_sql_error(exc, source_query=True)
+            raise
 
         description = cursor.description or []
         _validate_query_string_columns(description, aggregate)
@@ -74,30 +87,71 @@ def read_query(
         rows = cursor.fetchall()
 
     frame = pd.DataFrame(rows, columns=columns)
+    LOGGER.debug("Spørringen for %s ga %d rader med kolonnene %s.", aggregate.tabell, len(frame), columns)
     return frame
 
 
 def read_periods(
-        connection: oracledb.Connection, sql: str, period: str
-) -> set[int | str]:
+        connection: oracledb.Connection,
+        sql: str,
+        period: str,
+        *,
+        source_query: bool = True,
+) -> set[str]:
     """Henter bare unike, ikke-tomme perioder fra en kildespørring."""
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
     with connection.cursor() as cursor:
-        cursor.execute(
-            f"SELECT DISTINCT {period} FROM (\n{sql}\n) WHERE {period} IS NOT NULL"
-        )
+        try:
+            execute_sql(
+                cursor,
+                f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
+                f"WHERE {period} IS NOT NULL",
+            )
+        except oracledb.DatabaseError as exc:
+            _raise_friendly_sql_error(exc, source_query=source_query)
+            raise
         _validate_string_type(cursor.description, period)
-        return {row[0] for row in cursor.fetchall()}
+        periods = {row[0] for row in cursor.fetchall()}
+    LOGGER.debug("Fant %d perioder i %s.", len(periods), "kildespørringen" if source_query else "måltabellen")
+    return periods
 
 
 def read_target_periods(
         connection: oracledb.Connection, schema: str, aggregate: Aggregate
-) -> set[int | str]:
+) -> set[str]:
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
     period = validate_identifier(aggregate.periodisering.kolonne)
-    return read_periods(connection, f"SELECT {period} FROM {table}", period)
+    return read_periods(
+        connection, f"SELECT {period} FROM {table}", period, source_query=False
+    )
+
+
+def _raise_friendly_sql_error(exc: oracledb.DatabaseError, source_query: bool) -> None:
+    """Gir forståelige meldinger for kjente feil i aggregatets kildespørring."""
+    error = exc.args[0] if exc.args else None
+    code = getattr(error, "code", getattr(exc, "code", None))
+    if source_query:
+        if code == 942:
+            raise ValueError(
+                "En tabell eller visning i aggregatets SQL-spørring finnes ikke, "
+                "eller databasebrukeren mangler tilgang. Kontroller navn og "
+                "tilganger i SQL-filen. Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
+            ) from exc
+        if code == 32034:
+            raise ValueError(
+                "Oracle kan ikke bruke aggregatets SQL-spørring som en underspørring. "
+                "Dette kan skyldes en WITH-spørring; omskriv SQL-filen slik at "
+                "spørringen kan brukes som underspørring.  Du kan se hele spørringen som kjørte "
+                "ved å bruke --log-level=DEBUG."
+            ) from exc
+    else:
+        if code == 942:
+            raise ValueError(
+                "Måltabellen finnes ikke, eller databasebrukeren mangler tilgang. "
+                "Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
+            ) from exc
 
 
 def table_exists(
@@ -105,12 +159,15 @@ def table_exists(
 ) -> bool:
     """Sjekker om en tabell finnes i det angitte Oracle-skjemaet."""
     with connection.cursor() as cursor:
-        cursor.execute(
+        execute_sql(
+            cursor,
             "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
             owner=schema.upper(),
             table_name=table_name.upper(),
         )
-        return cursor.fetchone() is not None
+        exists = cursor.fetchone() is not None
+    LOGGER.debug("Tabellen %s.%s finnes: %s.", schema, table_name, exists)
+    return exists
 
 
 def validate_string_columns(
@@ -121,7 +178,8 @@ def validate_string_columns(
 ) -> None:
     """Kontrollerer at periode- og variabelkolonnene i en tabell er tekstkolonner."""
     with connection.cursor() as cursor:
-        cursor.execute(
+        execute_sql(
+            cursor,
             "SELECT column_name, data_type FROM all_tab_columns "
             "WHERE owner = :owner AND table_name = :table_name",
             owner=schema.upper(),
@@ -200,7 +258,7 @@ def write_comments(
     """Oppretter eller oppdaterer tabellens og kolonnenes Oracle-kommentarer."""
     with connection.cursor() as cursor:
         for statement in comment_statements(schema, table_name, metadata):
-            cursor.execute(statement)
+            execute_sql(cursor, statement)
 
 
 def write_result(
@@ -239,10 +297,13 @@ def write_result(
 
     try:
         with connection.cursor() as cursor:
+            LOGGER.debug("Skriver %d rader til %s (periodekolonne=%s).", len(frame), qualified_table_name, period_column)
             _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
             _insert_rows(cursor, qualified_table_name, frame)
         connection.commit()
+        LOGGER.debug("Committet skriving til %s.", qualified_table_name)
     except Exception:
+        LOGGER.debug("Feil ved skriving til %s; ruller tilbake.", qualified_table_name)
         connection.rollback()
         raise
 
@@ -257,8 +318,11 @@ def _delete_incremental_if_overwrite(cursor: Any, table: str,
     # frame is already only containing those periods that should be inserted, prefiltered for incremental mode
     available_periods = frame[period_column].dropna().unique().tolist()
     if available_periods:
+        LOGGER.debug("Sletter eksisterende rader i %s for perioder %s.", table, available_periods)
         predicate = _generate_in_predicate(period_column, available_periods)
-        cursor.execute(f"DELETE FROM {table} WHERE {predicate}", available_periods)
+        execute_sql(
+            cursor, f"DELETE FROM {table} WHERE {predicate}", available_periods
+        )
 
 
 def _insert_rows(cursor: Any, table: str, frame: pd.DataFrame) -> None:
@@ -273,7 +337,9 @@ def _insert_rows(cursor: Any, table: str, frame: pd.DataFrame) -> None:
         tuple(_db_value(value) for value in row)
         for row in frame.itertuples(index=False, name=None)
     ]
-    cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+    executemany_sql(
+        cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+    )
 
 
 def _db_value(value: Any) -> Any:

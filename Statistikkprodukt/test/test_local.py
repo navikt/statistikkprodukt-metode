@@ -2,9 +2,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from statistikkprodukt.app import run
+import pytest
+from statistikkprodukt.app.last import last
 from statistikkprodukt.config import StorageOption
-from statistikkprodukt.lokal import validate_columns
+from statistikkprodukt.csv import validate_columns
 from test.test_config import configuration
 
 
@@ -15,6 +16,15 @@ def test_csv_columns_include_periodisering_separately():
     validate_columns(frame, configuration().aggregater[0])
 
 
+def test_validate_columns_normalizes_names_without_pandas_rename():
+    frame = pd.DataFrame(columns=["PERIODE", "Region", "ANTALL"])
+
+    validate_columns(frame, configuration().aggregater[0])
+
+    assert list(frame.columns) == ["periode", "region", "antall"]
+
+
+@pytest.mark.r_dependent
 def test_csv_masked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()
@@ -25,7 +35,7 @@ def test_csv_masked(tmp_path):
         {"periode": [202501], "region": ["Oslo"], "antall": [3]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
-    run(
+    last(
         config,
         tmp_path,
         StorageOption.CSV,
@@ -56,6 +66,7 @@ def test_csv_masked(tmp_path):
     assert sorted(kontroll.to_dict("records"), key=sort_fn) == expected_kontroll
 
 
+@pytest.mark.r_dependent
 def test_csv_unmasked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()
@@ -66,7 +77,7 @@ def test_csv_unmasked(tmp_path):
         {"periode": [202501], "region": ["Oslo"], "antall": [12]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
-    run(
+    last(
         config,
         tmp_path,
         StorageOption.CSV,
