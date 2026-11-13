@@ -45,6 +45,7 @@ Konfigurasjonsmuligheter:
 - `--kilde`/`--maal` er enten `db` (default) eller `csv`
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
 - `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
+- `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger. 
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.

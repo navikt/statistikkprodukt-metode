@@ -46,6 +46,14 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG eller konfigurasjon.yml).",
     )
+    parser.add_argument(
+        "-p",
+        "--period",
+        action="append",
+        dest="periods",
+        metavar="PERIODE",
+        help="Begrens innlesingen til denne perioden. Kan angis flere ganger. Lastes uansett inkrementell strategi.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Vis hva som ville blitt gjort uten å skrive data.")
     parser.add_argument(
         "--kilde",
@@ -183,6 +191,7 @@ def main() -> None:
                 args.kilde_mappe,
                 args.maal_mappe,
                 selected_tables=args.aggregater,
+                selected_periods=args.periods,
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":

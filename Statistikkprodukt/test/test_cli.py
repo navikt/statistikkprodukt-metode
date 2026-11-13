@@ -85,6 +85,23 @@ def test_cli_accepts_id_registered_in_pipe_table(tmp_path, monkeypatch, command)
     execute.assert_called_once()
 
 
+def test_cli_accepts_repeated_period_filters(tmp_path, monkeypatch):
+    path = _configure(tmp_path, monkeypatch, "21000")
+    execute = Mock()
+    monkeypatch.setattr(app.last, "last", execute)
+    monkeypatch.setattr(
+        sys, "argv",
+        [
+            "statistikkprodukt", "last", "--config", str(path),
+            "-p", "202501", "--period", "202502",
+        ],
+    )
+
+    cli.main()
+
+    assert execute.call_args.kwargs["selected_periods"] == ["202501", "202502"]
+
+
 @pytest.mark.parametrize("second_id", ["00000", "00001"])
 def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, second_id):
     path = _configure(tmp_path, monkeypatch, "00000")

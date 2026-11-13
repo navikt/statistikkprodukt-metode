@@ -24,6 +24,7 @@ def last(
         output_directory: Path,
         *,
         selected_tables: list[str] | None = None,
+        selected_periods: list[str] | None = None,
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
@@ -52,6 +53,7 @@ def last(
                 aggregate,
                 config_directory,
                 transfer,
+                selected_periods=selected_periods,
                 dry_run=dry_run,
             )
             logg.resultater.append(resultat)
@@ -153,10 +155,10 @@ def _process_aggregate(
         config_directory: Path,
         transfer: Transfer,
         *,
+        selected_periods: list[str] | None = None,
         dry_run: bool,
 ) -> LasteResultat:
     """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
-    LOGGER.info("Leser data for %s.", aggregate.tabell)
     LOGGER.debug(
         "Aggregat %s: id=%s, inkrementell strategi=%s, prikking=%s, særskilt=%s.",
         aggregate.tabell, aggregate.id, aggregate.inkrementell_strategi.value,
@@ -167,9 +169,12 @@ def _process_aggregate(
         aggregate,
         config_directory,
         transfer,
+        selected_periods=selected_periods,
         dry_run=dry_run,
     )
 
+    antall_perioder_str = str(len(periods_to_load)) if periods_to_load is not None else "alle"
+    LOGGER.info("Behandler aggregat %s (id %s), leser %s perioder.", aggregate.tabell, aggregate.id, antall_perioder_str)
     data = _read_input(
         aggregate,
         config_directory,
@@ -177,7 +182,8 @@ def _process_aggregate(
         periods_to_load=periods_to_load,
     )
 
-    LOGGER.info("Prikker %d rader for %s.", len(data), aggregate.tabell)
+    perioder_str = ", ".join(sorted(map(str, data[aggregate.periodisering.kolonne].dropna().unique().tolist())))
+    LOGGER.info("%s: Prikker %s perioder (%s).", aggregate.id, antall_perioder_str, perioder_str)
     LOGGER.debug("Kolonner for %s: %s.", aggregate.tabell, list(data.columns))
     prepub, kontroll = prikking(
         data,
@@ -204,13 +210,13 @@ def _process_aggregate(
         metadata=None,
     )
     LOGGER.info(
-        ("Resultat for tabell %(tabell)s: "
+        ("%(id)s: Lastet "
          "%(antall_perioder)d perioder, "
          "%(antall_rader)d rader, "
-         "%(antall_primaerprikket)d primaerprikket, "
-         "%(antall_prikket)d prikket."),
+         "%(antall_prikket)d prikket, "
+         "derav %(antall_primaerprikket)d primærprikket."),
         {
-            "tabell": aggregate.tabell,
+            "id": aggregate.id,
             "antall_perioder": len(perioder),
             "antall_rader": resultat.antall_rader,
             "antall_primaerprikket": resultat.antall_primaerprikket,
@@ -238,9 +244,13 @@ def _get_periods_to_load(
         config_directory: Path,
         transfer: Transfer,
         *,
+        selected_periods: list[str] | None = None,
         dry_run: bool,
-) -> list[int | str] | None:
+) -> list[str] | None:
     """Velger perioder før innlesing; None betyr alle, en tom liste betyr ingen."""
+    if selected_periods is not None:
+        LOGGER.debug("Bruker eksplisitt valgte perioder for %s: %s.", aggregate.tabell, selected_periods)
+        return selected_periods
     if transfer.target == StorageOption.CSV or dry_run:
         LOGGER.debug("Leser alle perioder for %s (mål=%s, dry_run=%s).", aggregate.tabell, transfer.target, dry_run)
         return None
@@ -255,7 +265,7 @@ def _get_periods_to_load(
     )
     LOGGER.debug(
         "Perioder for %s: tilgjengelige=%s, eksisterende=%s, strategi=%s.",
-        aggregate.tabell, sorted(available, key=str), sorted(existing, key=str),
+        aggregate.tabell, sorted(available), sorted(existing),
         aggregate.inkrementell_strategi.value,
     )
     missing = available - existing
@@ -279,14 +289,14 @@ def _fetch_periods(
         aggregate: Aggregate,
         config_directory: Path,
         transfer: Transfer,
-) -> tuple[set[int | str], set[int | str]]:
+) -> tuple[set[str], set[str]]:
     """Henter tilgjengelige perioder fra datakilden og måltabellen."""
     assert transfer.connection is not None, "Databasetilkobling mangler."
 
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
         data = csv.read_csv(directory, aggregate)
-        available = set(data[aggregate.periodisering.kolonne].dropna().tolist())
+        available = set(data[aggregate.periodisering.kolonne].dropna())
     else:
         available = oracle.read_periods(
             transfer.connection,
@@ -315,7 +325,7 @@ def _read_input(
         config_directory: Path,
         transfer: Transfer,
         *,
-        periods_to_load: list[int | str] | None = None,
+        periods_to_load: list[str] | None = None,
 ) -> pd.DataFrame:
     """Leser aggregatdata fra CSV eller Oracle."""
     LOGGER.debug(

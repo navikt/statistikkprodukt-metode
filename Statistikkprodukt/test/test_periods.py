@@ -88,15 +88,15 @@ def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     ("mode", "available", "existing", "expected"),
     [
-        ("overskriv_ikke", {202501, 202502, 202503}, {202502}, [202501, 202503]),
-        ("overskriv_ikke", {202501}, {202501}, []),
-        ("overskriv_ikke", {202501}, set(), [202501]),
-        ("overskriv_ikke", set(), {202501}, []),
-        ("overskriv_alt", {202501, 202502}, {202502, 202503}, [202501, 202502]),
-        ("overskriv_alt", set(), {202501}, []),
-        ("overskriv_siste_periode", {202500, 202501, 202502}, {202500, 202501}, [202501, 202502]),
-        ("overskriv_siste_periode", {202500, 202501, 202502}, set(), [202500, 202501, 202502]),
-        ("overskriv_siste_periode", set(), {202501}, []),
+        ("overskriv_ikke", {"202501", "202502", "202503"}, {"202502"}, ["202501", "202503"]),
+        ("overskriv_ikke", {"202501"}, {"202501"}, []),
+        ("overskriv_ikke", {"202501"}, set(), ["202501"]),
+        ("overskriv_ikke", set(), {"202501"}, []),
+        ("overskriv_alt", {"202501", "202502"}, {"202502", "202503"}, ["202501", "202502"]),
+        ("overskriv_alt", set(), {"202501"}, []),
+        ("overskriv_siste_periode", {"202500", "202501", "202502"}, {"202500", "202501"}, ["202501", "202502"]),
+        ("overskriv_siste_periode", {"202500", "202501", "202502"}, set(), ["202500", "202501", "202502"]),
+        ("overskriv_siste_periode", set(), {"202501"}, []),
         ("overskriv_ikke", {"2025-01", "2025-02"}, {"2025-01"}, ["2025-02"]),
         ("overskriv_siste_periode", {"2025-01", "2025-02"}, set(), ["2025-01", "2025-02"]),
     ],
@@ -122,6 +122,32 @@ def test_get_periods_to_load(monkeypatch, tmp_path, mode, available, existing, e
         dry_run=False,
     ) == expected
     fetch.assert_called_once()
+
+
+@pytest.mark.parametrize("mode", list(IncrementalMode))
+def test_explicit_periods_override_incremental_mode(monkeypatch, tmp_path, mode):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    aggregate.inkrementell_strategi = mode
+    fetch = MagicMock(side_effect=AssertionError("Uventet periodeoppslag"))
+    monkeypatch.setattr(app, "_fetch_periods", fetch)
+    periods = ["202501", "202503"]
+
+    assert app._get_periods_to_load(
+        config,
+        aggregate,
+        tmp_path,
+        app.Transfer(
+            MagicMock(),
+            StorageOption.DB,
+            StorageOption.DB,
+            MagicMock(),
+            MagicMock(),
+        ),
+        selected_periods=periods,
+        dry_run=False,
+    ) == periods
+    fetch.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -156,8 +182,8 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
     connection = MagicMock()
     sql = "select periode, region, antall from kilde;"
     (tmp_path / aggregate.sporring_sql).write_text(sql)
-    read_source = MagicMock(return_value={202501, 202502})
-    read_target = MagicMock(return_value={202501})
+    read_source = MagicMock(return_value={"202501", "202502"})
+    read_target = MagicMock(return_value={"202501"})
     monkeypatch.setattr(oracle, "read_periods", read_source)
     monkeypatch.setattr(oracle, "read_target_periods", read_target)
     input_directory = tmp_path / "input"
@@ -178,7 +204,7 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
             input_directory,
             Path("output")
         ),
-    ) == ({202501, 202502}, {202501})
+    ) == ({"202501", "202502"}, {"202501"})
     read_target.assert_called_once_with(connection, "test", aggregate)
     if csv_input:
         read_source.assert_not_called()
@@ -186,7 +212,7 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
         read_source.assert_called_once_with(connection, sql, "periode")
 
 
-@pytest.mark.parametrize("periods", [None, [], [202502]])
+@pytest.mark.parametrize("periods", [None, [], ["202502"]])
 def test_read_csv_period_selection(tmp_path, periods):
     aggregate = configuration().aggregater[0]
     pd.DataFrame(
@@ -205,10 +231,34 @@ def test_read_csv_period_selection(tmp_path, periods):
         ),
         periods_to_load=periods,
     )
-    assert data["periode"].tolist() == ([202501, 202502] if periods is None else periods)
+    assert data["periode"].tolist() == (
+        ["202501", "202502"] if periods is None else periods
+    )
 
 
-@pytest.mark.parametrize("periods", [None, [], [202502]])
+def test_read_csv_filter_returns_string_period_from_numeric_csv(tmp_path):
+    aggregate = configuration().aggregater[0]
+    pd.DataFrame(
+        {"periode": [202501, 202502], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
+    ).to_csv(tmp_path / "tabell.csv", index=False)
+
+    data = app._read_input(
+        aggregate,
+        tmp_path,
+        app.Transfer(
+            None,
+            StorageOption.CSV,
+            StorageOption.CSV,
+            tmp_path,
+            Path("dummy"),
+        ),
+        periods_to_load=["202502"],
+    )
+
+    assert data["periode"].tolist() == ["202502"]
+
+
+@pytest.mark.parametrize("periods", [None, [], ["202502"]])
 def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
     config = configuration()
     aggregate = config.aggregater[0]
@@ -254,7 +304,7 @@ def query_connection():
     return connection, cursor
 
 
-@pytest.mark.parametrize("periods", [None, [], [202501], ["x') OR 1=1 --"]])
+@pytest.mark.parametrize("periods", [None, [], ["202501"], ["x') OR 1=1 --"]])
 def test_read_query_binds_period_values(periods):
     connection, cursor = query_connection()
     sql = "select periode, region, antall from kilde;"
@@ -283,7 +333,7 @@ def test_read_query_splits_large_period_lists():
         connection,
         "select periode, region, antall from kilde",
         configuration().aggregater[0],
-        periods_to_load=list(range(1001)),
+        periods_to_load=[str(period) for period in range(1001)],
     )
     query = cursor.execute.call_args.args[0]
     assert ":1000) OR periode IN (:1001)" in query
@@ -350,5 +400,5 @@ def test_period_identifiers_are_validated(identifier):
         update={"periodisering": periodisering}
     )
     with pytest.raises(ValueError, match="Oracle-navn"):
-        oracle.read_query(connection, "select * from kilde", aggregate, periods_to_load=[202501])
+        oracle.read_query(connection, "select * from kilde", aggregate, periods_to_load=["202501"])
     cursor.execute.assert_not_called()

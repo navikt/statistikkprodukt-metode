@@ -61,7 +61,7 @@ def read_query(
         sql: str,
         aggregate: Aggregate,
         *,
-        periods_to_load: list[int | str] | None = None,
+        periods_to_load: list[str] | None = None,
 ) -> pd.DataFrame:
     """Kjører aggregatspørringen og returnerer resultatet."""
     sql = sql.strip().removesuffix(";").rstrip()
@@ -97,7 +97,7 @@ def read_periods(
         period: str,
         *,
         source_query: bool = True,
-) -> set[int | str]:
+) -> set[str]:
     """Henter bare unike, ikke-tomme perioder fra en kildespørring."""
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
@@ -119,7 +119,7 @@ def read_periods(
 
 def read_target_periods(
         connection: oracledb.Connection, schema: str, aggregate: Aggregate
-) -> set[int | str]:
+) -> set[str]:
     """Henter periodene som allerede finnes i måltabellen."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.prepub_tabell)}"
     period = validate_identifier(aggregate.periodisering.kolonne)

@@ -20,6 +20,9 @@ def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
 
     LOGGER.debug("Leste %d rader og %d kolonner fra %s.", len(frame), len(frame.columns), path)
     validate_columns(frame, aggregate)
+    frame[aggregate.periodisering.kolonne] = frame[
+        aggregate.periodisering.kolonne
+    ].astype("string")
 
     return frame
 
