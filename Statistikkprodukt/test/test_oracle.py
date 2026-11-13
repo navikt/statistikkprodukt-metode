@@ -576,7 +576,7 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
         oracle_connection.commit()
 
 
-@pytest.mark.parametrize("periods", [None, [], [202502], [202501, 202502]])
+@pytest.mark.parametrize("periods", [None, [], ["202502"], ["202501", "202502"]])
 def test_read_query_filters_periods_in_oracle(oracle_connection, periods):
     sql = (
         "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
