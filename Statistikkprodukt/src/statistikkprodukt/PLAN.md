@@ -22,6 +22,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
    - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
    - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
    - `overskriv_siste_periode` replaces only the maximum period present in the result.
+   - `--periode/-p` may be used to override one ore more periods, overriding the incremental mode.
 8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
