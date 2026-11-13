@@ -7,6 +7,7 @@ import oracledb
 from statistikkprodukt import oracle
 from statistikkprodukt.app.last import _connect, _read_sql, _select_aggregates
 from statistikkprodukt.config import Aggregate, Configuration
+from statistikkprodukt.oracle.utils import execute_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ def create_tables(
 ) -> None:
     """Viser DDL for tomme småaggregattabeller eller oppretter dem i Oracle."""
     aggregates = _select_aggregates(configuration, selected_tables)
+    LOGGER.debug("Oppretter skjema for %s (i database: %s).", [a.tabell for a in aggregates], create_in_database)
     connection = _connect(configuration)
     try:
         schema = configuration.connection.schema_name
@@ -44,6 +46,7 @@ def create_tables(
             if not missing:
                 continue
 
+            LOGGER.debug("Mangler tabeller for %s: %s.", aggregate.tabell, [name for name, _ in missing])
             metadata = oracle.read_metadata(connection, schema, aggregate)
             sql = _read_sql(aggregate, config_directory)
             statements = []
@@ -58,7 +61,7 @@ def create_tables(
             if create_in_database:
                 with connection.cursor() as cursor:
                     for statement in statements:
-                        cursor.execute(statement)
+                        execute_sql(cursor, statement)
                 string_columns = [
                     aggregate.periodisering.kolonne,
                     *(variable.kolonne for variable in aggregate.variabler),
@@ -74,6 +77,7 @@ def create_tables(
             else:
                 print(";\n".join(statements) + ";")
     finally:
+        LOGGER.debug("Lukker databasetilkoblingen.")
         connection.close()
 
 
@@ -93,7 +97,8 @@ def _create_log_and_meta_tables(
         },
     }
     with connection.cursor() as cursor:
-        cursor.execute(
+        execute_sql(
+            cursor,
             "SELECT table_name FROM all_tables WHERE owner = :owner",
             owner=schema.upper(),
         )
@@ -102,7 +107,7 @@ def _create_log_and_meta_tables(
             if table_name in existing:
                 LOGGER.info("Tabellen %s.%s finnes allerede; hopper over.", schema, table_name)
             elif create_in_database:
-                cursor.execute(statement)
+                execute_sql(cursor, statement)
                 LOGGER.info("Opprettet tabellen %s.%s.", schema, table_name)
             else:
                 print(statement + ";")

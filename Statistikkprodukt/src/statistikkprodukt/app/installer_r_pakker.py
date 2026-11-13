@@ -15,6 +15,7 @@ def installer_r_pakker() -> None:
 
     pkg_dir = Path(__file__).parents[4] / "NavDataprodukt"
 
+    LOGGER.debug("Bruker R-pakkekatalog %s.", pkg_dir)
     LOGGER.info("Installere 'NavDataprodukt'...")
     utils = rpy2.robjects.packages.importr("utils")
     utils.install_packages(

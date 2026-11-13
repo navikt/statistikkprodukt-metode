@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from pathlib import Path
 
 import oracledb
@@ -26,7 +27,12 @@ def last(
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
+    LOGGER.debug(
+        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, valgte tabeller=%s.",
+        source, target, dry_run, selected_tables or "alle",
+    )
     aggregates = _select_aggregates(configuration, selected_tables)
+    LOGGER.debug("Behandler %d aggregater: %s.", len(aggregates), [a.tabell for a in aggregates])
 
     transfer = Transfer.from_options(
         configuration,
@@ -37,14 +43,7 @@ def last(
         dry_run=dry_run,
     )
 
-    logg = Kjorelogg(
-        konfigurasjon=configuration.model_dump(
-            mode="json", by_alias=True, exclude={"connection": {"password"}}
-        ),
-        kilde=str(source),
-        maal=str(target),
-        aggregater=aggregates,
-    )
+    logg = _initialize_kjorelogg(aggregates, configuration, source, target)
 
     try:
         for aggregate in aggregates:
@@ -57,15 +56,36 @@ def last(
             )
             logg.resultater.append(resultat)
     except BaseException as exc:
+        LOGGER.debug("Kjøringen feilet: %r.", exc)
         logg.fullfor_feil(exc)
         _write_log(configuration, transfer, logg, dry_run=dry_run)
         raise
     else:
+        LOGGER.debug("Kjøringen fullført uten feil.")
         logg.fullfor_suksess()
         _write_log(configuration, transfer, logg, dry_run=dry_run)
     finally:
         if transfer.connection is not None:
+            LOGGER.debug("Lukker databasetilkoblingen.")
             transfer.connection.close()
+
+
+def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configuration, source: StorageOption,
+                          target: StorageOption) -> Kjorelogg:
+    konfigurasjon_json = configuration.model_dump(
+        mode="json", by_alias=True, exclude={"connection": {"password"}}
+    )
+    konfigurasjon_json_str = json.dumps(konfigurasjon_json, ensure_ascii=False)
+    if "password" in konfigurasjon_json_str or configuration.connection.password.get_secret_value() in konfigurasjon_json_str:
+        raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
+
+    logg = Kjorelogg(
+        konfigurasjon=konfigurasjon_json,
+        kilde=str(source),
+        maal=str(target),
+        aggregater=aggregates,
+    )
+    return logg
 
 
 def _write_log(
@@ -77,7 +97,9 @@ def _write_log(
 ) -> None:
     """Skriver kjøreloggen til Oracle når kjøringen skriver til databasen."""
     if transfer.target != StorageOption.DB or dry_run or transfer.connection is None:
+        LOGGER.debug("Hopper over skriving av kjørelogg (mål=%s, dry_run=%s).", transfer.target, dry_run)
         return
+    LOGGER.debug("Skriver kjørelogg med status %s.", logg.status)
     try:
         oracle.write_log(transfer.connection, configuration.connection.schema_name, logg)
     except Exception:
@@ -94,6 +116,7 @@ def _select_aggregates(
 ) -> list[Aggregate]:
     """Velger alle aggregater eller kontrollerer eksplisitte tabellvalg."""
     if not selected_tables:
+        LOGGER.debug("Ingen tabeller valgt; bruker alle aggregater i konfigurasjonen.")
         return configuration.aggregater
 
     wanted = {name.lower() for name in selected_tables}
@@ -110,6 +133,7 @@ def _select_aggregates(
 
 def _connect(configuration: Configuration) -> oracledb.Connection:
     """Oppretter Oracle-tilkobling bare når kilden eller målet trenger den."""
+    LOGGER.debug("Kobler til Oracle (skjema=%s).", configuration.connection.schema_name)
     user = resolve_secret(configuration.connection.user)
     password = resolve_secret(
         configuration.connection.password.get_secret_value(), password=True
@@ -133,6 +157,11 @@ def _process_aggregate(
 ) -> LasteResultat:
     """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
     LOGGER.info("Leser data for %s.", aggregate.tabell)
+    LOGGER.debug(
+        "Aggregat %s: id=%s, inkrementell strategi=%s, prikking=%s, særskilt=%s.",
+        aggregate.tabell, aggregate.id, aggregate.inkrementell_strategi.value,
+        aggregate.prikking, aggregate.saerskilt,
+    )
     periods_to_load = _get_periods_to_load(
         configuration,
         aggregate,
@@ -149,6 +178,7 @@ def _process_aggregate(
     )
 
     LOGGER.info("Prikker %d rader for %s.", len(data), aggregate.tabell)
+    LOGGER.debug("Kolonner for %s: %s.", aggregate.tabell, list(data.columns))
     prepub, kontroll = prikking(
         data,
         aggregate.periodisering.kolonne,
@@ -162,7 +192,32 @@ def _process_aggregate(
     prepub = prepub[list(data.columns)]
     kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
 
-    LOGGER.info("Skriver %(len)d rader til %(tab)s_prepub og %(tab)s_kontroll.", {"len": len(prepub), "tab": aggregate.tabell})
+    perioder = sorted(map(str, prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()))
+    LOGGER.debug("Perioder i resultatet for %s: %s.", aggregate.tabell, perioder)
+    resultat = LasteResultat(
+        id=aggregate.id,
+        tabell=aggregate.tabell,
+        perioder=perioder,
+        antall_rader=len(prepub),
+        antall_primaerprikket=int(kontroll["primary"].sum()),
+        antall_prikket=int(kontroll["suppressed"].sum()),
+        metadata=None,
+    )
+    LOGGER.info(
+        ("Resultat for tabell %(tabell)s: "
+         "%(antall_perioder)d perioder, "
+         "%(antall_rader)d rader, "
+         "%(antall_primaerprikket)d primaerprikket, "
+         "%(antall_prikket)d prikket."),
+        {
+            "tabell": aggregate.tabell,
+            "antall_perioder": len(perioder),
+            "antall_rader": resultat.antall_rader,
+            "antall_primaerprikket": resultat.antall_primaerprikket,
+            "antall_prikket": resultat.antall_prikket,
+        }
+    )
+
     metadata = _write_output(
         configuration,
         aggregate,
@@ -172,16 +227,9 @@ def _process_aggregate(
         config_directory=config_directory,
         dry_run=dry_run,
     )
+    resultat.metadata = metadata
 
-    return LasteResultat(
-        id=aggregate.id,
-        tabell=aggregate.tabell,
-        perioder=sorted(prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()),
-        antall_rader=len(prepub),
-        antall_primaerprikket=int(kontroll["primary"].sum()),
-        antall_prikket=int(kontroll["suppressed"].sum()),
-        metadata=metadata,
-    )
+    return resultat
 
 
 def _get_periods_to_load(
@@ -194,6 +242,7 @@ def _get_periods_to_load(
 ) -> list[int | str] | None:
     """Velger perioder før innlesing; None betyr alle, en tom liste betyr ingen."""
     if transfer.target == StorageOption.CSV or dry_run:
+        LOGGER.debug("Leser alle perioder for %s (mål=%s, dry_run=%s).", aggregate.tabell, transfer.target, dry_run)
         return None
     if transfer.connection is None:
         raise RuntimeError("Databasetilkobling mangler.")
@@ -204,19 +253,25 @@ def _get_periods_to_load(
         config_directory,
         transfer,
     )
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
-        return sorted(available)
-
+    LOGGER.debug(
+        "Perioder for %s: tilgjengelige=%s, eksisterende=%s, strategi=%s.",
+        aggregate.tabell, sorted(available, key=str), sorted(existing, key=str),
+        aggregate.inkrementell_strategi.value,
+    )
     missing = available - existing
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
+        periods = sorted(available)
+    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
         max_available = {max(existing)} if existing and max(existing) in available else set()
-        return sorted(missing.union(max_available))
+        periods = sorted(missing.union(max_available))
     elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
-        return sorted(missing)
+        periods = sorted(missing)
     else:
         raise NotImplementedError(
             f"Ukjent inkrementell modus: {aggregate.inkrementell_strategi}"
         )
+    LOGGER.debug("Perioder som skal lastes for %s: %s.", aggregate.tabell, periods)
+    return periods
 
 
 def _fetch_periods(
@@ -248,6 +303,7 @@ def _fetch_periods(
 def _read_sql(aggregate: Aggregate, config_directory: Path) -> str:
     """Leser SQL-filen relativt til konfigurasjonen."""
     sql_path = (config_directory / aggregate.sporring_sql).resolve()
+    LOGGER.debug("Leser SQL-fil %s.", sql_path)
     try:
         return sql_path.read_text(encoding="utf-8")
     except OSError as exc:
@@ -262,11 +318,16 @@ def _read_input(
         periods_to_load: list[int | str] | None = None,
 ) -> pd.DataFrame:
     """Leser aggregatdata fra CSV eller Oracle."""
+    LOGGER.debug(
+        "Leser inndata for %s fra %s; perioder=%s.",
+        aggregate.tabell, transfer.source, "alle" if periods_to_load is None else periods_to_load,
+    )
     if transfer.source == StorageOption.CSV:
         directory = transfer.input_directory
         data = csv.read_csv(directory, aggregate)
         if periods_to_load is not None:
             data = data[data[aggregate.periodisering.kolonne].isin(periods_to_load)]
+        LOGGER.debug("Leste %d rader fra CSV for %s.", len(data), aggregate.tabell)
         return data
     else:
         if transfer.connection is None:
@@ -289,10 +350,15 @@ def _write_output(
         dry_run: bool,
 ) -> TableMetadata | None:
     """Sender prikkede data og kontrolldata til CSV eller Oracle."""
+    LOGGER.debug(
+        "Skriver resultat for %s til %s (prepub=%d rader, kontroll=%d rader).",
+        aggregate.tabell, transfer.target, len(prepub), len(kontroll),
+    )
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
         csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
         csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
+        return None
     else:
         return _write_database(
             configuration,
@@ -335,6 +401,7 @@ def _write_database(
 
     metadata = None
     if not dry_run:
+        LOGGER.debug("Leser metadata for %s.", aggregate.tabell)
         if is_test_id(aggregate.id):
             LOGGER.warning(
                 "Data for %s legges inn uten gyldig NAV-ID (id='%s'). "

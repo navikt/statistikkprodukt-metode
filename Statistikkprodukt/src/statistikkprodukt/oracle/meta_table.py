@@ -5,6 +5,7 @@ import logging
 import oracledb
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, validate_identifier
+from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,16 +58,20 @@ def write_metadata_table(
     """Overskriver hele {tabell}_meta med gjeldende metadata i én transaksjon."""
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.meta_tabell)}"
     rows = metadata_rows(aggregate, metadata)
+    LOGGER.debug("Skriver %d metadatarader til %s.", len(rows), table)
     names = ", ".join(META_COLUMNS)
     binds = ", ".join(f":{name}" for name in META_COLUMNS)
     try:
         with connection.cursor() as cursor:
             # DELETE i stedet for TRUNCATE: TRUNCATE er DDL og committer implisitt.
-            cursor.execute(f"DELETE FROM {table}")
+            execute_sql(cursor, f"DELETE FROM {table}")
             cursor.setinputsizes(verdi=oracledb.DB_TYPE_CLOB)
-            cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+            executemany_sql(
+                cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+            )
         connection.commit()
     except oracledb.DatabaseError as exc:
+        LOGGER.debug("Feil ved skriving av %s; ruller tilbake: %r.", table, exc)
         connection.rollback()
         (error,) = exc.args
         if getattr(error, "code", None) == 942:  # ORA-00942: tabellen finnes ikke

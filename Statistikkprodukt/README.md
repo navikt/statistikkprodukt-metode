@@ -28,7 +28,7 @@ KNAST har allerede R installert. For å installere eller oppdatere R avhengighet
 uv run statistikkprodukt installer-r-pakker
 ```
 
-Kjør eksempelet, som leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`, uten Oracle-tilkobling eller hemmeligheter:
+Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 
 ```sh
 cd Statistikkprodukt/eksempel
@@ -39,12 +39,12 @@ uv run statistikkprodukt last \
   --maal=csv
 ```
 
-Eksemplene bruker test-ID-ene `00000` og `00001`, som krever `--ingen-id-validering`. Ved databaseskriving varsles det om at disse dataene må fjernes før publisering.
-
 Konfigurasjonsmuligheter:
+- `--ingen-id-validering` tillater bruk av test-ID-er (00000–09999) som ikke finnes i registeret.
 - `--dry-run` viser planlagte endringer uten å modifisere data.
 - `--kilde`/`--maal` er enten `db` (default) eller `csv`
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
+- `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.
@@ -54,10 +54,10 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering ost_befolkning_alder ost_befolkning_kjonn
+uv run statistikkprodukt last --maal=. ost_befolkning_alder ost_befolkning_kjonn
 ```
 
-### Mot databasen
+### Kjør mot databasen
 
 Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test obt tabell.
 
@@ -71,20 +71,21 @@ connection:
   password: terminal://
 ```
 
-Opprett resultat- og metadatatabellene og den felles loggtabellen i Oracle:
+Opprett logg, resultat- og metadatatabellene (se [Databaseskjema](#databaseskjema) for detaljer):
 
 ```shell
 cd Statistikkprodukt/eksempel
 statistikkprodukt skjema opprett --config konfigurasjon.yml --ingen-id-validering --db
 ```
 
+Uten `--db` vises bare DDL.
+
 Kjør lasten fra databasen til csv:
 ```shell
 uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
 ```
 
-CSV filene i `data_ut` overskrives, men de skal ikke endre seg, siden eksempelet er ekvivalent med lasten fra csv til csv.
-Du kan slette de for å verifisere at data kommer inn det.
+CSV filene i `data_ut` overskrives. Du kan slette de for å verifisere at data kommer inn det.
 
 Kjør lasten fra databasen til databasen:
 ```shell
@@ -103,10 +104,10 @@ Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppsla
 
 ```sh
 # For alle aggregater i konfigurasjonen
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db
 
 # For enkelte aggregater
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml ost_2 ost_1
+uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db ost_2 ost_1
 ```
 
 Tabellene per aggregat:
@@ -217,8 +218,9 @@ Per småaggregat må det lages:
 - `{aggregatnavn}.yml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
+For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
 
-Eksempel på aggregatfil:
+Eksempel på aggregatkonfigurasjon:
 
 ```yaml
 definisjon:

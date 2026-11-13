@@ -12,6 +12,8 @@ import docker
 import oracledb
 from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 
+from statistikkprodukt.oracle.utils import execute_sql
+
 CONTAINER_NAME = "statistikkprodukt-oracle-test"
 CONTAINER_IMAGE = "gvenzl/oracle-free:23-slim-faststart"
 CONTAINER_LABEL = "no.nav.statistikkprodukt.testenv"
@@ -38,6 +40,7 @@ def setup() -> None:
     """Starter eller gjenbruker det administrerte Oracle-testmiljøet."""
     client = _docker_client()
     container = _get_named_container(client)
+    LOGGER.debug("Container %s funnet: %s.", CONTAINER_NAME, container is not None)
     if container is not None:
         _assert_container_is_running(container)
         return
@@ -57,6 +60,7 @@ def setup() -> None:
 
 
 def _run_container(client):
+    LOGGER.debug("Oppretter container %s fra %s på port %d.", CONTAINER_NAME, CONTAINER_IMAGE, CONTAINER_PORT)
     try:
         client.containers.run(
             CONTAINER_IMAGE,
@@ -85,6 +89,7 @@ def _run_container(client):
 def _assert_container_is_running(container: Any | None):
     """Sjekker at den administrerte testcontaineren kjører, og starter den hvis den er stoppet."""
     was_running = container.status == "running"
+    LOGGER.debug("Containerstatus: %s.", container.status)
     if not was_running:
         try:
             container.start()
@@ -103,6 +108,7 @@ def _assert_container_is_running(container: Any | None):
 def _assert_image_available(client):
     """Last ned docker image hvis det mangler"""
     try:
+        LOGGER.debug("Kontrollerer at Docker-bildet %s finnes lokalt.", CONTAINER_IMAGE)
         client.images.get(CONTAINER_IMAGE)
     except ImageNotFound:
         LOGGER.info(f"Oracle-testbildet {CONTAINER_IMAGE} lastes ned.")
@@ -126,7 +132,9 @@ def teardown() -> None:
 
     try:
         if container.status == "running":
+            LOGGER.debug("Stopper container %s.", CONTAINER_NAME)
             container.stop(timeout=20)
+        LOGGER.debug("Fjerner container %s.", CONTAINER_NAME)
         container.remove()
     except APIError as exc:
         raise TestEnvironmentError("Kunne ikke stoppe og fjerne Oracle-testmiljøet.") from exc
@@ -143,6 +151,7 @@ def run_pytest(arguments: Sequence[str]) -> int:
 
     environment = os.environ.copy()
     environment["STATISTIKKPRODUKT_TESTENV_EXTERNAL"] = "1"
+    LOGGER.debug("Kjører pytest med argumenter %s.", list(arguments))
     return subprocess.run(
         [sys.executable, "-m", "pytest", *arguments],
         env=environment,
@@ -189,6 +198,7 @@ def _connect_testenv_oracle(**kwargs) -> oracledb.Connection:
 def _wait_ready(timeout: int = READY_TIMEOUT) -> None:
     """Venter på at Oracle skal godta tilkoblinger på den faste porten."""
     deadline = time.monotonic() + timeout
+    LOGGER.debug("Venter på at Oracle blir klar (tidsfrist %d s).", timeout)
     last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
@@ -196,9 +206,11 @@ def _wait_ready(timeout: int = READY_TIMEOUT) -> None:
                 pass
 
             with _connect_testenv_oracle(tcp_connect_timeout=2) as connection:
+                LOGGER.debug("Oracle er klar.")
                 return
         except (OSError, oracledb.Error) as exc:
             last_error = exc
+            LOGGER.debug("Oracle er ikke klar ennå: %r.", exc)
             time.sleep(2)
 
     raise TestEnvironmentError(
@@ -208,13 +220,14 @@ def _wait_ready(timeout: int = READY_TIMEOUT) -> None:
 
 def _grant_dictionary_access() -> None:
     """Gir testbrukeren lesetilgang til Oracle-visningene som valideringen bruker."""
+    LOGGER.debug("Gir SYSTEM tilgang til katalogvisninger.")
     try:
         with _connect_testenv_oracle(
                 user="sys",
                 tcp_connect_timeout=5,
                 mode=oracledb.AuthMode.SYSDBA
         ) as connection, connection.cursor() as cursor:
-            cursor.execute("GRANT SELECT_CATALOG_ROLE TO SYSTEM")
+            execute_sql(cursor, "GRANT SELECT_CATALOG_ROLE TO SYSTEM")
     except oracledb.Error as exc:
         raise TestEnvironmentError(
             "Kunne ikke gi SYSTEM lesetilgang til Oracle sine DBA-visninger."

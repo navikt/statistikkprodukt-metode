@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import uuid4
@@ -18,6 +19,7 @@ from statistikkprodukt.oracle import (
     read_target_periods,
 )
 from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata
+from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 from test.test_config import configuration
 
 def test_read_metadata_uses_obt_table(monkeypatch):
@@ -733,3 +735,28 @@ def test_process_aggregate_only_masks_selected_periods(
             cursor.execute(f"DROP TABLE SYSTEM.{kontroll_table} PURGE")
             cursor.execute(f"DROP TABLE SYSTEM.{aggregate.meta_tabell} PURGE")
         oracle_connection.commit()
+
+
+def test_execute_sql_logs_statement_without_parameters(caplog):
+    cursor = MagicMock()
+    statement = "SELECT * FROM tabell WHERE id = :id"
+
+    with caplog.at_level(logging.DEBUG, logger="statistikkprodukt.oracle.utils"):
+        execute_sql(cursor, statement, id="sensitiv verdi")
+
+    cursor.execute.assert_called_once_with(statement, id="sensitiv verdi")
+    assert statement in caplog.text
+    assert "sensitiv verdi" not in caplog.text
+
+
+def test_executemany_sql_logs_statement_without_rows(caplog):
+    cursor = MagicMock()
+    statement = "INSERT INTO tabell (id) VALUES (:id)"
+    rows = [{"id": "sensitiv verdi"}]
+
+    with caplog.at_level(logging.DEBUG, logger="statistikkprodukt.oracle.utils"):
+        executemany_sql(cursor, statement, rows)
+
+    cursor.executemany.assert_called_once_with(statement, rows)
+    assert statement in caplog.text
+    assert "sensitiv verdi" not in caplog.text

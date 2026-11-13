@@ -5,6 +5,7 @@ import logging
 import oracledb
 from statistikkprodukt.app.models import Kjorelogg
 from statistikkprodukt.config import validate_identifier
+from statistikkprodukt.oracle.utils import executemany_sql
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,7 +91,9 @@ def write_log(connection: oracledb.Connection, schema: str, logg: Kjorelogg) -> 
     table = f"{validate_identifier(schema)}.{LOG_TABLE}"
     rows = logg.som_rader()
     if not rows:
+        LOGGER.debug("Ingen loggrader å skrive.")
         return
+    LOGGER.debug("Skriver %d loggrader til %s.", len(rows), table)
     names = ", ".join(LOG_COLUMNS)
     binds = ", ".join(f":{name}" for name in LOG_COLUMNS)
     try:
@@ -104,9 +107,12 @@ def write_log(connection: oracledb.Connection, schema: str, logg: Kjorelogg) -> 
                     "feilmelding", "innhold", "innhold_en", "sporring_sql",
                 )},
             )
-            cursor.executemany(f"INSERT INTO {table} ({names}) VALUES ({binds})", rows)
+            executemany_sql(
+                cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
+            )
         connection.commit()
     except Exception as exc:
+        LOGGER.debug("Feil ved skriving av kjøreloggen; ruller tilbake: %r.", exc)
         connection.rollback()
         if isinstance(exc, oracledb.DatabaseError):
             (error,) = exc.args
