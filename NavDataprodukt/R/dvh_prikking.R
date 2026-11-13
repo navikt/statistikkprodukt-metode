@@ -58,6 +58,9 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
                                     avoidHierarchical = TRUE
   )
 
+  # Fjern rader hvor alle variabler, inkludert periode er "Total"
+  prikk <- prikk[rowSums(prikk[varKol] == "Total", na.rm = TRUE) < length(varKol), ]
+
 
   # Erstatt "Total" med "I alt"
   prikk[prikk == "Total"] <- "I alt"
