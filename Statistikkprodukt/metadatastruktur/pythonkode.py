@@ -34,13 +34,6 @@ def add_dimension_rows(rows, item):
     add_row(rows, "CR", column, "no", item.get("navn"))
     add_row(rows, "CR", column, "en", item.get("navn-en"))
 
-    # Unit
-    if "unit" in item:
-        add_row(rows, "CR", f"unit_{column}", "no", item["unit"])
-
-    if "unit-en" in item:
-        add_row(rows, "CR", f"unit_{column}", "en", item["unit-en"])
-
     # SQ
     if "sq" in item:
         add_row(rows, "SQ", column, "", item["sq"])
@@ -107,6 +100,13 @@ def metadata_rows_from_yaml(filepath: str) -> list:
     for tellepunkt in d.get("tellepunkter", []):
         add_dimension_rows(rows, tellepunkt)
 
+        column = tellepunkt["kolonne"]
+        # Content / unit
+        if "innhold" in tellepunkt:
+            add_row(rows, "CR", f"unit_{column}", "no", tellepunkt["innhold"])
+        if "innhold-en" in tellepunkt:
+            add_row(rows, "CR", f"unit_{column}", "en", tellepunkt["innhold-en"])
+
     #
     # STUB
     #
@@ -134,12 +134,11 @@ def metadata_rows_from_yaml(filepath: str) -> list:
     data_columns = []
 
     for tp in d.get("tellepunkter", []):
-
         value = tp["kolonne"]
-
-        if "unit" in tp:
-            value += f"#1#unit_{tp['kolonne']}"
-
+        if "desimal" in tp:
+            value += f"#{tp['desimal']}"
+        if "innhold" in tp:
+            value += f"#unit_{tp['kolonne']}"
         data_columns.append(value)
 
     add_row(
@@ -161,6 +160,3 @@ if __name__ == "__main__":
 
     print("\nMetadata table:\n")
     print(df.to_string(index=False))
-
-    # Export if wanted
-    # df.to_excel("metadata.xlsx", index=False)
