@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 from typing import Annotated, Any
+from pathlib import Path
 
 from pydantic import (
     AfterValidator,
@@ -134,6 +135,11 @@ class Variable(KolonneMetadata):
 
 class Tellepunkt(KolonneMetadata):
     pass
+
+
+class YamlSqlPathPair(StrictModel):
+    yaml: Path | None = Field(description="YAML filbane. Internt", default=None)
+    sql: Path | None = Field(description="SQL filbane. Internet", default=None)
 
 
 class Aggregate(StrictModel):
