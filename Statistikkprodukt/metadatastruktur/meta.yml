@@ -1,8 +1,8 @@
 definisjon:
   id: 21000
   obt-tabell: obt_ab_befolkning_periode
-
-
+  
+  
   subject: test
   subject-code: ab
   subject-area: arbeid
@@ -32,9 +32,9 @@ definisjon:
       kolonne: antall
       innhold: Antall personer i gruppen.
       innhold-en: Number of people in the group.
-      unit: stk
-      unit-en: stk
+      desimal: 0
       sq: -24
+
 
   variabler:
     - navn: Alder
