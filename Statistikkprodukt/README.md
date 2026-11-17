@@ -55,7 +55,7 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-uv run statistikkprodukt last --maal=. ost_befolkning_alder ost_befolkning_kjonn
+uv run statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
 ```
 
 ### Kjør mot databasen
@@ -270,7 +270,7 @@ definisjon:
 
 `obt-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
 
-Metadata på `periodisering`, variabler og `tellepunkter` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
+Metadata på `periodisering`, `variabler` og `tellepunkter` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
 
 - `#NAVN` for norsk navn
 - `#NAVN_EN` for engelsk navn
