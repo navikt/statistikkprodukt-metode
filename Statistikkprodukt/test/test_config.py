@@ -285,3 +285,28 @@ def test_resolve_env_reference(monkeypatch):
     """Slår opp miljøvariabelreferanser for hemmeligheter."""
     monkeypatch.setenv("TEST_PASSWORD", "secret")
     assert resolve_secret("env://TEST_PASSWORD", password=True) == "secret"
+
+
+def test_aggregate_accepts_multiple_tellepunkter():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tellepunkter"] = [{"kolonne": "antall"}, {"kolonne": "kvinner"}]
+
+    aggregate = Configuration.model_validate(config).aggregater[0]
+
+    assert [t.kolonne for t in aggregate.tellepunkter] == ["antall", "kvinner"]
+
+
+@pytest.mark.parametrize(
+    "tellepunkter",
+    [
+        [{"kolonne": "antall"}, {"kolonne": "antall"}],
+        [{"kolonne": "verdi"}],
+        [{"kolonne": "tellepunkt"}],
+    ],
+)
+def test_aggregate_rejects_duplicate_or_reserved_tellepunkter(tellepunkter):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tellepunkter"] = tellepunkter
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)

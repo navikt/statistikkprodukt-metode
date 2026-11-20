@@ -34,7 +34,7 @@ def create_tables(
                 (aggregate.kontroll_tabell, True),
             ]
             missing = []
-            for table_name, with_markers in tables:
+            for table_name, is_kontroll_tabell in tables:
                 if oracle.table_exists(connection, schema, table_name):
                     LOGGER.info(
                         "Tabellen %s.%s finnes allerede; hopper over.",
@@ -42,7 +42,7 @@ def create_tables(
                         table_name,
                     )
                 else:
-                    missing.append((table_name, with_markers))
+                    missing.append((table_name, is_kontroll_tabell))
             if not missing:
                 continue
 
@@ -50,23 +50,39 @@ def create_tables(
             metadata = oracle.read_metadata(connection, schema, aggregate)
             sql = _read_sql(aggregate, config_directory)
             statements = []
-            for table_name, with_markers in missing:
-                statements.append(
-                    oracle.create_table_statement(
-                        schema, table_name, sql, with_markers=with_markers
+            for table_name, is_kontroll_tabell in missing:
+                if is_kontroll_tabell:
+                    statements.append(
+                        oracle.create_kontroll_table_statement(
+                            schema, table_name, sql, aggregate
+                        )
                     )
-                )
-                statements.extend(oracle.comment_statements(schema, table_name, metadata))
+                    statements.extend(
+                        oracle.kontroll_comment_statements(
+                            schema, table_name, aggregate, metadata
+                        )
+                    )
+                else:
+                    statements.append(
+                        oracle.create_table_statement(schema, table_name, sql)
+                    )
+                    statements.extend(
+                        oracle.comment_statements(schema, table_name, metadata)
+                    )
 
             if create_in_database:
                 with connection.cursor() as cursor:
                     for statement in statements:
                         execute_sql(cursor, statement)
-                string_columns = [
-                    aggregate.periodisering.kolonne,
-                    *(variable.kolonne for variable in aggregate.variabler),
-                ]
-                for table_name, _ in missing:
+
+                # fail if any column that's supposed to be a string is not a string
+                for table_name, is_kontroll_tabell in missing:
+                    string_columns = [
+                        aggregate.periodisering.kolonne,
+                        *(variable.kolonne for variable in aggregate.variabler),
+                    ]
+                    if is_kontroll_tabell:
+                        string_columns.append("tellepunkt")
                     oracle.validate_string_columns(
                         connection, schema, table_name, string_columns
                     )

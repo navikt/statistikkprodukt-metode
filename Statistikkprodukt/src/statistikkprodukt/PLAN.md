@@ -17,7 +17,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 3. **Oracle connection profiles:** Allowed values for `connection.database` are `DWHP`, `DWHQ`, `DWHU`, and `DWHR`. Use placeholder mappings for host, port, and service name for now.
 4. **Secret references:** Support the URI forms shown in the configuration example. Google Secret Manager payloads are UTF-8 strings and may contain a flat JSON object. Allow `terminal://` only when stdin is a TTY. Fail if a referenced value is missing.
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
-6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
+6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. The prepub output has the same columns as the input aggregate, with each configured tellepunkt in its own column. The control output has the dimensions, a `tellepunkt` column naming the tellepunkt, a `verdi` column with its unmasked value, and the suppression markers; each tellepunkt contributes its own rows. `tellepunkt` and `verdi` are reserved column names. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
 7. **Incremental modes:** The modes operate on the configured period column:
    - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
    - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
@@ -106,6 +106,7 @@ definisjon:
   inkrementell-strategi: overskriv_alt
   tellepunkter:
     - kolonne: antall
+    - kolonne: antall_kvinner
   formula: "~ periode * alder"
   prikking: true
   saerskilt: false
@@ -214,29 +215,24 @@ r_prikking = robjects.globalenv["dvh_prikking"]
     
 all_results = []
 
-for sub in df[periode].unique():
-    sub_df = df[df[periode] == sub]
+for tellepunkt in config["aggregater"]["tellepunkter"]:
+    tellepunkt_results = []
+    for sub in df[periode].unique():
+        sub_df = df[df[periode] == sub]
 
-    r_result = r_prikking(
-        data = sub_df, 
-        formula = config["formula"], 
-        tallKol = config['aggregater']['tellepunkter'][0]['kolonne'],
-        prikking = config["prikking"], 
-        saerskilt = config["saerskilt"]
-    )
+        r_result = r_prikking(
+            data=sub_df,
+            formula=config["formula"],
+            tallKol=tellepunkt["kolonne"],
+            prikking=config["prikking"],
+            saerskilt=config["saerskilt"],
+        )
 
-    # The R function returns both the aggregate and quality-check data frames.
-    df_result = pandas2ri.rpy2py(r_result.rx2("smalt_aggregat"))
+        # The R function returns both the aggregate and quality-check data frames.
+        df_result = pandas2ri.rpy2py(r_result.rx2("smalt_aggregat"))
+        tellepunkt_results.append(df_result)
 
-    # TODO: Clarify whether run information should be stored separately.
-    # TODO: Clarify how to store metadata in the database.
-    # df_result["run_target"] = config["tabell"]
-    # df_result["applied_formula"] = config["formula"]
-
-    all_results.append(df_result)
-
-# 5. Union all the outputs together into one final DataFrame
-final_df = pd.concat(all_results, ignore_index=True)
+    all_results.append(pd.concat(tellepunkt_results, ignore_index=True))
 ```
 
 ## Testing

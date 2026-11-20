@@ -12,7 +12,7 @@ from statistikkprodukt.config import (
     validate_identifier,
 )
 from statistikkprodukt.app.models import TableMetadata
-from statistikkprodukt.oracle.aggregate_table import comment_statements
+from statistikkprodukt.oracle.aggregate_table import comment_statements, kontroll_comment_statements
 from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
@@ -227,23 +227,43 @@ def _validate_string_type(description: Any, name: str) -> None:
         )
 
 
-def create_table_statement(
-        schema: str, table_name: str, sql: str, *, with_markers: bool = False
+def create_table_statement(schema: str, table_name: str, sql: str) -> str:
+    """Lager DDL for en tom tabell basert på SQL-spørringens kolonner."""
+    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+    source_sql = sql.strip().removesuffix(";").rstrip()
+    return (
+        f"CREATE TABLE {table} AS\n"
+        f"SELECT source_data.*\n"
+        f"FROM (\n{source_sql}\n) source_data\n"
+        "WHERE 1 = 0"
+    )
+
+
+def create_kontroll_table_statement(
+        schema: str, table_name: str, sql: str, aggregate: Aggregate
 ) -> str:
-    """Lager DDL for en tom tabell basert på SQL-spørringens kolonner.
+    """Lager DDL for kontrolldata med tellepunktene samlet i tellepunkt/verdi.
 
     Kontrolltabellen har i tillegg markørkolonnene primary og suppressed.
     """
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     source_sql = sql.strip().removesuffix(";").rstrip()
-    markers = (
-        ", CAST(NULL AS NUMBER(1)) AS primary, CAST(NULL AS NUMBER(1)) AS suppressed"
-        if with_markers
-        else ""
+    dimensions = [
+        aggregate.periodisering.kolonne,
+        *(variable.kolonne for variable in aggregate.variabler),
+    ]
+    selected_dimensions = ", ".join(
+        f"source_data.{validate_identifier(column)}" for column in dimensions
     )
+    # verdi får samme type som første tellepunkt
+    measure = validate_identifier(aggregate.tellepunkter[0].kolonne)
     return (
         f"CREATE TABLE {table} AS\n"
-        f"SELECT source_data.*{markers}\n"
+        f"SELECT {selected_dimensions}, "
+        "CAST(NULL AS VARCHAR2(128)) AS tellepunkt, "
+        f"source_data.{measure} AS verdi, "
+        "CAST(NULL AS NUMBER(1)) AS primary, "
+        "CAST(NULL AS NUMBER(1)) AS suppressed\n"
         f"FROM (\n{source_sql}\n) source_data\n"
         "WHERE 1 = 0"
     )
@@ -258,6 +278,21 @@ def write_comments(
     """Oppretter eller oppdaterer tabellens og kolonnenes Oracle-kommentarer."""
     with connection.cursor() as cursor:
         for statement in comment_statements(schema, table_name, metadata):
+            execute_sql(cursor, statement)
+
+
+def write_kontroll_comments(
+        connection: oracledb.Connection,
+        schema: str,
+        table_name: str,
+        aggregate: Aggregate,
+        metadata: TableMetadata,
+) -> None:
+    """Oppretter eller oppdaterer kommentarer for kontrolltabellen."""
+    with connection.cursor() as cursor:
+        for statement in kontroll_comment_statements(
+            schema, table_name, aggregate, metadata
+        ):
             execute_sql(cursor, statement)
 
 

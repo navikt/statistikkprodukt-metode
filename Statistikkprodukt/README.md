@@ -118,9 +118,11 @@ create table ost_1_kontroll (
   periode_kolonne varchar2(10),
   variabel1_kolonne varchar2(10),
   variabel2_kolonne varchar2(10),
-  -- tall som ikke er prikket
-  tall_kolonne number,
-    
+  -- Navnet på tellepunktet (kolonnen) verdien gjelder for, og verdien som ikke er prikket.
+  -- Hvert tellepunkt får egne rader.
+  tellepunkt varchar2(128),
+  verdi number,
+
   -- Lagd til:
   -- primærprikking (små tall) 1/0 for ja/nei
   primary number, 
@@ -132,8 +134,9 @@ create table ost_1_prepub (
   -- Fra SQL spørringen:
   periode_kolonne varchar2(10),
   variabel_kolonne varchar2(10),
-  -- nan når det er prikket
-  tall_kolonne number
+  -- En kolonne per konfigurerte tellepunkt, nan når det er prikket
+  tall_kolonne number,
+  tall2_kolonne number
 );
 
 CREATE TABLE ost_1_meta (

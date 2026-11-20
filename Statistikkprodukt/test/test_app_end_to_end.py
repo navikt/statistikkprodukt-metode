@@ -73,6 +73,11 @@ definisjon:
       kolonne: antall
       innhold: Summert antall.
       innhold-en: Summed count.
+    - navn: Antall kvinner
+      navn-en: Number of women
+      kolonne: antall_kvinner
+      innhold: Summert antall kvinner.
+      innhold-en: Summed number of women.
   formula: "~ periode / region"
   prikking: true
   saerskilt: false
@@ -87,7 +92,8 @@ definisjon:
     )
     (aggregate_directory / f"{aggregate_table}.sql").write_text(
         f"""
-select periode, region, sum(antall) as antall
+select periode, region, sum(antall) as antall,
+       sum(antall_kvinner) as antall_kvinner
 from {source_table}
 group by periode, region
 """,
@@ -98,15 +104,16 @@ group by periode, region
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{source_table} ("
-                "periode varchar2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER)"
+                "periode varchar2(6 CHAR), region VARCHAR2(100 CHAR), "
+                "antall NUMBER, antall_kvinner NUMBER)"
             )
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{source_table} VALUES (:1, :2, :3)",
+                f"INSERT INTO SYSTEM.{source_table} VALUES (:1, :2, :3, :4)",
                 [
-                    ('202501', "Bergen", 7.0),
-                    ('202501', "Oslo", 10.0),
-                    ('202502', "Bergen", 6.0),
-                    ('202502', "Oslo", 3.0),
+                    ('202501', "Bergen", 7.0, 7.0),
+                    ('202501', "Oslo", 10.0, 10.0),
+                    ('202502', "Bergen", 6.0, 6.0),
+                    ('202502', "Oslo", 3.0, 3.0),
                 ],
             )
         oracle_connection.commit()
@@ -122,35 +129,40 @@ group by periode, region
 
         with oracle_connection.cursor() as cursor:
             cursor.execute(
-                f"SELECT periode, region, antall "
+                f"SELECT periode, region, antall, antall_kvinner "
                 f"FROM SYSTEM.{aggregate_table}_prepub ORDER BY periode, region"
             )
             prepub_rows = cursor.fetchall()
             cursor.execute(
-                f"SELECT periode, region, antall, primary, suppressed "
-                f"FROM SYSTEM.{aggregate_table}_kontroll ORDER BY periode, region"
+                f"SELECT periode, region, tellepunkt, verdi, primary, suppressed "
+                f"FROM SYSTEM.{aggregate_table}_kontroll "
+                f"ORDER BY periode, region, tellepunkt"
             )
             kontroll_rows = cursor.fetchall()
 
         expected_prepub = [
-            ('I alt', "I alt", 17),
-            ('202501', "I alt", 17),
-            ('202501', "Bergen", 7),
-            ('202501', "Oslo", 10),
-            ('I alt', "I alt", 9),
-            ('202502', "I alt", 9),
-            ('202502', "Bergen", None),
-            ('202502', "Oslo", None)
+            ('I alt', "I alt", 17, 17),
+            ('202501', "I alt", 17, 17),
+            ('202501', "Bergen", 7, 7),
+            ('202501', "Oslo", 10, 10),
+            ('I alt', "I alt", 9, 9),
+            ('202502', "I alt", 9, 9),
+            ('202502', "Bergen", None, None),
+            ('202502', "Oslo", None, None)
         ]
-        expected_kontroll = [
-            ('I alt', "I alt", 17, 0, 0),
-            ('202501', "I alt", 17, 0, 0),
-            ('202501', "Bergen", 7, 0, 0),
-            ('202501', "Oslo", 10, 0, 0),
-            ('I alt', "I alt", 9, 0, 0),
-            ('202502', "I alt", 9, 0, 0),
-            ('202502', "Bergen", 6, 0, 1),
-            ('202502', "Oslo", 3, 1, 1)
+        expected_kontroll_per_tellepunkt = [
+            ('I alt', "I alt", "antall", 17, 0, 0),
+            ('202501', "I alt", "antall", 17, 0, 0),
+            ('202501', "Bergen", "antall", 7, 0, 0),
+            ('202501', "Oslo", "antall", 10, 0, 0),
+            ('I alt', "I alt", "antall", 9, 0, 0),
+            ('202502', "I alt", "antall", 9, 0, 0),
+            ('202502', "Bergen", "antall", 6, 0, 1),
+            ('202502', "Oslo", "antall", 3, 1, 1),
+        ]
+        expected_kontroll = expected_kontroll_per_tellepunkt + [
+            (*row[:2], "antall_kvinner", *row[3:])
+            for row in expected_kontroll_per_tellepunkt
         ]
 
         assert sorted(prepub_rows) == sorted(expected_prepub)
@@ -172,7 +184,7 @@ group by periode, region
         assert meta["id"] == "21000"
         assert meta["navn"] == "Aggregerte verdier"
         assert meta["periodisering"] == "periode"
-        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 2)]
+        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 4)]
     finally:
         with oracle_connection.cursor() as cursor:
             for table in (

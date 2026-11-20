@@ -159,8 +159,7 @@ class Aggregate(StrictModel):
     )
     tellepunkter: list[Tellepunkt] = Field(
         min_length=1,
-        max_length=1,
-        description="Måltallskolonnen som inneholder tellingen.",
+        description="Måltallskolonnene som inneholder tellingen. Hver prikkes for seg.",
     )
     formula: NonEmptyString = Field(
         description="R-formelen som brukes til prikking."
@@ -239,17 +238,21 @@ class Aggregate(StrictModel):
     def validate_column_contract(self) -> Aggregate:
         """Kontrollerer at dimensjoner og måltall har unike kolonner."""
         columns = [variable.kolonne for variable in self.variabler]
+        tellepunkt_columns = [tellepunkt.kolonne for tellepunkt in self.tellepunkter]
         if len(columns) != len(set(columns)):
             raise ConfigError("variabler kan ikke inneholde gjentatte kolonner")
+        if len(tellepunkt_columns) != len(set(tellepunkt_columns)):
+            raise ConfigError("tellepunkter kan ikke inneholde gjentatte kolonner")
         if self.periodisering.kolonne in columns:
             raise ConfigError("periodisering.kolonne kan ikke også være en variabel")
-        if any(tellepunkt.kolonne in columns for tellepunkt in self.tellepunkter):
+        if any(column in columns for column in tellepunkt_columns):
             raise ConfigError("tellepunkt kan ikke også være en variabel")
-        if any(
-            tellepunkt.kolonne == self.periodisering.kolonne in columns
-            for tellepunkt in self.tellepunkter
-        ):
+        if self.periodisering.kolonne in tellepunkt_columns:
             raise ConfigError("tellepunkt.kolonne kan ikke være periodisering.kolonne")
+        if {"tellepunkt", "verdi"}.intersection(
+            [self.periodisering.kolonne, *columns, *tellepunkt_columns]
+        ):
+            raise ConfigError("tellepunkt og verdi er reserverte kolonnenavn")
         return self
 
 

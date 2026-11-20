@@ -9,7 +9,7 @@ import pytest
 import statistikkprodukt.app.last as app
 import statistikkprodukt.app.skjema as table_app
 from statistikkprodukt import oracle
-from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption
+from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption, Tellepunkt
 from statistikkprodukt.oracle import aggregate_table, meta_table
 from statistikkprodukt.oracle import (
     write_result,
@@ -335,7 +335,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
                 table_comment = cursor.fetchone()[0]
 
             assert table_comment == expected_table_comment
-            assert comments == {
+            expected_comments = {
                 "PERIODE": (
                     "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
                 ),
@@ -343,11 +343,20 @@ def test_create_tables_writes_column_comments_to_all_comments(
                     "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
                     "#INNHOLD_EN Geographical area"
                 ),
-                "ANTALL": (
+            }
+            if table_name == aggregate.kontroll_tabell:
+                assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                comments = {
+                    column: comment
+                    for column, comment in comments.items()
+                    if column not in {"TELLEPUNKT", "VERDI"}
+                }
+            else:
+                expected_comments["ANTALL"] = (
                     "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
                     "#INNHOLD_EN Number of people"
-                ),
-            }
+                )
+            assert comments == expected_comments
     finally:
         with oracle_connection.cursor() as cursor:
             for table_name in [*tables, aggregate.meta_tabell]:
@@ -444,12 +453,16 @@ def test_write_database_writes_column_comments_to_all_comments(
 
     try:
         with oracle_connection.cursor() as cursor:
-            for table_name in tables:
-                cursor.execute(
-                    f"CREATE TABLE SYSTEM.{table_name} ("
-                    "periode NUMBER, region VARCHAR2(100 CHAR), "
-                    "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
-                )
+            cursor.execute(
+                f"CREATE TABLE SYSTEM.{aggregate.prepub_tabell} ("
+                "periode NUMBER, region VARCHAR2(100 CHAR), antall NUMBER)"
+            )
+            cursor.execute(
+                f"CREATE TABLE SYSTEM.{aggregate.kontroll_tabell} ("
+                "periode NUMBER, region VARCHAR2(100 CHAR), "
+                "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
+                "primary NUMBER(1), suppressed NUMBER(1))"
+            )
             cursor.execute(
                 oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell)
             )
@@ -463,11 +476,14 @@ def test_write_database_writes_column_comments_to_all_comments(
                 "suppressed": [True],
             }
         )
+        kontroll_frame = frame.drop(columns="antall").assign(
+            tellepunkt="antall", verdi=10
+        )[["periode", "region", "tellepunkt", "verdi", "primary", "suppressed"]]
         app._write_database(
             config,
             aggregate,
-            frame,
-            frame,
+            frame[["periode", "region", "antall"]],
+            kontroll_frame,
             app.Transfer(
                 oracle_connection,
                 StorageOption.DB,
@@ -500,7 +516,7 @@ def test_write_database_writes_column_comments_to_all_comments(
                 "#NAVN Tabell #NAVN_EN Table #INNHOLD Tabellinnhold "
                 "#INNHOLD_EN Table content"
             )
-            assert comments == {
+            expected_comments = {
                 "PERIODE": (
                     "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
                 ),
@@ -508,11 +524,20 @@ def test_write_database_writes_column_comments_to_all_comments(
                     "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
                     "#INNHOLD_EN Geographical area"
                 ),
-                "ANTALL": (
+            }
+            if table_name == aggregate.kontroll_tabell:
+                assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                comments = {
+                    column: comment
+                    for column, comment in comments.items()
+                    if column not in {"TELLEPUNKT", "VERDI"}
+                }
+            else:
+                expected_comments["ANTALL"] = (
                     "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
                     "#INNHOLD_EN Number of people"
-                ),
-            }
+                )
+            assert comments == expected_comments
     finally:
         with oracle_connection.cursor() as cursor:
             for table_name in [*tables, aggregate.meta_tabell]:
@@ -684,6 +709,7 @@ def test_process_aggregate_only_masks_selected_periods(
         lambda *args: TableMetadata(table=Metadata(), columns={}),
     )
     monkeypatch.setattr(oracle, "write_comments", lambda *args: None)
+    monkeypatch.setattr(oracle, "write_kontroll_comments", lambda *args: None)
     prepub_table = f"{table}_prepub"
     kontroll_table = f"{table}_kontroll"
     try:
@@ -695,7 +721,8 @@ def test_process_aggregate_only_masks_selected_periods(
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{kontroll_table} ("
                 "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), "
-                "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
+                "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
+                "primary NUMBER(1), suppressed NUMBER(1))"
             )
             cursor.execute(oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell))
             existing = [("202500", "Oslo", 0), ("202501", "Oslo", 1), ("202502", "Oslo", 2)]
@@ -706,7 +733,7 @@ def test_process_aggregate_only_masks_selected_periods(
                 f"INSERT INTO SYSTEM.{prepub_table} VALUES (:1, :2, :3)", existing
             )
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, :3, 1, 1)",
+                f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, 'antall', :3, 1, 1)",
                 existing,
             )
 
@@ -726,8 +753,8 @@ def test_process_aggregate_only_masks_selected_periods(
 
         assert sorted(masked_periods) == loaded
         with (oracle_connection.cursor() as cursor):
-            for name in (prepub_table, kontroll_table):
-                cursor.execute(f"SELECT periode, antall FROM SYSTEM.{name} ORDER BY periode")
+            for name, measure in ((prepub_table, "antall"), (kontroll_table, "verdi")):
+                cursor.execute(f"SELECT periode, {measure} FROM SYSTEM.{name} ORDER BY periode")
                 assert cursor.fetchall() == expected
     finally:
         with oracle_connection.cursor() as cursor:
@@ -760,3 +787,47 @@ def test_executemany_sql_logs_statement_without_rows(caplog):
     cursor.executemany.assert_called_once_with(statement, rows)
     assert statement in caplog.text
     assert "sensitiv verdi" not in caplog.text
+
+
+def test_process_aggregate_prikker_hvert_tellepunkt_og_navngir_kontroll(monkeypatch, tmp_path):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    aggregate.tellepunkter = [Tellepunkt(kolonne="antall"), Tellepunkt(kolonne="kvinner")]
+    data = pd.DataFrame(
+        {"periode": ["202501", "202501"], "region": ["Oslo", "Bergen"],
+         "antall": [10, 20], "kvinner": [4, 8]}
+    )
+    prikket = []
+
+    def mask(frame, periode, formula, tall_kolonne, *args):
+        prikket.append(tall_kolonne)
+        kontroll = frame.copy()
+        kontroll["primary"] = False
+        kontroll["suppressed"] = tall_kolonne == "kvinner"
+        prepub = frame.copy()
+        prepub[tall_kolonne] = prepub[tall_kolonne] * 100
+        return prepub, kontroll
+
+    written = {}
+    monkeypatch.setattr(app, "prikking", mask)
+    monkeypatch.setattr(app, "_get_periods_to_load", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_read_input", lambda *a, **k: data)
+    monkeypatch.setattr(
+        app, "_write_output",
+        lambda config, aggregate, prepub, kontroll, *a, **k: written.update(prepub=prepub, kontroll=kontroll),
+    )
+
+    resultat = app._process_aggregate(
+        config, aggregate, tmp_path,
+        app.Transfer(None, StorageOption.CSV, StorageOption.CSV, Path("dummy"), Path("dummy")),
+        dry_run=True,
+    )
+
+    assert prikket == ["antall", "kvinner"]
+    assert list(written["prepub"].columns) == ["periode", "region", "antall", "kvinner"]
+    assert written["prepub"]["kvinner"].tolist() == [400, 800]
+    kontroll = written["kontroll"]
+    assert list(kontroll.columns) == ["periode", "region", "tellepunkt", "verdi", "primary", "suppressed"]
+    assert kontroll["tellepunkt"].tolist() == ["antall", "antall", "kvinner", "kvinner"]
+    assert kontroll["suppressed"].tolist() == [False, False, True, True]
+    assert resultat.antall_prikket == 2

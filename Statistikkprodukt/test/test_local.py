@@ -53,7 +53,17 @@ def test_csv_masked(tmp_path):
 
     sort_fn = lambda item: tuple(item[col] for col in col_order)
     expected.sort(key=sort_fn)
-    expected_kontroll = [row.copy() | dict(primary=True, suppressed=True) for row in expected]
+    expected_kontroll = [
+        {
+            "periode": row["periode"],
+            "region": row["region"],
+            "tellepunkt": "antall",
+            "verdi": row["antall"],
+            "primary": True,
+            "suppressed": True,
+        }
+        for row in expected
+    ]
     expected_prepub = [row.copy() | dict(antall=None) for row in expected]
 
     prepub = pd.read_csv(output_directory / "tabell_prepub.csv")
@@ -63,7 +73,10 @@ def test_csv_masked(tmp_path):
     prepub = prepub.replace({np.nan: None})
 
     assert sorted(prepub.to_dict("records"), key=sort_fn) == expected_prepub
-    assert sorted(kontroll.to_dict("records"), key=sort_fn) == expected_kontroll
+    kontroll_sort_fn = lambda item: tuple(
+        item[col] for col in ("periode", "region", "tellepunkt")
+    )
+    assert sorted(kontroll.to_dict("records"), key=kontroll_sort_fn) == expected_kontroll
 
 
 @pytest.mark.r_dependent
@@ -95,10 +108,23 @@ def test_csv_unmasked(tmp_path):
 
     sort_fn = lambda item: tuple(item[col] for col in col_order)
     expected_prepub.sort(key=sort_fn)
-    expected_kontroll = [dict(**row, primary=False, suppressed=False) for row in expected_prepub]
+    expected_kontroll = [
+        {
+            "periode": row["periode"],
+            "region": row["region"],
+            "tellepunkt": "antall",
+            "verdi": row["antall"],
+            "primary": False,
+            "suppressed": False,
+        }
+        for row in expected_prepub
+    ]
 
     prepub = pd.read_csv(output_directory / "tabell_prepub.csv")
     kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv")
 
     assert sorted(prepub.to_dict("records"), key=sort_fn) == expected_prepub
-    assert sorted(kontroll.to_dict("records"), key=sort_fn) == expected_kontroll
+    kontroll_sort_fn = lambda item: tuple(
+        item[col] for col in ("periode", "region", "tellepunkt")
+    )
+    assert sorted(kontroll.to_dict("records"), key=kontroll_sort_fn) == expected_kontroll

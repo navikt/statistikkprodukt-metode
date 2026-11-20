@@ -33,6 +33,39 @@ def comment_statements(
     return statements
 
 
+def kontroll_comment_statements(
+    schema: str,
+    table_name: str,
+    aggregate: Aggregate,
+    metadata: TableMetadata,
+) -> list[str]:
+    """Lager kommentarer for kontrolltabellen med dimensjoner samt tellepunkt og verdi."""
+    columns = {
+        column: metadata.columns[column]
+        for column in [
+            aggregate.periodisering.kolonne,
+            *(variable.kolonne for variable in aggregate.variabler),
+        ]
+    }
+    columns["tellepunkt"] = Metadata(
+        navn="Tellepunkt",
+        navn_en="Count point",
+        innhold="Navnet på tellepunktkolonnen som verdien gjelder for.",
+        innhold_en="Name of the count point column the value belongs to.",
+    )
+    columns["verdi"] = Metadata(
+        navn="Verdi",
+        navn_en="Value",
+        innhold="Verdien for tellepunktet.",
+        innhold_en="The value for the count point.",
+    )
+    return comment_statements(
+        schema,
+        table_name,
+        TableMetadata(table=metadata.table, columns=columns),
+    )
+
+
 def read_metadata(
     connection: oracledb.Connection,
     schema: str,

@@ -9,7 +9,7 @@ import pandas as pd
 from pydantic import SecretStr
 from statistikkprodukt import oracle, csv
 from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer
-from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, is_test_id, resolve_secret, StorageOption
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -185,18 +185,45 @@ def _process_aggregate(
     perioder_str = ", ".join(sorted(map(str, data[aggregate.periodisering.kolonne].dropna().unique().tolist())))
     LOGGER.info("%s: Prikker %s perioder (%s).", aggregate.id, antall_perioder_str, perioder_str)
     LOGGER.debug("Kolonner for %s: %s.", aggregate.tabell, list(data.columns))
-    prepub, kontroll = prikking(
-        data,
+    dimension_columns = [
         aggregate.periodisering.kolonne,
-        aggregate.formula,
-        aggregate.tellepunkter[0].kolonne,
-        aggregate.prikking,
-        aggregate.saerskilt,
-    )
+        *(variable.kolonne for variable in aggregate.variabler),
+    ]
+    prepub = None
+    kontroll_resultater = []
+
+    # prikk hvert tellepunkt for seg
+    for tellepunkt in aggregate.tellepunkter:
+        LOGGER.info("%s: Prikker tellepunkt %s.", aggregate.id, tellepunkt.kolonne)
+        prepub_tellepunkt, kontroll_tellepunkt = prikking(
+            data,
+            aggregate.periodisering.kolonne,
+            aggregate.formula,
+            tellepunkt.kolonne,
+            aggregate.prikking,
+            aggregate.saerskilt,
+        )
+        _validate_prikking_output(
+            dimension_columns, tellepunkt, prepub, prepub_tellepunkt, kontroll_tellepunkt
+        )
+
+        # prepub beholder en kolonne per tellepunkt
+        if prepub is None:
+            prepub = prepub_tellepunkt.copy()
+        else:
+            prepub[tellepunkt.kolonne] = prepub_tellepunkt[tellepunkt.kolonne].array
+
+        # kontroll har én rad per tellepunkt, med tellepunktets navn i egen kolonne
+        kontroll_resultat = kontroll_tellepunkt.loc[:, dimension_columns].copy()
+        kontroll_resultat["tellepunkt"] = tellepunkt.kolonne
+        kontroll_resultat["verdi"] = kontroll_tellepunkt[tellepunkt.kolonne].array
+        kontroll_resultat["primary"] = kontroll_tellepunkt["primary"].array
+        kontroll_resultat["suppressed"] = kontroll_tellepunkt["suppressed"].array
+        kontroll_resultater.append(kontroll_resultat)
 
     # ensure column order
     prepub = prepub[list(data.columns)]
-    kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
+    kontroll = pd.concat(kontroll_resultater, ignore_index=True)
 
     perioder = sorted(map(str, prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()))
     LOGGER.debug("Perioder i resultatet for %s: %s.", aggregate.tabell, perioder)
@@ -236,6 +263,45 @@ def _process_aggregate(
     resultat.metadata = metadata
 
     return resultat
+
+
+def _validate_prikking_output(
+        dimension_columns: list[str],
+        tellepunkt: Tellepunkt,
+        prepub: pd.DataFrame | None,
+        prepub_tellepunkt: pd.DataFrame,
+        kontroll_tellepunkt: pd.DataFrame,
+) -> None:
+    """Kontrollerer at prikkeresultatet for ett tellepunkt kan slås sammen med de andre."""
+    required = [*dimension_columns, tellepunkt.kolonne]
+    if len(prepub_tellepunkt) != len(kontroll_tellepunkt):
+        raise ValueError(
+            f"Prikkeresultatene til publikasjon og kontroll for {tellepunkt.kolonne} har ulikt antall rader."
+        )
+    if any(column not in prepub_tellepunkt.columns for column in required):
+        raise ValueError(
+            f"Prikkeresultatet til publikasjon for {tellepunkt.kolonne} mangler nødvendige kolonner."
+        )
+    if any(column not in kontroll_tellepunkt.columns for column in required):
+        raise ValueError(
+            f"Kontrollresultatet for {tellepunkt.kolonne} mangler nødvendige kolonner."
+        )
+    if any(column not in kontroll_tellepunkt.columns for column in ("primary", "suppressed")):
+        raise ValueError(
+            f"Kontrollresultatet for {tellepunkt.kolonne} mangler prikkemarkører."
+        )
+
+    if prepub is not None:
+        if len(prepub_tellepunkt) != len(prepub):
+            raise ValueError(
+                "Prikkeresultatene for ulike tellepunkter har ulikt antall rader."
+            )
+        if not prepub_tellepunkt[dimension_columns].reset_index(drop=True).equals(
+                prepub[dimension_columns].reset_index(drop=True)
+        ):
+            raise ValueError(
+                "Prikkeresultatene for ulike tellepunkter har ulike dimensjonsrader."
+            )
 
 
 def _get_periods_to_load(
@@ -432,7 +498,12 @@ def _write_database(
         )
         if not dry_run:
             LOGGER.info("Oppdaterer kommentarer for %s.", table_name)
-            oracle.write_comments(connection, schema, table_name, metadata)
+            if table_name == aggregate.kontroll_tabell:
+                oracle.write_kontroll_comments(
+                    connection, schema, table_name, aggregate, metadata
+                )
+            else:
+                oracle.write_comments(connection, schema, table_name, metadata)
 
     if not dry_run:
         LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
