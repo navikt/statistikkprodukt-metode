@@ -806,6 +806,8 @@ def test_process_aggregate_prikker_hvert_tellepunkt_og_navngir_kontroll(monkeypa
         kontroll["suppressed"] = tall_kolonne == "kvinner"
         prepub = frame.copy()
         prepub[tall_kolonne] = prepub[tall_kolonne] * 100
+        if tall_kolonne == "kvinner":
+            prepub[tall_kolonne] = float("nan")
         return prepub, kontroll
 
     written = {}
@@ -825,7 +827,7 @@ def test_process_aggregate_prikker_hvert_tellepunkt_og_navngir_kontroll(monkeypa
 
     assert prikket == ["antall", "kvinner"]
     assert list(written["prepub"].columns) == ["periode", "region", "antall", "kvinner"]
-    assert written["prepub"]["kvinner"].tolist() == [400, 800]
+    assert written["prepub"]["kvinner"].tolist() == [None, None]
     kontroll = written["kontroll"]
     assert list(kontroll.columns) == ["periode", "region", "tellepunkt", "verdi", "primary", "suppressed"]
     assert kontroll["tellepunkt"].tolist() == ["antall", "antall", "kvinner", "kvinner"]

@@ -207,6 +207,12 @@ def _process_aggregate(
             dimension_columns, tellepunkt, prepub, prepub_tellepunkt, kontroll_tellepunkt
         )
 
+        # store None instead of na
+        values = prepub_tellepunkt[tellepunkt.kolonne]
+        prepub_tellepunkt[tellepunkt.kolonne] = values.astype(object).where(
+            values.notna(), None
+        )
+
         # prepub beholder en kolonne per tellepunkt
         if prepub is None:
             prepub = prepub_tellepunkt.copy()
