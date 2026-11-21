@@ -19,7 +19,8 @@ def installer_r_pakker() -> None:
     LOGGER.info("Installere 'NavDataprodukt'...")
     utils = rpy2.robjects.packages.importr("utils")
     utils.install_packages(
-        StrVector(["SSBtools", "GaussSuppression", "openxlsx", "readxl", "DBI", "odbc", "rstudioapi"]),
+        StrVector(["SSBtools", "GaussSuppression"]),
+        repos="https://cran.uib.no/",
         dependencies=True,
     )
     utils.install_packages(
