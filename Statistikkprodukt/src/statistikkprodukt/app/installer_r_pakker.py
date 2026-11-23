@@ -58,4 +58,4 @@ def installer_r_pakker() -> None:
     #     upgrade=True
     # )
     pak = rpy2.robjects.packages.importr("pak")
-    pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True, repos=repository)
+    pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)

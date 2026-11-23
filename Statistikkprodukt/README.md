@@ -42,10 +42,13 @@ Test om installasjonen er vellykket:
 statistikkprodukt --help
 ```
 
+Om det kommer `statistikkprodukt: command not found` må du kjøre `uv tool update-shell` (teknisk: legger til `~/.local/bin` til `PATH` i `rc` filen til din shell, f.eks. `~/.bashrc`). Deretter må du omstarte KNAST. Det må du kun gjøre én gang.
+
+
 For å gå gjennom eksempelet, klon repoet. Men det er ikke nødvendig for å bruke verktøyet.
 ```sh
 git clone https://github.com/navikt/statistikkprodukt-metode.git
-````
+```
 
 KNAST har allerede R installert. For å installere eller oppdatere R avhengighetene for prikking, åpne brannmuren til
 - packagemanager.posit.co/*
@@ -56,6 +59,8 @@ og kjør:
 ```sh
 statistikkprodukt installer-r-pakker
 ```
+Her må du svare "yes" på spørsmålet "Would you like to create a personal library".
+Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet.
 
 Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 
