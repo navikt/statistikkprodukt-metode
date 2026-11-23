@@ -129,7 +129,8 @@ create table ost_1_kontroll (
   -- primærprikking (små tall) 1/0 for ja/nei
   primary number, 
   -- sekundærprikking via gaussian suppression 1/0 for ja/nei
-  suppressed number
+  suppressed number,
+  dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL
 );
 
 create table ost_1_prepub (
@@ -138,7 +139,8 @@ create table ost_1_prepub (
   variabel_kolonne varchar2(10),
   -- En kolonne per konfigurerte tellepunkt, nan når det er prikket
   tall_kolonne number,
-  tall2_kolonne number
+  tall2_kolonne number,
+  dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL
 );
 
 CREATE TABLE ost_1_meta (
@@ -147,7 +149,7 @@ CREATE TABLE ost_1_meta (
   scope              VARCHAR2(256 CHAR),
   language           CHAR(2),
   value              VARCHAR2(4000 CHAR),
-  dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+  dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL
 );
 ```
 
@@ -195,7 +197,7 @@ CREATE TABLE ost_logg (
   antall_rader          NUMBER,
   antall_primaerprikket NUMBER,
   antall_prikket        NUMBER,
-  dvh_sist_oppdatert    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+  dvh_lastet_tid        DATE DEFAULT SYSDATE NOT NULL
 );
 ```
 

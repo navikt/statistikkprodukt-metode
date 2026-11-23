@@ -81,7 +81,7 @@ def create_log_table_statement(schema: str) -> str:
         "  antall_rader          NUMBER,\n"
         "  antall_primaerprikket NUMBER,\n"
         "  antall_prikket        NUMBER,\n"
-        "  dvh_sist_oppdatert    TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
+        "  dvh_lastet_tid        DATE DEFAULT SYSDATE NOT NULL\n"
         ")"
     )
 

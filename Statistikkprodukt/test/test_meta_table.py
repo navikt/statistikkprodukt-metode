@@ -215,6 +215,6 @@ def test_schema_uses_new_format():
     statement = create_meta_table_statement("TEST", "tabell_meta")
     assert "value              VARCHAR2(4000 CHAR)" in statement
     assert "language           CHAR(2)," in statement
-    assert "dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL" in statement
+    assert "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL" in statement
     with pytest.raises(ValueError):
         create_meta_table_statement("TEST; DROP TABLE x", "tabell_meta")

@@ -38,7 +38,7 @@ def create_meta_table_statement(schema: str, table_name: str) -> str:
         "  scope              VARCHAR2(256 CHAR),\n"
         "  language           CHAR(2),\n"
         "  value              VARCHAR2(4000 CHAR),\n"
-        "  dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL\n"
+        "  dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL\n"
         ")"
     )
 

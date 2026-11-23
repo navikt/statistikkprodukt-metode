@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -31,6 +32,8 @@ def test_validate_columns_normalizes_names_without_pandas_rename():
 @pytest.mark.parametrize("source", [StorageOption.CSV, StorageOption.DB])
 @pytest.mark.parametrize("empty_data", [False, True])
 def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, source, empty_data):
+    loaded_at = datetime(2026, 11, 23, 0, 29, 8, 123456)
+    monkeypatch.setattr("statistikkprodukt.app.last.oslo_now", lambda: loaded_at)
     aggregate = aggregate_with_metadata()
     expected = resolved_metadata(aggregate) if source == StorageOption.DB else (
         TableMetadata.from_aggregate(aggregate)
@@ -51,14 +54,26 @@ def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, s
     )
 
     frame = pd.read_csv(path, dtype=str, keep_default_na=False)
-    assert list(frame.columns) == [*oracle.META_COLUMNS, "dvh_sist_oppdatert"]
-    assert frame.drop(columns="dvh_sist_oppdatert").to_dict("records") == [
+    assert list(frame.columns) == [*oracle.META_COLUMNS, "dvh_lastet_tid"]
+    assert frame.drop(columns="dvh_lastet_tid").to_dict("records") == [
         {key: value if value is not None else "" for key, value in row.items()}
         for row in oracle.metadata_rows(aggregate, expected)
     ]
     assert metadata == expected
-    assert frame["dvh_sist_oppdatert"].nunique() == 1
-    assert pd.to_datetime(frame["dvh_sist_oppdatert"]).notna().all()
+    assert frame["dvh_lastet_tid"].nunique() == 1
+    loaded_at = pd.to_datetime(frame["dvh_lastet_tid"])
+    assert loaded_at.notna().all()
+    assert (loaded_at.dt.microsecond == 0).all()
+    assert frame["dvh_lastet_tid"].unique().tolist() == ["2026-11-23 00:29:08"]
+    for name in (aggregate.prepub_tabell, aggregate.kontroll_tabell):
+        data_path = tmp_path / f"{name}.csv"
+        if empty_data:
+            assert not data_path.exists()
+        else:
+            output = pd.read_csv(data_path)
+            assert output["dvh_lastet_tid"].tolist() == ["2026-11-23 00:29:08"]
+            pd.testing.assert_frame_equal(output.drop(columns="dvh_lastet_tid"), data)
+    assert "dvh_lastet_tid" not in data.columns
     if source == StorageOption.DB:
         read_metadata.assert_called_once_with(
             connection, configuration().connection.schema_name, aggregate
@@ -161,6 +176,8 @@ def test_csv_masked(tmp_path):
 
     prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
     kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
+    prepub = prepub.drop(columns="dvh_lastet_tid")
+    kontroll = kontroll.drop(columns="dvh_lastet_tid")
 
     # nan are not comparable, normalize them to None
     prepub = prepub.replace({np.nan: None})
@@ -214,6 +231,8 @@ def test_csv_unmasked(tmp_path):
 
     prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
     kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
+    prepub = prepub.drop(columns="dvh_lastet_tid")
+    kontroll = kontroll.drop(columns="dvh_lastet_tid")
 
     assert sorted(prepub.to_dict("records"), key=sort_fn) == expected_prepub
     kontroll_sort_fn = lambda item: tuple(

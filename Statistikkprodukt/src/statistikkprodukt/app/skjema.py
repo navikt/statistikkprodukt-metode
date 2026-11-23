@@ -6,7 +6,7 @@ from pathlib import Path
 import oracledb
 from statistikkprodukt import oracle
 from statistikkprodukt.app.last import _connect, _read_sql, _select_aggregates
-from statistikkprodukt.config import Aggregate, Configuration
+from statistikkprodukt.config import Aggregate, Configuration, validate_identifier
 from statistikkprodukt.oracle.utils import execute_sql
 
 LOGGER = logging.getLogger(__name__)
@@ -69,6 +69,11 @@ def create_tables(
                     statements.extend(
                         oracle.comment_statements(schema, table_name, metadata)
                     )
+                table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+                statements.append(
+                    f"ALTER TABLE {table} ADD ("
+                    "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
+                )
 
             if create_in_database:
                 with connection.cursor() as cursor:

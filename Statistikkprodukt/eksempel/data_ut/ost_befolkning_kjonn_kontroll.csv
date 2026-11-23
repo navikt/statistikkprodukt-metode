@@ -1,5 +1,5 @@
-periode,kjonn,tellepunkt,verdi,primary,suppressed
-202501,Kvinner,antall,80000.0,False,False
-202501,Menn,antall,87000.0,False,False
-202502,Kvinner,antall,80300.0,False,False
-202502,Menn,antall,87000.0,False,False
+periode,kjonn,tellepunkt,verdi,primary,suppressed,dvh_lastet_tid
+202501,Kvinner,antall,80000.0,False,False,2026-11-21 08:00:00
+202501,Menn,antall,87000.0,False,False,2026-11-21 08:00:00
+202502,Kvinner,antall,80300.0,False,False,2026-11-21 08:00:00
+202502,Menn,antall,87000.0,False,False,2026-11-21 08:00:00

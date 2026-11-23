@@ -440,9 +440,16 @@ def _write_output(
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
         meta, metadata = _get_meta_table_data(aggregate, configuration, transfer)
-        csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
-        csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
-        csv.write_csv(meta, directory, aggregate, aggregate.meta_tabell, dry_run=dry_run)
+        loaded_at = oslo_now().replace(microsecond=0)
+        for frame, name in (
+            (prepub, aggregate.prepub_tabell),
+            (kontroll, aggregate.kontroll_tabell),
+            (meta, aggregate.meta_tabell),
+        ):
+            csv.write_csv(
+                frame.assign(dvh_lastet_tid=loaded_at),
+                directory, aggregate, name, dry_run=dry_run,
+            )
         return metadata
     else:
         return _write_database(
@@ -467,7 +474,6 @@ def _get_meta_table_data(aggregate: Aggregate, configuration: Configuration, tra
     meta = pd.DataFrame(
         oracle.metadata_rows(aggregate, metadata), columns=oracle.META_COLUMNS
     )
-    meta["dvh_sist_oppdatert"] = oslo_now()
     return meta, metadata
 
 

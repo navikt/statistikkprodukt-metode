@@ -206,7 +206,7 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
                         if row["keyword"] == "TITLE" and row["language"] == "NO") == "Oppdatert"
             cursor.execute(
                 f"SELECT COUNT(*) FROM SYSTEM.{aggregate.meta_tabell} "
-                "WHERE dvh_sist_oppdatert IS NULL"
+                "WHERE dvh_lastet_tid IS NULL"
             )
             assert cursor.fetchone() == (0,)
 
@@ -235,6 +235,23 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
                 id=success.kjoring_id,
             )
             assert cursor.fetchone() == ("OK", None)
+            for table_name in (aggregate.meta_tabell, oracle.LOG_TABLE):
+                cursor.execute(
+                    "SELECT data_type, data_default, nullable FROM all_tab_columns "
+                    "WHERE owner = 'SYSTEM' AND table_name = :table_name "
+                    "AND column_name = 'DVH_LASTET_TID'",
+                    table_name=table_name.upper(),
+                )
+                data_type, default, nullable = cursor.fetchone()
+                assert data_type == "DATE"
+                assert default.strip().upper() == "SYSDATE"
+                assert nullable == "N"
+            cursor.execute(
+                "SELECT dvh_lastet_tid FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
+                id=success.kjoring_id,
+            )
+            loaded_at = cursor.fetchone()[0]
+            assert loaded_at is not None and loaded_at.microsecond == 0
     finally:
         with oracle_connection.cursor() as cursor:
             if oracle.table_exists(oracle_connection, "SYSTEM", oracle.LOG_TABLE):
@@ -327,6 +344,22 @@ def test_create_tables_writes_column_comments_to_all_comments(
 
         for table_name in tables:
             with oracle_connection.cursor() as cursor:
+                cursor.execute(
+                    f"INSERT INTO SYSTEM.{table_name} (periode, region) "
+                    "VALUES ('202501', 'Oslo')"
+                )
+                cursor.execute(f"SELECT dvh_lastet_tid FROM SYSTEM.{table_name}")
+                assert cursor.fetchone()[0] is not None
+                cursor.execute(
+                    "SELECT data_type, data_default, nullable FROM all_tab_columns "
+                    "WHERE owner = 'SYSTEM' AND table_name = :table_name "
+                    "AND column_name = 'DVH_LASTET_TID'",
+                    table_name=table_name.upper(),
+                )
+                data_type, default, nullable = cursor.fetchone()
+                assert data_type == "DATE"
+                assert default.strip().upper() == "SYSDATE"
+                assert nullable == "N"
                 cursor.execute(
                     "SELECT column_name, comments FROM sys.all_col_comments "
                     "WHERE owner = :owner AND table_name = :table_name "
