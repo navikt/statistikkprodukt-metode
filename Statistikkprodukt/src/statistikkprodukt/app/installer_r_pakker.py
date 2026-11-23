@@ -116,7 +116,7 @@ def installer_r_pakker() -> None:
         #     upgrade=True
         # )
         pak = rpy2.robjects.packages.importr("pak")
-        pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@medta-felter", upgrade=True)
+        pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)
 
         LOGGER.info("R-pakker installert.")
 
