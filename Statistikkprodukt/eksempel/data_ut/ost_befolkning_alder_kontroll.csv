@@ -1,6 +1,6 @@
 periode,alder,tellepunkt,verdi,primary,suppressed,dvh_lastet_tid
-202501,0,antall,54000.0,False,False,2026-11-21 08:00:00
-202501,1,antall,56000.0,False,False,2026-11-21 08:00:00
+202501,0,antall,3.0,True,True,2026-11-21 08:00:00
+202501,1,antall,56000.0,False,True,2026-11-21 08:00:00
 202501,2,antall,57000.0,False,False,2026-11-21 08:00:00
 202502,0,antall,54100.0,False,False,2026-11-21 08:00:00
 202502,1,antall,56100.0,False,False,2026-11-21 08:00:00
