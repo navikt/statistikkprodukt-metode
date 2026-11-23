@@ -2,15 +2,15 @@
 
 `statistikkprodukt` er et verktøy for datateam for å lage statistikkaggregater med Gaussian Suppression prikking/maskering av små verdier for personvernhensyn.
 
-Verktøyet forbereder metadata til generering av PX-filer for Statistikkbanken. På sikt skal det bli mulig å bruke verktøyet også utenfor Statistikkbank konktekst. 
+Verktøyet forbereder metadata til generering av PX-filer for Statistikkbanken. På sikt skal det bli mulig å bruke verktøyet også utenfor Statistikkbank konktekst.
 
 Verktøyet konfigureres med yaml filer og kan håndtere flere aggregater samtidig.
 
 For hver aggregat::
 - Lese data fra Oracle/CSV inkrementell
-- Kjøre Gaussian Suppression algoritme implementert i R for hver 
+- Kjøre Gaussian Suppression algoritme implementert i R for hver aggregat
 - Lagre resultatet i Oracle/CSV
-- Les metadata fra en bredt aggregat tabell (obt), oppdater fra konfigurasjonsfilen, skriv som databasekommentarer-
+- Les metadata fra en bredt aggregat tabell (obt), oppdater fra konfigurasjonsfilen, skriv som databasekommentarer
 
 For hvert aggregat lages `{tabell}_prepub` med prikkede data, `{tabell}_kontroll` med kontrolldata og `{tabell}_meta` med metadata. Databasekjøringer logges i én felles tabell, `ost_logg`.
 
@@ -20,10 +20,16 @@ Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerh�
 
 ### Lokal / KNAST
 
+Er du på KNAST må du først autentisere deg for å kunne nedlaste python pakker:
+```shell
+gcloud auth login
+pypi-auth
+```
+
 Installer `statistikkprodukt` med uv:
 ```sh
 # legg til @branch eller @tag for å velge versjon
-uv tool install git+https://github.com/navikt/statistikkprodukt-metode
+uv tool install git+https://github.com/navikt/statistikkprodukt-metode@meta-felter
 ```
 
 Har du allerede installert, oppdater til nyeste versjon med:
@@ -42,7 +48,10 @@ git clone https://github.com/navikt/statistikkprodukt-metode.git
 ````
 
 KNAST har allerede R installert. For å installere eller oppdatere R avhengighetene for prikking, åpne brannmuren til
-- TODO
+- packagemanager.posit.co/*
+- rspm-sync.rstudio.com/bin/*
+- codeload.github.com/navikt/statistikkprodukt-metode/*
+
 og kjør:
 ```sh
 statistikkprodukt installer-r-pakker
@@ -65,7 +74,7 @@ Konfigurasjonsmuligheter:
 - `--kilde`/`--maal` er enten `db` (default) eller `csv`
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
 - `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
-- `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger. 
+- `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger.
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.
@@ -78,6 +87,10 @@ Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
 ```
 
+> [!WARNING]
+> Legg `*.csv` til din `.gitignore` og heller bruke `git add -f min_fil.csv`, for å unngå å sjekke inn
+> csv filer med produksjonsdata ved et uhell.
+
 ### Sjekk konfigurasjonen
 
 Valider hovedkonfigurasjonen, aggregatdefinisjonene og ID-er mot statistikkproduktregisteret:
@@ -89,7 +102,7 @@ statistikkprodukt konfig sjekk --config konfigurasjon.yml
 statistikkprodukt konfig sjekk --config konfigurasjon.yml --ingen-id-validering
 ```
 
-`--config` kan erstattes med miljøvariabelen `STATISTIKKPRODUKT_AGGREGAT_CONFIG`. 
+`--config` kan erstattes med miljøvariabelen `STATISTIKKPRODUKT_AGGREGAT_CONFIG`.
 
 Gyldig konfigurasjon gir avslutningskode `0`; konfigurasjonsfeil gir `2`.
 
@@ -135,7 +148,7 @@ select * from ost_befolkning_alder_kontroll;
 ```
 
 # System dokumentasjon
-## Databaseskjema 
+## Databaseskjema
 Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppslag i Oracle dictionary. Vanlig `last` oppretter eller endrer ikke tabellstrukturen.
 
 ```sh
@@ -160,7 +173,7 @@ create table ost_1_kontroll (
 
   -- Lagd til:
   -- primærprikking (små tall) 1/0 for ja/nei
-  primary number, 
+  primary number,
   -- sekundærprikking via gaussian suppression 1/0 for ja/nei
   suppressed number,
   dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL
@@ -465,7 +478,7 @@ NB: Både periode og variabler må være streng.
 
 ### Statistikkproduktregisteret
 
-Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 21000 og 22999, uten `NAV`-prefiks. 
+Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 21000 og 22999, uten `NAV`-prefiks.
 
 Til utvikling kan du bruke `'00000'` til `'09999'` med `--ingen-id-validering`. Oppgi test-ID-er som strenger i YAML for å bevare innledende nuller.
 
@@ -526,7 +539,7 @@ NB at passordet _må_ være en hemmelighetsreferanse, der er ikke mulig å legge
   user: gsm://projects/my_project/secrets/my_secret/versions/latest/username
   password: gsm://projects/my_project/secrets/my_secret/versions/latest/password
 ```
-Leser fra hemmeligheten `my_secret` i prosjektet `my_project`. Det forventes at den inneholder en JSON-string, og den pakkes ut med nøklene `username` og `password`. De kan velges fritt. 
+Leser fra hemmeligheten `my_secret` i prosjektet `my_project`. Det forventes at den inneholder en JSON-string, og den pakkes ut med nøklene `username` og `password`. De kan velges fritt.
 
 Nøklene er valgfritt, man kan også bruke hele hemmeligheten som en enkel verdi:
 ```yaml
