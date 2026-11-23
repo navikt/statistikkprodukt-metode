@@ -127,3 +127,83 @@ def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, s
     else:
         cli.main()
         execute.assert_called_once()
+
+
+@pytest.mark.parametrize("use_environment", [False, True])
+def test_cli_config_check_only_validates(tmp_path, monkeypatch, capsys, use_environment):
+    from statistikkprodukt.config import loader
+    import oracledb
+
+    path = _configure(tmp_path, monkeypatch, "21000")
+    monkeypatch.delenv("TEST_PASSWORD", raising=False)
+    operations = [
+        (loader, "resolve_secret"),
+        (oracledb, "connect"),
+        (app.last, "last"),
+        (app.skjema, "create_tables"),
+        (app.installer_r_pakker, "installer_r_pakker"),
+    ]
+    mocks = []
+    for module, name in operations:
+        operation = Mock(side_effect=AssertionError("Kun validering er tillatt."))
+        monkeypatch.setattr(module, name, operation)
+        mocks.append(operation)
+    if use_environment:
+        monkeypatch.setenv("STATISTIKKPRODUKT_AGGREGAT_CONFIG", str(path))
+        flags = []
+    else:
+        flags = ["--config", str(path)]
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "konfig", "sjekk", *flags])
+
+    cli.main()
+
+    assert "Konfigurasjonen er gyldig. Antall aggregater: 1." in capsys.readouterr().out
+    for operation in mocks:
+        operation.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "error",
+    ["missing_config", "invalid_yaml", "unknown_field", "missing_aggregate", "unregistered_id"],
+)
+def test_cli_config_check_reports_configuration_errors(tmp_path, monkeypatch, caplog, error):
+    path = _configure(tmp_path, monkeypatch, "21001" if error == "unregistered_id" else "21000")
+    if error == "missing_config":
+        monkeypatch.delenv("STATISTIKKPRODUKT_AGGREGAT_CONFIG", raising=False)
+        flags = []
+    else:
+        flags = ["--config", str(path)]
+        if error == "invalid_yaml":
+            path.write_text("connection: [", encoding="utf-8")
+        elif error == "unknown_field":
+            aggregate_path = tmp_path / "tabell.yml"
+            aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
+            aggregate["definisjon"]["ukjent"] = True
+            aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
+        elif error == "missing_aggregate":
+            (tmp_path / "tabell.yml").unlink()
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "konfig", "sjekk", *flags])
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+    assert "Konfigurasjonsfeil:" in caplog.text
+
+
+@pytest.mark.parametrize("allow_development_id", [False, True])
+def test_cli_config_check_gates_test_ids(tmp_path, monkeypatch, capsys, allow_development_id):
+    path = _configure(tmp_path, monkeypatch, "00001")
+    flags = ["--ingen-id-validering"] if allow_development_id else []
+    monkeypatch.setattr(
+        sys, "argv",
+        ["statistikkprodukt", "konfig", "sjekk", "--config", str(path), *flags],
+    )
+
+    if allow_development_id:
+        cli.main()
+        assert "Konfigurasjonen er gyldig" in capsys.readouterr().out
+    else:
+        with pytest.raises(SystemExit) as exc:
+            cli.main()
+        assert exc.value.code == 2

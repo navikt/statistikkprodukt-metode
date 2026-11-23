@@ -109,6 +109,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_aggregate_options(last)
 
+    config = commands.add_parser("konfig", help="Kontroller konfigurasjonen.")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    check = config_commands.add_parser(
+        "sjekk",
+        help="Valider YAML-konfigurasjonen og aggregat-ID-er uten å kjøre lasten.",
+        description=(
+            "Valider hovedkonfigurasjonen, aggregatdefinisjonene og aggregat-ID-er. "
+            "Henter ikke hemmeligheter, kobler ikke til databasen og skriver ingen data."
+        ),
+    )
+    check.add_argument(
+        "--config",
+        default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
+        help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG).",
+    )
+    _add_id_validation_option(check)
+    _add_logging_options(check)
+
     schema = commands.add_parser("skjema", help="Vis eller opprett småaggregattabeller.")
     schema_commands = schema.add_subparsers(dest="schema_command", required=True)
     create = schema_commands.add_parser(
@@ -173,6 +191,15 @@ def main() -> None:
     try:
         if args.command == "testenv":
             _run_testenv(args, parser)
+
+        elif args.command == "konfig":
+            configuration, _ = load_configuration(
+                args.config, ingen_id_validering=args.ingen_id_validering
+            )
+            StatistikkproduktRegister().valider(
+                configuration.aggregater, ingen_id_validering=args.ingen_id_validering
+            )
+            print(f"Konfigurasjonen er gyldig. Antall aggregater: {len(configuration.aggregater)}.")
 
         elif args.command == "last":
             config_path = args.config

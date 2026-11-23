@@ -78,6 +78,21 @@ Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
 ```
 
+### Sjekk konfigurasjonen
+
+Valider hovedkonfigurasjonen, aggregatdefinisjonene og ID-er mot statistikkproduktregisteret:
+
+```sh
+statistikkprodukt konfig sjekk --config konfigurasjon.yml
+
+# For eksempler med test-ID-er
+statistikkprodukt konfig sjekk --config konfigurasjon.yml --ingen-id-validering
+```
+
+`--config` kan erstattes med miljøvariabelen `STATISTIKKPRODUKT_AGGREGAT_CONFIG`. 
+
+Gyldig konfigurasjon gir avslutningskode `0`; konfigurasjonsfeil gir `2`.
+
 ### Kjør mot databasen
 
 Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test obt tabell.
