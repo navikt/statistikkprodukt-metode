@@ -46,14 +46,16 @@ def installer_r_pakker() -> None:
         )
     """)
     utils.install_packages(
-        StrVector(["SSBtools", "GaussSuppression", "DBI", "odbc", "rstudioapi"]),
+        StrVector(["SSBtools", "GaussSuppression", "DBI", "odbc", "rstudioapi", "pak"]),
         repos=repository,
         dependencies=True,
     )
     LOGGER.info("Installerer 'NavDataprodukt'...")
-    utils.install_packages(
-        StrVector([str(pkg_dir)]),
-        repos=rpy2.rinterface.NULL,
-        type="source",
-        upgrade=True
-    )
+    # utils.install_packages(
+    #     StrVector([str(pkg_dir)]),
+    #     repos=rpy2.rinterface.NULL,
+    #     type="source",
+    #     upgrade=True
+    # )
+    pak = rpy2.robjects.packages.importr("pak")
+    pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True, repos=repository)
