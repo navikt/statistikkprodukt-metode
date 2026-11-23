@@ -196,7 +196,7 @@ def _process_aggregate(
     for tellepunkt in aggregate.tellepunkter:
         LOGGER.info("%s: Prikker tellepunkt %s.", aggregate.id, tellepunkt.kolonne)
         prepub_tellepunkt, kontroll_tellepunkt = prikking(
-            data,
+            data[[*dimension_columns, tellepunkt.kolonne]],
             aggregate.periodisering.kolonne,
             aggregate.formula,
             tellepunkt.kolonne,
