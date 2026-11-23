@@ -66,7 +66,7 @@ definisjon:
     kolonne: periode
     innhold: Periode.
     innhold-en: Period.
-  inkrementell-strategi: overskriv_alt
+  inkrementell-strategi: overskriv_eksisterende_perioder
   tellepunkter:
     - navn: Antall
       navn-en: Count

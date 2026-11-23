@@ -188,7 +188,7 @@ CREATE TABLE ost_logg (
   innhold_en            CLOB,
   referanse_tabell      VARCHAR2(261 CHAR),
   periodisering         VARCHAR2(128 CHAR),
-  inkrementell          VARCHAR2(30 CHAR),
+  inkrementell          VARCHAR2(128 CHAR),
   formula               VARCHAR2(4000 CHAR),
   prikking              NUMBER(1),
   saerskilt             NUMBER(1),
@@ -201,6 +201,14 @@ CREATE TABLE ost_logg (
 );
 ```
 
+
+Eksisterende loggtabeller med `inkrementell VARCHAR2(30 CHAR)` må utvides
+manuelt i riktig skjema for å romme de nye modusnavnene. Vanlig lasting og
+`skjema opprett --db` endrer ikke eksisterende loggtabeller:
+
+```sql
+ALTER TABLE ost_logg MODIFY (inkrementell VARCHAR2(128 CHAR));
+```
 
 ## Konfigurasjon
 
@@ -400,9 +408,9 @@ definisjon:
 
   # Bestemmer hvordan innkommende perioder erstatter eller supplerer eksisterende data.
   # Valgmuligheter:
-    # - overskriv_alt: erstatter alle eksisterende data for perioden.
-    # - overskriv_ikke: beholder eksisterende data for perioden, og legger til nye.
-  inkrementell-strategi: overskriv_alt
+    # - overskriv_eksisterende_perioder: erstatter alle eksisterende data for perioden.
+    # - legg_til_nye_perioder: beholder eksisterende data for perioden, og legger til nye.
+  inkrementell-strategi: overskriv_eksisterende_perioder
   # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
   formula: "~ periode : alder"
   # Angir om dataene skal prikkes.
@@ -434,7 +442,7 @@ Alle aggregater i samme konfigurasjon må ha unik `id`, også ved bruk av test-I
 
 Følgende inkrementelle strategier er støttet. Inkrementelle laster baserer seg på periodekolonnen.
 
-#### `overskriv_ikke`
+#### `legg_til_nye_perioder`
 
 Laster kun nye perioder:
 ```text
@@ -451,7 +459,7 @@ Laster kun nye perioder:
 202503
 ```
 
-#### `overskriv_alt`
+#### `overskriv_eksisterende_perioder`
 
 Overskrive alle perioder som finnes i kilden. Perioder som ikke finnes i kilden, men som finnes i målet, beholdes.
 

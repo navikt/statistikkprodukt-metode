@@ -88,13 +88,13 @@ def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     ("mode", "available", "existing", "expected"),
     [
-        ("overskriv_ikke", {"202501", "202502", "202503"}, {"202502"}, ["202501", "202503"]),
-        ("overskriv_ikke", {"202501"}, {"202501"}, []),
-        ("overskriv_ikke", {"202501"}, set(), ["202501"]),
-        ("overskriv_ikke", set(), {"202501"}, []),
-        ("overskriv_alt", {"202501", "202502"}, {"202502", "202503"}, ["202501", "202502"]),
-        ("overskriv_alt", set(), {"202501"}, []),
-        ("overskriv_ikke", {"2025-01", "2025-02"}, {"2025-01"}, ["2025-02"]),
+        ("legg_til_nye_perioder", {"202501", "202502", "202503"}, {"202502"}, ["202501", "202503"]),
+        ("legg_til_nye_perioder", {"202501"}, {"202501"}, []),
+        ("legg_til_nye_perioder", {"202501"}, set(), ["202501"]),
+        ("legg_til_nye_perioder", set(), {"202501"}, []),
+        ("overskriv_eksisterende_perioder", {"202501", "202502"}, {"202502", "202503"}, ["202501", "202502"]),
+        ("overskriv_eksisterende_perioder", set(), {"202501"}, []),
+        ("legg_til_nye_perioder", {"2025-01", "2025-02"}, {"2025-01"}, ["2025-02"]),
     ],
 )
 def test_get_periods_to_load(monkeypatch, tmp_path, mode, available, existing, expected):

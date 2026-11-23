@@ -72,7 +72,7 @@ def create_log_table_statement(schema: str) -> str:
         "  innhold_en            CLOB,\n"
         "  referanse_tabell      VARCHAR2(261 CHAR),\n"
         "  periodisering         VARCHAR2(128 CHAR),\n"
-        "  inkrementell          VARCHAR2(30 CHAR),\n"
+        "  inkrementell          VARCHAR2(128 CHAR),\n"
         "  formula               VARCHAR2(4000 CHAR),\n"
         "  prikking              NUMBER(1),\n"
         "  saerskilt             NUMBER(1),\n"

@@ -342,9 +342,9 @@ def _get_periods_to_load(
         aggregate.inkrementell_strategi.value,
     )
     missing = available - existing
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER:
         periods = sorted(available)
-    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
+    elif aggregate.inkrementell_strategi == IncrementalMode.LEGG_TIL_NYE_PERIODER:
         periods = sorted(missing)
     else:
         raise NotImplementedError(

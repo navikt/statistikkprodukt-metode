@@ -168,6 +168,7 @@ def test_auxiliary_schema_creation_checks_dictionary_and_reuses_cursor():
 def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
     aggregate = configuration().aggregater[0].model_copy(update={
         "tabell": f"ost_test_{uuid4().hex[:12]}",
+        "inkrementell_strategi": IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER,
     })
     long_text = "Æøå" * 5000
     table_metadata = TableMetadata(
@@ -231,10 +232,10 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
             assert json_text.read() == long_text
 
             cursor.execute(
-                "SELECT status, antall_rader FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
+                "SELECT status, antall_rader, inkrementell FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
                 id=success.kjoring_id,
             )
-            assert cursor.fetchone() == ("OK", None)
+            assert cursor.fetchone() == ("OK", None, "overskriv_eksisterende_perioder")
             for table_name in (aggregate.meta_tabell, oracle.LOG_TABLE):
                 cursor.execute(
                     "SELECT data_type, data_default, nullable FROM all_tab_columns "
@@ -702,12 +703,12 @@ def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
     ("mode", "loaded", "expected"),
     [
         (
-                "overskriv_ikke",
+                "legg_til_nye_perioder",
                 ["202503"],
                 [("202500", 0), ("202501", 1), ("202502", 2), ("202503", 30)],
         ),
         (
-                "overskriv_alt",
+                "overskriv_eksisterende_perioder",
                 ["202501", "202502", "202503"],
                 [("202500", 0), ("202501", 10), ("202502", 20), ("202503", 30)],
         ),

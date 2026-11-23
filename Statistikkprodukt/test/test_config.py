@@ -37,7 +37,7 @@ def configuration():
                         "innhold": "Månedsperiode",
                         "innhold-en": "Month period",
                     },
-                    "inkrementell-strategi": "overskriv_ikke",
+                    "inkrementell-strategi": "legg_til_nye_perioder",
                     "tellepunkter": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
@@ -57,13 +57,14 @@ def test_configuration_rejects_unknown_keys():
         Configuration.model_validate(config)
 
 
-def test_configuration_rejects_removed_incremental_mode():
+@pytest.mark.parametrize("mode", ["overskriv_siste_periode", "overskriv_ikke", "overskriv_alt"])
+def test_configuration_rejects_removed_incremental_mode(mode):
     config = configuration().model_dump(by_alias=True)
-    config["aggregater"][0]["inkrementell-strategi"] = "overskriv_siste_periode"
+    config["aggregater"][0]["inkrementell-strategi"] = mode
 
     with pytest.raises(
         ValidationError,
-        match="inkrementell-strategi må være én av overskriv_alt, overskriv_ikke",
+        match="inkrementell-strategi må være én av legg_til_nye_perioder, overskriv_eksisterende_perioder",
     ):
         Configuration.model_validate(config)
 
@@ -186,7 +187,7 @@ definisjon:
     kolonne: periode
     innhold: Periode
     innhold-en: Month
-  inkrementell-strategi: overskriv_ikke
+  inkrementell-strategi: legg_til_nye_perioder
   tellepunkter:
     - navn: Antall
       navn-en: Count
@@ -214,7 +215,7 @@ definisjon:
     assert aggregate.referanse_tabell == "obt_tabell"
     assert aggregate.sporring_sql == "aggregater/tabell.sql"
     assert aggregate.periodisering.kolonne == "periode"
-    assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
+    assert aggregate.inkrementell_strategi.value == "legg_til_nye_perioder"
     assert isinstance(aggregate.tellepunkter[0], Tellepunkt)
     assert aggregate.tellepunkter[0].kolonne == "antall"
 
@@ -248,7 +249,7 @@ definisjon:
   referanse-tabell: OBT_TABELL
   periodisering:
     kolonne: periode
-  inkrementell-strategi: overskriv_ikke
+  inkrementell-strategi: legg_til_nye_perioder
   tellepunkter:
     - kolonne: antall
   formula: "~ periode * region"

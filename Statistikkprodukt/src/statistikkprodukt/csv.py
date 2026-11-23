@@ -73,7 +73,7 @@ def write_csv(
         print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 
-    if aggregate.inkrementell_strategi != IncrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi != IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER:
         LOGGER.warning("CSV filer overskrives også når inkrementell modus er satt til %s.",
                        aggregate.inkrementell_strategi.value)
 

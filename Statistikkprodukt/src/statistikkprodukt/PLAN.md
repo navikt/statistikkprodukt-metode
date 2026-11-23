@@ -19,8 +19,8 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
 6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. The prepub output has the same columns as the input aggregate, with each configured tellepunkt in its own column. The control output has the dimensions, a `tellepunkt` column naming the tellepunkt, a `verdi` column with its unmasked value, and the suppression markers; each tellepunkt contributes its own rows. `tellepunkt` and `verdi` are reserved column names. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
 7. **Incremental modes:** The modes operate on the configured period column:
-   - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
-   - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
+   - `legg_til_nye_perioder` appends periods that do not already exist and logs a warning for periods that already exist.
+   - `overskriv_eksisterende_perioder` replaces all periods that are returned by the query. Other periods in the target are not removed.
    - `--periode/-p` may be used to override one ore more periods, overriding the incremental mode.
 8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
@@ -103,7 +103,7 @@ definisjon:
     kolonne: periode
     innhold: Månedsperiode
     innhold-en: Month period
-  inkrementell-strategi: overskriv_alt
+  inkrementell-strategi: overskriv_eksisterende_perioder
   tellepunkter:
     - kolonne: antall
     - kolonne: antall_kvinner

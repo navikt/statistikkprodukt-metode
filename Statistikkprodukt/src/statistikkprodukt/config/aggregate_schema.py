@@ -25,8 +25,8 @@ _IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9_$#]{0,127}$")
 
 
 class IncrementalMode(StrEnum):
-    OVERSKRIV_IKKE = "overskriv_ikke"
-    OVERSKRIV_ALT = "overskriv_alt"
+    LEGG_TIL_NYE_PERIODER = "legg_til_nye_perioder"
+    OVERSKRIV_EKSISTERENDE_PERIODER = "overskriv_eksisterende_perioder"
 
 
 def validate_identifier(value: str) -> str:

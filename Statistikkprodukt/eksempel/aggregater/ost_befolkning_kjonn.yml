@@ -154,9 +154,9 @@ definisjon:
 
   # Bestemmer hvordan innkommende perioder erstatter eller supplerer eksisterende data.
   # Valgmuligheter:
-    # - overskriv_alt: erstatter alle eksisterende data for perioden.
-    # - overskriv_ikke: beholder eksisterende data for perioden, og legger til nye.
-  inkrementell-strategi: overskriv_alt
+    # - overskriv_eksisterende_perioder: erstatter alle eksisterende data for perioden.
+    # - legg_til_nye_perioder: beholder eksisterende data for perioden, og legger til nye.
+  inkrementell-strategi: overskriv_eksisterende_perioder
 
   # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
   formula: "~ periode : kjonn"
