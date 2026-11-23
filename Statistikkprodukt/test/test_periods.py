@@ -94,11 +94,7 @@ def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
         ("overskriv_ikke", set(), {"202501"}, []),
         ("overskriv_alt", {"202501", "202502"}, {"202502", "202503"}, ["202501", "202502"]),
         ("overskriv_alt", set(), {"202501"}, []),
-        ("overskriv_siste_periode", {"202500", "202501", "202502"}, {"202500", "202501"}, ["202501", "202502"]),
-        ("overskriv_siste_periode", {"202500", "202501", "202502"}, set(), ["202500", "202501", "202502"]),
-        ("overskriv_siste_periode", set(), {"202501"}, []),
         ("overskriv_ikke", {"2025-01", "2025-02"}, {"2025-01"}, ["2025-02"]),
-        ("overskriv_siste_periode", {"2025-01", "2025-02"}, set(), ["2025-01", "2025-02"]),
     ],
 )
 def test_get_periods_to_load(monkeypatch, tmp_path, mode, available, existing, expected):

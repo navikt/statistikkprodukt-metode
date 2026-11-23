@@ -156,7 +156,6 @@ definisjon:
   # Valgmuligheter:
     # - overskriv_alt: erstatter alle eksisterende data for perioden.
     # - overskriv_ikke: beholder eksisterende data for perioden, og legger til nye.
-    # - overskriv_siste_periode: erstatter den siste periode, legg til nye perioder, behold eldre perioder.
   inkrementell-strategi: overskriv_alt
   # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
   formula: "~ periode : alder"

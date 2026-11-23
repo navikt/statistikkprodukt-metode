@@ -402,7 +402,6 @@ definisjon:
   # Valgmuligheter:
     # - overskriv_alt: erstatter alle eksisterende data for perioden.
     # - overskriv_ikke: beholder eksisterende data for perioden, og legger til nye.
-    # - overskriv_siste_periode: erstatter den siste periode, legg til nye perioder, behold eldre perioder.
   inkrementell-strategi: overskriv_alt
   # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
   formula: "~ periode : alder"
@@ -472,27 +471,6 @@ Overskrive alle perioder som finnes i kilden. Perioder som ikke finnes i kilden,
 202503
 
 # Perioden 202412 beholdes.
-```
-
-#### `overskriv_siste_periode`
-
-Som `overskriv_ikke`, men den nyeste perioden i målet overskrives. 
-
-```text
-# I kilden
-202412
-202501
-202502
-202503
-
-# I målet
-202501
-202502
-
-# Lastet
-202412
-202502
-202503
 ```
 
 ### Hemmeligheter

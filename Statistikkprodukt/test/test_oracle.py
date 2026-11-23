@@ -711,11 +711,6 @@ def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
                 ["202501", "202502", "202503"],
                 [("202500", 0), ("202501", 10), ("202502", 20), ("202503", 30)],
         ),
-        (
-                "overskriv_siste_periode",
-                ["202503"],
-                [("202500", 0), ("202501", 1), ("202502", 2), ("202503", 30)],
-        ),
     ],
 )
 def test_process_aggregate_only_masks_selected_periods(
@@ -768,9 +763,6 @@ def test_process_aggregate_only_masks_selected_periods(
             )
             cursor.execute(oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell))
             existing = [("202500", "Oslo", 0), ("202501", "Oslo", 1), ("202502", "Oslo", 2)]
-            if mode == "overskriv_siste_periode":
-                # Make 202503 the existing latest period so this mode must replace it.
-                existing.append(("202503", "Oslo", 3))
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{prepub_table} VALUES (:1, :2, :3)", existing
             )

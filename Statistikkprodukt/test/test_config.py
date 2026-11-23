@@ -57,6 +57,17 @@ def test_configuration_rejects_unknown_keys():
         Configuration.model_validate(config)
 
 
+def test_configuration_rejects_removed_incremental_mode():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["inkrementell-strategi"] = "overskriv_siste_periode"
+
+    with pytest.raises(
+        ValidationError,
+        match="inkrementell-strategi må være én av overskriv_alt, overskriv_ikke",
+    ):
+        Configuration.model_validate(config)
+
+
 def test_aggregate_id_does_not_include_nav_prefix():
     """Krever aggregat-ID i tallformat uten NAV-prefiks."""
     config = configuration().model_dump(by_alias=True)

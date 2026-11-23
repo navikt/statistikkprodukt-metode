@@ -344,9 +344,6 @@ def _get_periods_to_load(
     missing = available - existing
     if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
         periods = sorted(available)
-    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
-        max_available = {max(existing)} if existing and max(existing) in available else set()
-        periods = sorted(missing.union(max_available))
     elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
         periods = sorted(missing)
     else:
