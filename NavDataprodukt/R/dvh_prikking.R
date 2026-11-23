@@ -58,9 +58,15 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
                                     avoidHierarchical = TRUE
   )
 
+
+  # Lister kolonner som etter hvert skal droppes
+  drops <-c("primary", "suppressed")
+
+  # Finner variabelkolonnene
+  varKol <- setdiff(names(prikk), c(drops, freqVar))
+  
   # Fjern rader hvor alle variabler, inkludert periode er "Total"
   prikk <- prikk[rowSums(prikk[varKol] == "Total", na.rm = TRUE) < length(varKol), ]
-
 
   # Erstatt "Total" med "I alt"
   prikk[prikk == "Total"] <- "I alt"
@@ -69,7 +75,7 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
 
   smal[[freqVar]][smal$suppressed == TRUE] <- NA
 
-  drops <-c("primary", "suppressed")
+  
   smal <- smal[ , !(names(smal) %in% drops), drop = FALSE]
 
   return(list(smalt_aggregat = smal, kvalitetssikring = prikk))
