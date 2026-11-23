@@ -270,7 +270,7 @@ def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
     monkeypatch.setattr(app, "_read_input", calls.read)
     monkeypatch.setattr(app, "_write_output", calls.write)
     monkeypatch.setattr(oracle, "read_metadata", MagicMock())
-    mask = MagicMock(return_value=(data, data.assign(primary=True, suppressed=True)))
+    mask = MagicMock(return_value=(data.copy(), data.assign(primary=True, suppressed=True)))
     monkeypatch.setattr(app, "prikking", mask)
 
     app._process_aggregate(
@@ -290,6 +290,45 @@ def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
     assert [call[0] for call in calls.mock_calls] == ["select", "read", "write"]
     assert calls.read.call_args.kwargs["periods_to_load"] == periods
     pd.testing.assert_frame_equal(mask.call_args.args[0], data)
+
+
+def test_process_passes_only_selected_tellepunkt_to_r(monkeypatch, tmp_path):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    aggregate.tellepunkter.append(
+        aggregate.tellepunkter[0].model_copy(update={"kolonne": "antall_kvinner"})
+    )
+    data = pd.DataFrame({
+        "periode": ["202501"],
+        "region": ["Oslo"],
+        "antall": [10],
+        "antall_kvinner": [7],
+    })
+    monkeypatch.setattr(app, "_get_periods_to_load", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app, "_read_input", lambda *args, **kwargs: data)
+    write = MagicMock()
+    monkeypatch.setattr(app, "_write_output", write)
+
+    def mask(selected, periode, formula, tall_kolonne, prikking, saerskilt):
+        assert list(selected.columns) == ["periode", "region", tall_kolonne]
+        return selected.copy(), selected.assign(primary=False, suppressed=False)
+
+    mask_mock = MagicMock(side_effect=mask)
+    monkeypatch.setattr(app, "prikking", mask_mock)
+
+    app._process_aggregate(
+        config, aggregate, tmp_path,
+        app.Transfer(None, StorageOption.CSV, StorageOption.CSV, tmp_path, tmp_path),
+        dry_run=False,
+    )
+
+    assert mask_mock.call_count == 2
+    prepub, kontroll = write.call_args.args[2:4]
+    pd.testing.assert_frame_equal(prepub, data.astype({
+        "antall": object, "antall_kvinner": object,
+    }))
+    assert kontroll["tellepunkt"].tolist() == ["antall", "antall_kvinner"]
+    assert kontroll["verdi"].tolist() == [10, 7]
 
 
 def query_connection():

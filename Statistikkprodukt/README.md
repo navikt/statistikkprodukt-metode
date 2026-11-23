@@ -2,6 +2,8 @@
 
 `statistikkprodukt` er et verktøy for datateam for å lage statistikkaggregater med Gaussian Suppression prikking/maskering av små verdier for personvernhensyn.
 
+Verktøyet forbereder metadata til generering av PX-filer for Statistikkbanken. På sikt skal det bli mulig å bruke verktøyet også utenfor Statistikkbank konktekst. 
+
 Verktøyet konfigureres med yaml filer og kan håndtere flere aggregater samtidig.
 
 For hver aggregat::
@@ -140,11 +142,24 @@ create table ost_1_prepub (
 );
 
 CREATE TABLE ost_1_meta (
-  felt               VARCHAR2(128 CHAR) NOT NULL,
-  verdi              CLOB,
+  type               CHAR(2) NOT NULL,
+  keyword            VARCHAR2(256 CHAR) NOT NULL,
+  scope              VARCHAR2(256 CHAR),
+  language           CHAR(2),
+  value              VARCHAR2(4000 CHAR),
   dvh_sist_oppdatert TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
 );
 ```
+
+Metadatatabellen erstattes transaksjonelt ved hver databasekjøring.
+`TYPE` grupperer radene som PX (PX-nøkkelord), CS (kolonneoppsett),
+CR (kolonnemetadata) eller SQ (startvisning). `SCOPE` er foreløpig NULL.
+`LANGUAGE` er NO/EN for oversatte felt og NULL for språkuavhengige felt.
+`VALUE` kan være opptil 4000 byte i UTF-8. Kolonnesuffiksene `__no` og `__en`
+støttes foreløpig ikke. Se [metafelter.md](metafelter.md) for config-feltene.
+
+Eksisterende metadatatabeller med `felt`/`verdi` må fjernes og opprettes på nytt
+via `skjema opprett --db`; vanlig lasting migrerer ikke skjemaet.
 
 Logg tabell:
 
@@ -268,7 +283,7 @@ definisjon:
     # PX: SUBJECT-CODE.
     fagomraade-kode: AM
 
-    # Gir en norsk merknad og lenke til Om statistikken, gjerne som Markdown.
+    # Gir en utfyllende merknad, gjerne som Markdown.
     # PX: NOTE på norsk.
     merknad: |
       Se [Om statistikken](https://www.nav.no/statistikk).

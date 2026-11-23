@@ -53,6 +53,22 @@ class TableMetadata:
     table: Metadata
     columns: dict[str, Metadata]
 
+    @classmethod
+    def from_aggregate(cls, aggregate: Aggregate) -> TableMetadata:
+        """Henter tilgjengelige YAML-metadata uten krav om databasekommentarer."""
+        fields = set(Metadata.model_fields)
+        return cls(
+            table=Metadata.model_validate(aggregate.model_dump(include=fields)),
+            columns={
+                variable.kolonne: Metadata.model_validate(
+                    variable.model_dump(include=fields)
+                )
+                for variable in (
+                    aggregate.periodisering, *aggregate.variabler, *aggregate.tellepunkter
+                )
+            },
+        )
+
 
 @dataclass
 class LasteResultat:

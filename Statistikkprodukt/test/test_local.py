@@ -1,12 +1,16 @@
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import numpy as np
 import pandas as pd
 import pytest
-from statistikkprodukt.app.last import last
+from statistikkprodukt import oracle
+from statistikkprodukt.app.last import last, _write_output
+from statistikkprodukt.app.models import TableMetadata, Transfer
 from statistikkprodukt.config import StorageOption
 from statistikkprodukt.csv import validate_columns
 from test.test_config import configuration
+from test.test_meta_table import aggregate_with_metadata, resolved_metadata
 
 
 def test_csv_columns_include_periodisering_separately():
@@ -22,6 +26,96 @@ def test_validate_columns_normalizes_names_without_pandas_rename():
     validate_columns(frame, configuration().aggregater[0])
 
     assert list(frame.columns) == ["periode", "region", "antall"]
+
+
+@pytest.mark.parametrize("source", [StorageOption.CSV, StorageOption.DB])
+@pytest.mark.parametrize("empty_data", [False, True])
+def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, source, empty_data):
+    aggregate = aggregate_with_metadata()
+    expected = resolved_metadata(aggregate) if source == StorageOption.DB else (
+        TableMetadata.from_aggregate(aggregate)
+    )
+    if source == StorageOption.DB:
+        expected.columns["region"].navn = "Navn fra database"
+    read_metadata = MagicMock(return_value=expected)
+    monkeypatch.setattr(oracle, "read_metadata", read_metadata)
+    connection = MagicMock() if source == StorageOption.DB else None
+    transfer = Transfer(connection, source, StorageOption.CSV, tmp_path, tmp_path)
+    path = tmp_path / "tabell_meta.csv"
+    path.write_text("utdatert metadata", encoding="utf-8")
+    data = pd.DataFrame() if empty_data else pd.DataFrame({"antall": [12]})
+
+    metadata = _write_output(
+        configuration(), aggregate, data, data, transfer,
+        config_directory=tmp_path, dry_run=False,
+    )
+
+    frame = pd.read_csv(path, dtype=str, keep_default_na=False)
+    assert list(frame.columns) == [*oracle.META_COLUMNS, "dvh_sist_oppdatert"]
+    assert frame.drop(columns="dvh_sist_oppdatert").to_dict("records") == [
+        {key: value if value is not None else "" for key, value in row.items()}
+        for row in oracle.metadata_rows(aggregate, expected)
+    ]
+    assert metadata == expected
+    assert frame["dvh_sist_oppdatert"].nunique() == 1
+    assert pd.to_datetime(frame["dvh_sist_oppdatert"]).notna().all()
+    if source == StorageOption.DB:
+        read_metadata.assert_called_once_with(
+            connection, configuration().connection.schema_name, aggregate
+        )
+        connection.commit.assert_not_called()
+    else:
+        read_metadata.assert_not_called()
+
+
+@pytest.mark.parametrize("existing_file", [False, True])
+def test_csv_metadata_dry_run_does_not_write(tmp_path, capsys, existing_file):
+    aggregate = aggregate_with_metadata()
+    output = tmp_path / "data_ut"
+    path = output / "tabell_meta.csv"
+    if existing_file:
+        output.mkdir()
+        path.write_text("Behold eksisterende metadata", encoding="utf-8")
+    transfer = Transfer(None, StorageOption.CSV, StorageOption.CSV, tmp_path, output)
+    _write_output(
+        configuration(), aggregate, pd.DataFrame(), pd.DataFrame(), transfer,
+        config_directory=tmp_path, dry_run=True,
+    )
+    assert "tabell_meta.csv" in capsys.readouterr().out
+    if existing_file:
+        assert path.read_text(encoding="utf-8") == "Behold eksisterende metadata"
+    else:
+        assert not output.exists()
+
+
+def test_csv_pipeline_writes_metadata_without_database_or_r(tmp_path, monkeypatch):
+    import statistikkprodukt.app.last as app
+
+    config = configuration()
+    input_directory = tmp_path / "data_inn"
+    output_directory = tmp_path / "data_ut"
+    input_directory.mkdir()
+    pd.DataFrame(
+        {"periode": [202501], "region": ["Oslo"], "antall": [12]}
+    ).to_csv(input_directory / "tabell.csv", index=False)
+
+    def mask(data, *args):
+        control = data.copy()
+        control["primary"] = False
+        control["suppressed"] = False
+        return data.copy(), control
+
+    monkeypatch.setattr(app, "prikking", mask)
+    connect = MagicMock(side_effect=AssertionError("CSV skal ikke koble til databasen"))
+    monkeypatch.setattr(app, "_connect", connect)
+    last(config, tmp_path, StorageOption.CSV, StorageOption.CSV,
+         input_directory, output_directory)
+    assert {path.name for path in output_directory.iterdir()} == {
+        "tabell_prepub.csv", "tabell_kontroll.csv", "tabell_meta.csv",
+    }
+    frame = pd.read_csv(output_directory / "tabell_meta.csv", dtype=str, keep_default_na=False)
+    assert frame.loc[frame["keyword"] == "MATRIX", "value"].tolist() == ["21000"]
+    connect.assert_not_called()
 
 
 @pytest.mark.r_dependent
@@ -45,7 +139,6 @@ def test_csv_masked(tmp_path):
     )
 
     expected = [
-        {'periode': 'I alt', 'region': 'I alt', 'antall': 3.0},
         {'periode': '202501', 'region': 'I alt', 'antall': 3.0},
         {'periode': '202501', 'region': 'Oslo', 'antall': 3.0}
     ]
@@ -66,8 +159,8 @@ def test_csv_masked(tmp_path):
     ]
     expected_prepub = [row.copy() | dict(antall=None) for row in expected]
 
-    prepub = pd.read_csv(output_directory / "tabell_prepub.csv")
-    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv")
+    prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
+    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
 
     # nan are not comparable, normalize them to None
     prepub = prepub.replace({np.nan: None})
@@ -100,7 +193,6 @@ def test_csv_unmasked(tmp_path):
     )
 
     expected_prepub = [
-        {'periode': 'I alt', 'region': 'I alt', 'antall': 12.0},
         {'periode': '202501', 'region': 'I alt', 'antall': 12.0},
         {'periode': '202501', 'region': 'Oslo', 'antall': 12.0}
     ]
@@ -120,8 +212,8 @@ def test_csv_unmasked(tmp_path):
         for row in expected_prepub
     ]
 
-    prepub = pd.read_csv(output_directory / "tabell_prepub.csv")
-    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv")
+    prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
+    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
 
     assert sorted(prepub.to_dict("records"), key=sort_fn) == expected_prepub
     kontroll_sort_fn = lambda item: tuple(

@@ -128,15 +128,116 @@ class KolonneMetadata(StrictModel):
         return value.strip() or None if isinstance(value, str) else value
 
 
+class DimensionStatistikkbank(StrictModel):
+    startvisning_antall_verdier: int | None = Field(
+        default=None,
+        alias="startvisning-antall-verdier",
+        description=(
+            "Antall dimensjonsverdier i startvisningen. Positivt velger første N, "
+            "negativt siste N i alfabetisk rekkefølge, og 0 skjuler variabelen."
+        ),
+    )
+
+
+class MeasureStatistikkbank(StrictModel):
+    desimaler_visning: int | None = Field(
+        default=None, alias="desimaler-visning", ge=0,
+        description="Antall desimaler som vises for måltallet, uten å endre lagrede data.",
+    )
+    desimaler_lagring: int | None = Field(
+        default=None, alias="desimaler-lagring", ge=0,
+        description="Antall desimaler som bevares i PX-eksporten, ikke ved generell lasting.",
+    )
+
+
+class Kontakt(StrictModel):
+    seksjon: NonEmptyString = Field(description="Seksjonen som svarer på spørsmål om statistikken.")
+    epost: NonEmptyString = Field(description="Kontaktpunktets e-postadresse.")
+    telefonnummer: str | None = Field(
+        default=None, description="Kontaktpunktets telefonnummer som tekst."
+    )
+
+
+class TableStatistikkbank(StrictModel):
+    tema: str | None = Field(
+        default=None, description="Norsk tema på nivå 2 i menyhierarkiet; PX SUBJECT."
+    )
+    tema_en: str | None = Field(
+        default=None, alias="tema-en", description="Engelsk tema; PX SUBJECT."
+    )
+    tema_kode: str | None = Field(
+        default=None, alias="tema-kode", description="Statistikkbankens temakode; PX SUBJECT_KORT."
+    )
+    fagomraade: str | None = Field(
+        default=None, description="Norsk fagområde på nivå 1 i menyhierarkiet; PX SUBJECT-AREA."
+    )
+    fagomraade_kode: str | None = Field(
+        default=None, alias="fagomraade-kode",
+        description="Fagområdets kode fra Statistikkbankens kodeverk; PX SUBJECT-CODE.",
+    )
+    merknad: str | None = Field(
+        default=None, description="Norsk merknad, gjerne med lenke til Om statistikken; PX NOTE."
+    )
+    merknad_en: str | None = Field(
+        default=None, alias="merknad-en", description="Engelsk merknad; PX NOTE."
+    )
+    fremhevet_merknad: str | None = Field(
+        default=None, alias="fremhevet-merknad",
+        description="Norsk merknad som fremheves over den vanlige merknaden; PX NOTEX.",
+    )
+    fremhevet_merknad_en: str | None = Field(
+        default=None, alias="fremhevet-merknad-en",
+        description="Engelsk fremhevet merknad; PX NOTEX.",
+    )
+    avsluttet: bool | None = Field(
+        default=None,
+        description="Om statistikken ikke lenger skal oppdateres; PX DISCONTINUED.",
+    )
+    offisiell_statistikk: bool | None = Field(
+        default=None, alias="offisiell-statistikk",
+        description="Om tabellen publiseres som offisiell statistikk; PX OFFICIAL-STATISTICS.",
+    )
+    startvisning_antall_tellepunkter: int = Field(
+        default=1, alias="startvisning-antall-tellepunkter",
+        description=(
+            "Antall måltall i startvisningen (SQ STAT_VAR). Positivt velger første N, "
+            "negativt siste N, og 0 ingen."
+        ),
+    )
+    kontakter: list[Kontakt] = Field(
+        default_factory=list,
+        description="Kontaktpunkter for spørsmål om statistikken; én PX CONTACT-rad per kontakt.",
+    )
+
+
 class Variable(KolonneMetadata):
-    pass
+    statistikkbank: DimensionStatistikkbank = Field(
+        default_factory=DimensionStatistikkbank,
+        description="Statistikkbankens startvisningsinnstillinger for dimensjonen.",
+    )
 
 
 class Tellepunkt(KolonneMetadata):
-    pass
+    enhet: str | None = Field(
+        default=None, description="Måltallets norske måleenhet, ikke innholdsbeskrivelsen."
+    )
+    enhet_en: str | None = Field(
+        default=None, alias="enhet-en", description="Måltallets engelske måleenhet."
+    )
+    statistikkbank: MeasureStatistikkbank = Field(
+        default_factory=MeasureStatistikkbank,
+        description="Statistikkbankens innstillinger for måltallets visning og PX-eksport.",
+    )
 
 
 class Aggregate(StrictModel):
+    statistikkbank: TableStatistikkbank = Field(
+        default_factory=TableStatistikkbank,
+        description="Tabellens metadata og startvisningsinnstillinger for Statistikkbanken.",
+    )
+    ansvarlig_team: str | None = Field(
+        default=None, alias="ansvarlig-team", description="Teamet som har ansvar for aggregatet."
+    )
     id: AggregateId = Field(description="Aggregatets ID.")
     navn: str = Field(description="Navn på aggregatet.")
     navn_en: str = Field(alias="navn-en", description="Engelsk navn på aggregatet.")

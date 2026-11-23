@@ -141,21 +141,17 @@ group by periode, region
             kontroll_rows = cursor.fetchall()
 
         expected_prepub = [
-            ('I alt', "I alt", 17, 17),
             ('202501', "I alt", 17, 17),
             ('202501', "Bergen", 7, 7),
             ('202501', "Oslo", 10, 10),
-            ('I alt', "I alt", 9, 9),
             ('202502', "I alt", 9, 9),
             ('202502', "Bergen", None, None),
             ('202502', "Oslo", None, None)
         ]
         expected_kontroll_per_tellepunkt = [
-            ('I alt', "I alt", "antall", 17, 0, 0),
             ('202501', "I alt", "antall", 17, 0, 0),
             ('202501', "Bergen", "antall", 7, 0, 0),
             ('202501', "Oslo", "antall", 10, 0, 0),
-            ('I alt', "I alt", "antall", 9, 0, 0),
             ('202502', "I alt", "antall", 9, 0, 0),
             ('202502', "Bergen", "antall", 6, 0, 1),
             ('202502', "Oslo", "antall", 3, 1, 1),
@@ -169,8 +165,11 @@ group by periode, region
         assert sorted(kontroll_rows) == sorted(expected_kontroll)
 
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate_table}_meta")
-            meta = {field: value.read() if value is not None else None for field, value in cursor.fetchall()}
+            cursor.execute(
+                f"SELECT type, keyword, language, value FROM SYSTEM.{aggregate_table}_meta"
+            )
+            meta = {(row_type, keyword, language): value
+                    for row_type, keyword, language, value in cursor.fetchall()}
             cursor.execute(
                 "SELECT status, aggregat_id, tabell, navn, antall_rader, antall_prikket "
                 f"FROM SYSTEM.{log_table} WHERE tabell = :tabell",
@@ -181,10 +180,10 @@ group by periode, region
                 for status, aggregat_id, table, name, count, masked in cursor.fetchall()
             ]
 
-        assert meta["id"] == "21000"
-        assert meta["navn"] == "Aggregerte verdier"
-        assert meta["periodisering"] == "periode"
-        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 8, 4)]
+        assert meta["PX", "MATRIX", None] == "21000"
+        assert meta["PX", "TITLE", "NO"] == "Aggregerte verdier"
+        assert meta["CS", "TIMEVAL", None] == "periode"
+        assert log_rows == [("OK", "21000", aggregate_table, "Aggregerte verdier", 6, 4)]
     finally:
         with oracle_connection.cursor() as cursor:
             for table in (

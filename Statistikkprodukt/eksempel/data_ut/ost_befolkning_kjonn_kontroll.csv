@@ -1,7 +1,5 @@
-periode,kjonn,antall,primary,suppressed
-I alt,I alt,167000.0,False,False
-202501,Kvinner,80000.0,False,False
-202501,Menn,87000.0,False,False
-I alt,I alt,167300.0,False,False
-202502,Kvinner,80300.0,False,False
-202502,Menn,87000.0,False,False
+periode,kjonn,tellepunkt,verdi,primary,suppressed
+202501,Kvinner,antall,80000.0,False,False
+202501,Menn,antall,87000.0,False,False
+202502,Kvinner,antall,80300.0,False,False
+202502,Menn,antall,87000.0,False,False

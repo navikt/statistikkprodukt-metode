@@ -171,8 +171,8 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
     })
     long_text = "Æøå" * 5000
     table_metadata = TableMetadata(
-        Metadata(navn="OBT navn", navn_en="Name", innhold=long_text, innhold_en="Content"),
-        {},
+        Metadata(navn="OBT navn", navn_en="Name", innhold="Æøå" * 600, innhold_en="Content"),
+        TableMetadata.from_aggregate(aggregate).columns,
     )
     logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [aggregate])
     logg.resultater = [
@@ -195,11 +195,20 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
         oracle.write_log(oracle_connection, "SYSTEM", success)
 
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate.meta_tabell}")
-            meta = {name: value.read() for name, value in cursor.fetchall()}
-            assert meta["navn"] == "Oppdatert"
-            assert meta["innhold"] == long_text
-            assert len(meta) == len(meta_table.META_FIELDS)
+            cursor.execute(
+                f"SELECT type, keyword, scope, language, value "
+                f"FROM SYSTEM.{aggregate.meta_tabell}"
+            )
+            meta = [dict(zip(meta_table.META_COLUMNS, row)) for row in cursor.fetchall()]
+            expected = meta_table.metadata_rows(aggregate, table_metadata)
+            assert sorted(meta, key=repr) == sorted(expected, key=repr)
+            assert next(row["value"] for row in meta
+                        if row["keyword"] == "TITLE" and row["language"] == "NO") == "Oppdatert"
+            cursor.execute(
+                f"SELECT COUNT(*) FROM SYSTEM.{aggregate.meta_tabell} "
+                "WHERE dvh_sist_oppdatert IS NULL"
+            )
+            assert cursor.fetchone() == (0,)
 
             cursor.execute(
                 "SELECT status, db_bruker, commit_hash, konfigurasjon, perioder, feilmelding, "
@@ -706,7 +715,7 @@ def test_process_aggregate_only_masks_selected_periods(
     monkeypatch.setattr(
         oracle,
         "read_metadata",
-        lambda *args: TableMetadata(table=Metadata(), columns={}),
+        lambda *args: TableMetadata.from_aggregate(aggregate),
     )
     monkeypatch.setattr(oracle, "write_comments", lambda *args: None)
     monkeypatch.setattr(oracle, "write_kontroll_comments", lambda *args: None)

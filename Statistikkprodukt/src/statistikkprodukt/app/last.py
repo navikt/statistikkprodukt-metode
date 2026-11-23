@@ -6,9 +6,10 @@ from pathlib import Path
 
 import oracledb
 import pandas as pd
+from pandas import DataFrame
 from pydantic import SecretStr
 from statistikkprodukt import oracle, csv
-from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer
+from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer, oslo_now
 from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_secret, StorageOption
 from statistikkprodukt.prikking import prikking
 
@@ -431,16 +432,18 @@ def _write_output(
         config_directory: Path,
         dry_run: bool,
 ) -> TableMetadata | None:
-    """Sender prikkede data og kontrolldata til CSV eller Oracle."""
+    """Sender prikkede data, kontrolldata og metadata til CSV eller Oracle."""
     LOGGER.debug(
         "Skriver resultat for %s til %s (prepub=%d rader, kontroll=%d rader).",
         aggregate.tabell, transfer.target, len(prepub), len(kontroll),
     )
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
+        meta, metadata = _get_meta_table_data(aggregate, configuration, transfer)
         csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
         csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
-        return None
+        csv.write_csv(meta, directory, aggregate, aggregate.meta_tabell, dry_run=dry_run)
+        return metadata
     else:
         return _write_database(
             configuration,
@@ -450,6 +453,22 @@ def _write_output(
             transfer,
             dry_run=dry_run,
         )
+
+def _get_meta_table_data(aggregate: Aggregate, configuration: Configuration, transfer: Transfer) -> tuple[
+    DataFrame, TableMetadata]:
+    if transfer.source == StorageOption.DB:
+        if transfer.connection is None:
+            raise RuntimeError("Databasetilkobling mangler.")
+        metadata = oracle.read_metadata(
+            transfer.connection, configuration.connection.schema_name, aggregate
+        )
+    else:
+        metadata = TableMetadata.from_aggregate(aggregate)
+    meta = pd.DataFrame(
+        oracle.metadata_rows(aggregate, metadata), columns=oracle.META_COLUMNS
+    )
+    meta["dvh_sist_oppdatert"] = oslo_now()
+    return meta, metadata
 
 
 def _write_database(

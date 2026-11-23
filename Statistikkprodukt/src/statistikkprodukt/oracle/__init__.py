@@ -10,7 +10,9 @@ from statistikkprodukt.oracle.log_table import (
     write_log,
 )
 from statistikkprodukt.oracle.meta_table import (
+    META_COLUMNS,
     create_meta_table_statement,
+    metadata_rows,
     write_metadata_table,
 )
 from statistikkprodukt.oracle.operations import (
@@ -28,6 +30,7 @@ from statistikkprodukt.oracle.operations import (
 )
 
 __all__ = [
+    "META_COLUMNS",
     "LOG_TABLE",
     "connect",
     "comment_statements",
@@ -39,6 +42,7 @@ __all__ = [
     "create_table_statement",
     "parse_metadata",
     "read_metadata",
+    "metadata_rows",
     "read_periods",
     "read_query",
     "read_target_periods",
