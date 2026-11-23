@@ -224,50 +224,174 @@ Per småaggregat må det lages:
 
 For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
 
-Eksempel på aggregatkonfigurasjon:
+Fullstendig eksempel på aggregatkonfigurasjon:
 
 ```yaml
+# Samler innstillinger og metadata for ett aggregat.
 definisjon:
-  # Registrer en unik id (21000–22999); test-ID-er '00000'–'09999' krever --ingen-id-validering.
+  # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.txt.
+  # Produksjons id-er er (21000–22999); test-ID-er '00000'–'09999' (det krever --ingen-id-validering flagg).
+  # PX: Grunnlag for MATRIX; eksportøren legger på NAV-prefiks ved Nav-publisering.
   id: 21000
-  referanse-tabell: befolkning
-  
-  # Metadata per småaggregat, påkrevd  
-  navn: "Kort navn på norsk"
-  navn-en: "Short name in English"
-  innhold: "Beskrivelse av innhold på norsk"
-  innhold-en: "Description of content in English"
-  
-  # Konfigurasjon av aggregat
+  # Angir kildetabellen som leverer manglende metadata gjennom databasekommentarer. OBT tabell.
+  referanse-tabell: obt_ab_befolkning_periode
+  # Angir aggregatets norske navn.
+  # PX: TITLE på norsk, brukt som tabellens tittel i menyen.
+  navn: Befolkning etter periode og alder
+  # Angir aggregatets engelske navn.
+  # PX: TITLE på engelsk.
+  navn-en: Population by period and age
+  # Beskriver aggregatets innhold på norsk.
+  # PX: CONTENTS på norsk, første del av overskriften når tabellen åpnes.
+  innhold: Befolkning
+  # Beskriver aggregatets innhold på engelsk.
+  # PX: CONTENTS på engelsk.
+  innhold-en: Population
+  # Angir teamet som har ansvar for aggregatet.
+  ansvarlig-team: Datateam
+
+  # Samler metadata og visningsinnstillinger som gjelder Statistikkbanken.
+  statistikkbank:
+    # Angir statistikkens norske tema på nivå 2 i menyhierarkiet.
+    # PX: SUBJECT på norsk.
+    tema: Befolkning
+    # Angir statistikkens engelske tema.
+    # PX: SUBJECT på engelsk.
+    tema-en: Population
+    # Angir et kode for temaet; bruksområde må avklares med Statistikkbanken.
+    # PX: SUBJECT_KORT; navnet må samsvare med Statistikkbankens mapping av tema-koden.
+    tema-kode: BEFOLKNING
+    # Angir fagområdets navn på nivå 1 i menyhierarkiet.
+    # PX: SUBJECT-AREA; navnet må samsvare med Statistikkbankens mapping av områdekoden.
+    fagomraade: Arbeidsmarked
+    # Angir fagområdets kode fra Statistikkbankens kodeverk.
+    # PX: SUBJECT-CODE.
+    fagomraade-kode: AM
+
+    # Gir en norsk merknad og lenke til Om statistikken, gjerne som Markdown.
+    # PX: NOTE på norsk.
+    merknad: |
+      Se [Om statistikken](https://www.nav.no/statistikk).
+    # Gir den engelske merknaden og lenken til Om statistikken.
+    # PX: NOTE på engelsk.
+    merknad-en: |
+      See [About the statistics](https://www.nav.no/statistikk).
+    # Gir en norsk merknad som skal fremheves over den vanlige merknaden.
+    # PX: NOTEX på norsk, vist i en blå boks i Statistikkbanken.
+    fremhevet-merknad: Brudd i tidsserien fra januar 2025.
+    # Gir den engelske varianten av den fremhevede merknaden.
+    # PX: NOTEX på engelsk.
+    fremhevet-merknad-en: Break in the time series from January 2025.
+
+    # Angir om statistikken ikke lenger skal oppdateres.
+    # PX: DISCONTINUED, med true som YES og false som NO.
+    avsluttet: false
+    # Angir om tabellen publiseres som offisiell statistikk.
+    # PX: OFFICIAL-STATISTICS, med true som YES og false som NO.
+    offisiell-statistikk: true
+
+    # Angir antall måltall i startvisningen; positivt velger første N, negativt siste N, 0 ingen.
+    # PX: Navs SQ STAT_VAR-rad, som eksportøren bruker til å lage startvisningen.
+    startvisning-antall-tellepunkter: 1
+
+    # Lister kontaktpunkter som kan svare på spørsmål om statistikken.
+    # PX: CONTACT; eksportøren formaterer kontaktfeltene med # som skilletegn.
+    kontakter:
+      # Angir seksjonen som kan gi informasjon om statistikken.
+      # PX: Seksjonsdelen av CONTACT.
+      - seksjon: Statistikkseksjonen
+        # Angir kontaktpunktets e-postadresse.
+        # PX: E-postdelen av CONTACT.
+        epost: nav.statistikk@nav.no
+        # Angir et valgfritt telefonnummer som tekst.
+        # PX: Telefondelen av CONTACT.
+        telefonnummer: "1234"
+
+  # Beskriver tidsdimensjonen som brukes til periodevalg og inkrementell lasting.
   periodisering:
+    # Angir datakolonnen som inneholder perioden.
+    # PX: Navs CS TIMEVAL-kolonnereferanse; dimensjonen inngår også i STUB eller HEADING.
     kolonne: periode
-    # Følgende metadata kan hentes fra kolonnekommentarer i OBT-tabellen,
-    # men kan også overskrives her. Det samme gjelder for tellepunkter og variabler.
+    # Angir tidsdimensjonens norske visningsnavn.
+    # PX: Norsk visningsnavn via Navs CR-metadata for periodekolonnen.
     navn: Periode
+    # Angir tidsdimensjonens engelske visningsnavn.
+    # PX: Engelsk visningsnavn via Navs CR-metadata for periodekolonnen.
     navn-en: Period
-    innhold: Månedsperiode
-    innhold-en: Month period
-  
-  tellepunkter:
-    - kolonne: antall
-      navn: Antall personer
-      navn-en: Number of people
-      innhold: Antall personer i gruppen.
-      innhold-en: Number of people in the group.
-    
+    # Beskriver periodenes betydning og format på norsk.
+    innhold: Månedsperiode på formatet YYYYMM.
+    # Beskriver periodenes betydning og format på engelsk.
+    innhold-en: Month in YYYYMM format.
+    # Samler Statistikkbankens visningsinnstillinger for tidsdimensjonen.
+    statistikkbank:
+      # Velger siste 24 perioder; positivt velger første N, negativt siste N, 0 skjuler variabelen.
+      # PX: Navs SQ-rad for periodekolonnen; alfabetisk sortering må tilsvare kronologisk orden.
+      startvisning-antall-verdier: -24
+
+  # Lister dimensjonene som dataene fordeles etter.
+  # PX: Dimensjonskolonnene er grunnlag for Navs CS STUB og CS HEADING.
   variabler:
+    # Angir datakolonnen for dimensjonen.
+    # PX: Kolonnereferanse i Navs CS STUB eller CS HEADING og tilhørende CR-metadata.
     - kolonne: alder
+      # Angir dimensjonens norske visningsnavn.
+      # PX: Norsk visningsnavn via Navs CR-metadata for alder.
       navn: Alder
+      # Angir dimensjonens engelske visningsnavn.
+      # PX: Engelsk visningsnavn via Navs CR-metadata for alder.
       navn-en: Age
-      innhold: Alder på personene i gruppen.
-      innhold-en: Age of the people in the group.
-    
-  # Konfigurasjon av last
-  inkrementell-strategi: overskriv_alt  # overskriv_ikke, overskriv_alt, overskriv_siste_periode
-  
-  # Konfigurasjon av prikking
-  formula: "~ periode * alder"
+      # Beskriver dimensjonens innhold på norsk.
+      innhold: Alder i ettårige grupper.
+      # Beskriver dimensjonens innhold på engelsk.
+      innhold-en: Age in single-year groups.
+      # Samler Statistikkbankens visningsinnstillinger for dimensjonen.
+      statistikkbank:
+        # Velger første 12 verdier; positivt velger første N, negativt siste N, 0 skjuler variabelen.
+        # PX: Navs SQ-rad for alder, med verdier valgt etter alfabetisk sortering.
+        startvisning-antall-verdier: 12
+
+  # Lister måltallskolonnene som behandles og prikkes hver for seg.
+  # PX: Navs CS DATA og måltallsdimensjonen STAT_VAR hos eksportøren.
+  tellepunkter:
+    # Angir datakolonnen som inneholder måltallet.
+    # PX: Kolonnereferanse i Navs CS DATA og tilhørende CR-metadata.
+    - kolonne: antall
+      # Angir måltallets norske visningsnavn.
+      # PX: Norsk etikett for måltallet via Navs CR-metadata.
+      navn: Antall personer
+      # Angir måltallets engelske visningsnavn.
+      # PX: Engelsk etikett for måltallet via Navs CR-metadata.
+      navn-en: Number of people
+      # Beskriver måltallet på norsk; dette er ikke måleenheten.
+      innhold: Antall personer i gruppen.
+      # Beskriver måltallet på engelsk; dette er ikke måleenheten.
+      innhold-en: Number of people in the group.
+      # Angir måleenheten på norsk.
+      # PX: UNITS via Navs enhetsmetadata, med enhetsreferanse i CS DATA i versjon 1.
+      enhet: personer
+      # Angir måleenheten på engelsk.
+      # PX: Engelsk UNITS via Navs enhetsmetadata.
+      enhet-en: persons
+      # Samler Statistikkbankens innstillinger for måltallets eksport og visning.
+      statistikkbank:
+        # Angir antall desimaler som skal vises, uten å endre lagrede data.
+        # PX: PRECISION per måltall; støtte hos Nav må avklares.
+        desimaler-visning: 0
+        # Angir antall desimaler som skal bevares i PX-eksporten, ikke avrunding ved generell lasting.
+        # PX: Grunnlag for global DECIMALS via Navs CS DATA; eksportøren samordner alle måltall.
+        desimaler-lagring: 0
+
+  # Bestemmer hvordan innkommende perioder erstatter eller supplerer eksisterende data.
+  # Valgmuligheter:
+    # - overskriv_alt: erstatter alle eksisterende data for perioden.
+    # - overskriv_ikke: beholder eksisterende data for perioden, og legger til nye.
+    # - overskriv_siste_periode: erstatter den siste periode, legg til nye perioder, behold eldre perioder.
+  inkrementell-strategi: overskriv_alt
+  # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
+  formula: "~ periode : alder"
+  # Angir om dataene skal prikkes.
   prikking: true
+  # Angir om særskilt behandling skal brukes.
   saerskilt: false
 ```
 
