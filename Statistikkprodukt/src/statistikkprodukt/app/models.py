@@ -115,7 +115,7 @@ class Kjorelogg:
                 "aggregat_id": aggregate.id,
                 "tabell": aggregate.tabell,
                 **{name: getattr(resolved, name) for name in Metadata.model_fields},
-                "obt_tabell": aggregate.obt_tabell,
+                "referanse_tabell": aggregate.referanse_tabell,
                 "periodisering": aggregate.periodisering.kolonne,
                 "inkrementell": str(aggregate.inkrementell_strategi),
                 "formula": aggregate.formula,

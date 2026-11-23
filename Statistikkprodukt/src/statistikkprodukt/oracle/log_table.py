@@ -33,7 +33,7 @@ LOG_COLUMNS = (
     "navn_en",
     "innhold",
     "innhold_en",
-    "obt_tabell",
+    "referanse_tabell",
     "periodisering",
     "inkrementell",
     "formula",
@@ -70,7 +70,7 @@ def create_log_table_statement(schema: str) -> str:
         "  navn_en               VARCHAR2(4000 char),\n"
         "  innhold               CLOB,\n"
         "  innhold_en            CLOB,\n"
-        "  obt_tabell            VARCHAR2(261 CHAR),\n"
+        "  referanse_tabell      VARCHAR2(261 CHAR),\n"
         "  periodisering         VARCHAR2(128 CHAR),\n"
         "  inkrementell          VARCHAR2(30 CHAR),\n"
         "  formula               VARCHAR2(4000 CHAR),\n"

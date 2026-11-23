@@ -59,7 +59,7 @@ def test_read_metadata_uses_obt_table(monkeypatch):
     monkeypatch.setattr(aggregate_table, "_fetch_column_metadata", fetch_column)
 
     aggregate = configuration().aggregater[0]
-    aggregate.obt_tabell = "obt.obt_kilde"
+    aggregate.referanse_tabell = "obt.obt_kilde"
     result = aggregate_table.read_metadata(Connection(), "TEST", aggregate)
 
     assert calls == [

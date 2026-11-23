@@ -169,7 +169,7 @@ CREATE TABLE ost_logg (
   navn_en               VARCHAR2(4000 CHAR),
   innhold               CLOB,
   innhold_en            CLOB,
-  obt_tabell            VARCHAR2(261 CHAR),
+  referanse_tabell      VARCHAR2(261 CHAR),
   periodisering         VARCHAR2(128 CHAR),
   inkrementell          VARCHAR2(30 CHAR),
   formula               VARCHAR2(4000 CHAR),
@@ -230,7 +230,7 @@ Eksempel på aggregatkonfigurasjon:
 definisjon:
   # Registrer en unik id (21000–22999); test-ID-er '00000'–'09999' krever --ingen-id-validering.
   id: 21000
-  obt-tabell: befolkning
+  referanse-tabell: befolkning
   
   # Metadata per småaggregat, påkrevd  
   navn: "Kort navn på norsk"
@@ -271,7 +271,7 @@ definisjon:
   saerskilt: false
 ```
 
-`obt-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
+`referanse-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
 
 Metadata på `periodisering`, `variabler` og `tellepunkter` kommer fra kolonnekommentarer med tags, med mindre man overskriver dem i konfigurasjonsfilen. Tags i kolonnekommentarer er som følger:
 

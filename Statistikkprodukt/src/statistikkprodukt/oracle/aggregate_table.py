@@ -75,7 +75,7 @@ def read_metadata(
 
     Data fra konfigurasjon prioriteres over databasekommentarer.
     """
-    table_parts = aggregate.obt_tabell.split(".")
+    table_parts = aggregate.referanse_tabell.split(".")
     owner, table_name = (table_parts[0], table_parts[1]) if len(table_parts) == 2 else (
         schema,
         table_parts[0],

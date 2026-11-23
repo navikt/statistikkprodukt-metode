@@ -28,7 +28,7 @@ def configuration():
                     "innhold": "Innhold",
                     "innhold-en": "Content",
                     "tabell": "TABELL",
-                    "obt-tabell": "OBT_TABELL",
+                    "referanse-tabell": "OBT_TABELL",
                     "sporring_sql": "select.sql",
                     "periodisering": {
                         "navn": "Periodisering",
@@ -168,7 +168,7 @@ definisjon:
   innhold: {table} 
   innhold-en: {table}
   id: 21000
-  obt-tabell: OBT_TABELL
+  referanse-tabell: OBT_TABELL
   periodisering:
     navn: Periode
     navn-en: Period
@@ -200,7 +200,7 @@ definisjon:
     assert config_directory == tmp_path
     assert [aggregate.tabell for aggregate in config.aggregater] == ["tabell"]
     aggregate = config.aggregater[0]
-    assert aggregate.obt_tabell == "obt_tabell"
+    assert aggregate.referanse_tabell == "obt_tabell"
     assert aggregate.sporring_sql == "aggregater/tabell.sql"
     assert aggregate.periodisering.kolonne == "periode"
     assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
@@ -234,7 +234,7 @@ definisjon:
   innhold: dummy 
   innhold-en: dummy
   id: "21000"
-  obt-tabell: OBT_TABELL
+  referanse-tabell: OBT_TABELL
   periodisering:
     kolonne: periode
   inkrementell-strategi: overskriv_ikke

@@ -141,8 +141,8 @@ class Aggregate(StrictModel):
     navn: str = Field(description="Navn på aggregatet.")
     navn_en: str = Field(alias="navn-en", description="Engelsk navn på aggregatet.")
     tabell: OracleIdentifier = Field(description="Navn på måltabellen.")
-    obt_tabell: OracleTableIdentifier = Field(
-        alias="obt-tabell",
+    referanse_tabell: OracleTableIdentifier = Field(
+        alias="referanse-tabell",
         description="Kildetabellen som brukes til å hente metadata.",
     )
     innhold: str = Field(description="Beskrivelse av innholdet i aggregatet.")

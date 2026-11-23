@@ -26,7 +26,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
-11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `obt-tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
+11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `referanse-tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
 12. **R boundary:** `prikking` calls the R script and returns two dataframes, one masked and one with added metadata for debugging.
 13. **Language and errors:** CLI help and output, configuration validation, logs, documentation, and other user-facing errors must be in Norwegian. Exit with `0` for success, `2` for CLI or configuration errors, and `1` for operational failures.
 14. **Container:** Use an Ubuntu base image and install Python and R. Defer a Chainguard-based image.
@@ -96,7 +96,7 @@ definisjon:
   innhold: Befolkning fordelt etter periode og alder.
   innhold-en: Population distributed by period and age.
   id: 21000
-  obt-tabell: obt_befolkning
+  referanse-tabell: obt_befolkning
   periodisering:
     navn: Period
     navn-en: Period
@@ -114,7 +114,7 @@ definisjon:
     - kolonne: alder
 ```
 
-`obt-tabell` names the OBT source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `OBT.BEFOLKNING_ALDER`; an unqualified name uses the configured connection schema. `navn`, `navn-en`, `innhold` and `innhold-en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `obt-tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
+`referanse-tabell` names a source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `MY_SCHEMA.OBT_BEFOLKNING`; an unqualified name uses the configured connection schema. `navn`, `navn-en`, `innhold` and `innhold-en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `referanse-tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
 
 ## CLI
 

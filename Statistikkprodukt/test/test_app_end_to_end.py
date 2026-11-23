@@ -55,7 +55,7 @@ aggregater:
         f"""
 definisjon:
   id: "21000"
-  obt-tabell: {source_table}
+  referanse-tabell: {source_table}
   navn: Aggregerte verdier
   navn-en: Aggregated values
   innhold: Verdier gruppert etter periode og region.
