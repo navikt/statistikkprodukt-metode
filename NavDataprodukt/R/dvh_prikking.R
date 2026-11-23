@@ -18,6 +18,7 @@ dvh_prikking <- function(data, formula, tallKol, prikking,saerskilt) {
   colnames(data) <- tolower(colnames(data))
 
   freqVar <- tolower(tallKol)
+  varKol <- setdiff(names(data), freqVar)
   data[[freqVar]][is.na(data[[freqVar]])] <- 0 # Maa legges paa hvis verdikolonner kan inneholde NULL
 
   if(tolower(prikking) == 'false'){
