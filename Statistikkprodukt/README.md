@@ -19,22 +19,40 @@ Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerh�
 ## Kom i gang
 
 ### Lokal / KNAST
-Last ned repositoriet og installer python avhengigheter:
+
+Installer `statistikkprodukt` med uv:
 ```sh
-uv sync
-uv run statistikkprodukt --help
+# legg til @branch eller @tag for å velge versjon
+uv tool install git+https://github.com/navikt/statistikkprodukt-metode
 ```
 
-KNAST har allerede R installert. For å installere eller oppdatere R avhengighetene for prikking, kjør:
+Har du allerede installert, oppdater til nyeste versjon med:
 ```sh
-uv run statistikkprodukt installer-r-pakker
+uv tool upgrade statistikkprodukt
+```
+
+Test om installasjonen er vellykket:
+```sh
+statistikkprodukt --help
+```
+
+For å gå gjennom eksempelet, klon repoet. Men det er ikke nødvendig for å bruke verktøyet.
+```sh
+git clone https://github.com/navikt/statistikkprodukt-metode.git
+````
+
+KNAST har allerede R installert. For å installere eller oppdatere R avhengighetene for prikking, åpne brannmuren til
+- TODO
+og kjør:
+```sh
+statistikkprodukt installer-r-pakker
 ```
 
 Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 
 ```sh
 cd Statistikkprodukt/eksempel
-uv run statistikkprodukt last \
+statistikkprodukt last \
   --config konfigurasjon.yml \
   --ingen-id-validering \
   --kilde=csv \
@@ -57,7 +75,7 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-uv run statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
+statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
 ```
 
 ### Kjør mot databasen
@@ -85,14 +103,14 @@ Uten `--db` vises bare DDL.
 
 Kjør lasten fra databasen til csv:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
+statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
 ```
 
 CSV filene i `data_ut` overskrives. Du kan slette de for å verifisere at data kommer inn det.
 
 Kjør lasten fra databasen til databasen:
 ```shell
-uv run statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
+statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
 ```
 
 Sjekk resultatene i Oracle:
@@ -107,10 +125,10 @@ Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppsla
 
 ```sh
 # For alle aggregater i konfigurasjonen
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db
+statistikkprodukt skjema opprett --config konfigurasjon.yml --db
 
 # For enkelte aggregater
-uv run statistikkprodukt skjema opprett --config konfigurasjon.yml --db ost_2 ost_1
+statistikkprodukt skjema opprett --config konfigurasjon.yml --db ost_2 ost_1
 ```
 
 Tabellene per aggregat:
