@@ -9,10 +9,10 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports:
     SSBtools,
-    GaussSuppression
-Suggests: 
-    openxlsx,
-    readxl,
-	DBI,
+    GaussSuppression,
+    DBI,
     odbc,
     rstudioapi
+Suggests:
+    openxlsx,
+    readxl
