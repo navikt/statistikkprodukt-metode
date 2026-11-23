@@ -59,8 +59,7 @@ og kjør:
 ```sh
 statistikkprodukt installer-r-pakker
 ```
-Her må du svare "yes" på spørsmålet "Would you like to create a personal library".
-Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet.
+Her må du svare "yes" på spørsmålet "Would you like to create a personal library" og "Y" på "Do you want to continue". Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet.
 
 Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 
