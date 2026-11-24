@@ -181,6 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
     installer_r_pakker = commands.add_parser(
         "installer-r-pakker", help="Installer R-pakker som kreves for å kjøre prikking og andre statistikkprodukter."
     )
+    installer_r_pakker.add_argument(
+        "--dev-lokal-r-pakke",
+        action="store_true",
+        help="Installer R-pakken fra lokal repository i stedet for fra GitHub. Fungerer kun for utvikling og testing.",
+    )
     _add_logging_options(installer_r_pakker)
 
     testenv = commands.add_parser(
@@ -264,7 +269,7 @@ def main() -> None:
             )
         elif args.command == "installer-r-pakker":
             LOGGER.debug("Kjører 'installer-r-pakker'.")
-            installer_r_pakker.installer_r_pakker()
+            installer_r_pakker.installer_r_pakker(args.dev_lokal_r_pakke)
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)
     except ConfigError as exc:

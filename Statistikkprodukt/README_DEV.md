@@ -67,3 +67,11 @@ uv run statistikkprodukt testenv pytest
 # eller med argumenter til pytest, som må følge '--':
 uv run statistikkprodukt testenv pytest -- -q
 ```
+
+## Endringer i R pakken
+
+Til vanlig blir prikking R pakken installert fra den nyeste versjonen på GitHub. For å utvikle og bruke lokale endringer,
+må man installere R pakken fra kildekoden i `NavDataprodukt/`:
+    
+```sh
+uv run statistikkprodukt install_r_package --dev-lokal-r-pakke

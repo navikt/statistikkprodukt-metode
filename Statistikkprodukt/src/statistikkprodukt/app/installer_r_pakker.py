@@ -75,8 +75,13 @@ def _sjekk_proxytilgang() -> None:
         raise SystemExit(1)
 
 
-def installer_r_pakker() -> None:
-    """Installerer R-pakker som kreves for prikking."""
+def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
+    """Installerer R-pakker som kreves for prikking.
+    
+    Args:
+        dev_lokal_r_pakke (bool): Hvis True, installerer R-pakken fra lokal kilde i stedet for fra GitHub. 
+            Dette er nyttig for utvikling og testing.
+    """
     LOGGER.info("Installerer R-avhengigheter. R skriver ut mange warnings, men de kan ignoreres.")
     _sjekk_proxytilgang()
 
@@ -108,15 +113,18 @@ def installer_r_pakker() -> None:
             StrVector(["SSBtools", "GaussSuppression", "pak"]),
             repos=repository,
         )
-        LOGGER.info("Installerer 'NavDataprodukt'...")
-        # utils.install_packages(
-        #     StrVector([str(pkg_dir)]),
-        #     repos=rpy2.rinterface.NULL,
-        #     type="source",
-        #     upgrade=True
-        # )
-        pak = rpy2.robjects.packages.importr("pak")
-        pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)
+        if dev_lokal_r_pakke:
+            LOGGER.info("Installerer 'NavDataprodukt' fra lokal repository...")
+            utils.install_packages(
+                StrVector([str(pkg_dir)]),
+                repos=rpy2.rinterface.NULL,
+                type="source",
+                upgrade=True
+            )
+        else:
+            LOGGER.info("Installerer 'NavDataprodukt' fra GitHub...")
+            pak = rpy2.robjects.packages.importr("pak")
+            pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)
 
         LOGGER.info("R-pakker installert.")
 
