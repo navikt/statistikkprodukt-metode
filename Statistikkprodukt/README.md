@@ -16,6 +16,28 @@ For hvert aggregat lages `{tabell}_prepub` med prikkede data, `{tabell}_kontroll
 
 Denne filen er brukerdokumentasjon. [README_DEV.md](README_DEV.md) er utviklerhåndbok.
 
+## Innhold
+
+- [Statistikkprodukt](#statistikkprodukt)
+  - [Kom i gang](#kom-i-gang)
+    - [Lokal / KNAST](#lokal--knast)
+    - [Sjekk konfigurasjonen](#sjekk-konfigurasjonen)
+    - [Kjør mot databasen](#kjør-mot-databasen)
+- [System dokumentasjon](#system-dokumentasjon)
+  - [Databaseskjema](#databaseskjema)
+  - [Konfigurasjon](#konfigurasjon)
+    - [Hovedkonfigurasjonsfil](#hovedkonfigurasjonsfil)
+  - [Konfigurasjon per småaggregat](#konfigurasjon-per-småaggregat)
+    - [Statistikkproduktregisteret](#statistikkproduktregisteret)
+    - [Inkrementelle laster](#inkrementelle-laster)
+      - [`legg_til_nye_perioder`](#legg_til_nye_perioder)
+      - [`overskriv_eksisterende_perioder`](#overskriv_eksisterende_perioder)
+    - [Hemmeligheter](#hemmeligheter)
+      - [GSM](#gsm)
+      - [Miljøvariabler](#miljøvariabler)
+      - [Lokal utvikling](#lokal-utvikling)
+- [Bruk av KI](#bruk-av-ki)
+
 ## Kom i gang
 
 ### Lokal / KNAST
