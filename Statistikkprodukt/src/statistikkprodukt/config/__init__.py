@@ -27,7 +27,7 @@ from .app_schema import (
     DatabaseConnection,
     StorageOption,
 )
-from .loader import format_validation_error, load_configuration, resolve_secret
+from .loader import format_validation_error, load_configuration, resolve_config
 from .register import StatistikkproduktRegister
 
 __all__ = [
@@ -55,7 +55,7 @@ __all__ = [
     "is_not_empty",
     "is_test_id",
     "load_configuration",
-    "resolve_secret",
+    "resolve_config",
     "validate_identifier",
     "validate_table_identifier",
 ]

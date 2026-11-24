@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from pydantic import ValidationError
 
@@ -172,65 +172,98 @@ def format_validation_error(error: dict[str, Any]) -> str:
     return f"{location}: {message}"
 
 
-def resolve_secret(reference: str, *, password: bool = False) -> str:
+def resolve_config(config_key: str, reference: str, *, password: bool = False) -> str:
     """Slår opp en bokstavelig verdi eller støttet hemmelighetsreferanse."""
     if "://" not in reference:
         if password:
-            raise ConfigError("Passord må angis som en hemmelighetsreferanse.")
+            raise ConfigError(
+                f"Passord for {config_key} må angis som en hemmelighetsreferanse "
+                "(f.eks. 'terminal://')."
+            )
         return reference
 
     parsed = urlsplit(reference)
-    LOGGER.debug("Løser hemmelighetsreferanse med skjema %s://.", parsed.scheme)
+    LOGGER.debug("Løser referansen for %s med skjema %s://.", config_key, parsed.scheme)
     if parsed.scheme == "env":
-        key = parsed.netloc or parsed.path.lstrip("/")
-        value = os.environ.get(key)
-        if value is None:
-            raise ConfigError(f"Miljøvariabelen {key} er ikke satt.")
-        return value
-    if parsed.scheme == "terminal":
-        if not sys.stdin.isatty():
-            raise ConfigError("terminal:// kan bare brukes når standard input er en terminal.")
-        value = getpass.getpass("Skriv inn hemmelig verdi: ")
-        if not value:
-            raise ConfigError("Den innleste hemmeligheten kan ikke være tom.")
-        return value
-    if parsed.scheme == "gsm":
-        from google.api_core.exceptions import GoogleAPIError
-        from google.auth.exceptions import GoogleAuthError
-        from google.cloud import secretmanager
+        return _resolve_config_from_env(config_key, parsed)
+    elif parsed.scheme == "terminal":
+        return _resolve_config_from_terminal(config_key)
+    elif parsed.scheme == "gsm":
+        return _resolve_config_from_gsm(config_key, parsed)
+    else:
+        raise ConfigError(f"Ukjent referanse for {config_key}: {parsed.scheme}://.")
 
-        secret_path = parsed.path.strip("/")
-        if parsed.netloc:
-            secret_path = f"{parsed.netloc}/{secret_path}"
-        parts = secret_path.split("/")
-        key = None
-        if len(parts) >= 7 and parts[-3] == "versions":
-            key = parts.pop()
-        secret_name = "/".join(parts)
-        try:
-            response = secretmanager.SecretManagerServiceClient().access_secret_version(
-                request={"name": secret_name}
-            )
-            payload = response.payload.data.decode("utf-8")
-            if key:
-                values = json.loads(payload)
-                if not isinstance(values, dict) or key not in values:
-                    raise ConfigError(
-                        f"Nøkkelen {key!r} finnes ikke i den lagrede hemmeligheten."
-                    )
-                payload = values[key]
-            if not isinstance(payload, str) or not payload:
+
+def _resolve_config_from_env(config_key: str, parsed_url: SplitResult) -> str:
+    env_var = parsed_url.netloc or parsed_url.path.lstrip("/")
+    value = os.environ.get(env_var)
+    if value is None:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            f"Miljøvariabelen {env_var} er ikke satt."
+        )
+    return value
+
+
+def _resolve_config_from_terminal(config_key: str) -> str:
+    if not sys.stdin.isatty():
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "'terminal://' kan bare brukes når standard input er en terminal."
+        )
+    value = getpass.getpass(f"Tast inn verdien for {config_key}: ")
+    if not value:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "Den inntastete verdien er tom."
+        )
+    return value
+
+
+def _resolve_config_from_gsm(config_key: str, parsed_url: SplitResult) -> str:
+    from google.api_core.exceptions import GoogleAPIError
+    from google.auth.exceptions import GoogleAuthError
+    from google.cloud import secretmanager
+
+    secret_path = parsed_url.path.strip("/")
+    if parsed_url.netloc:
+        secret_path = f"{parsed_url.netloc}/{secret_path}"
+    parts = secret_path.split("/")
+    json_key = None
+    if len(parts) >= 7 and parts[-3] == "versions":
+        json_key = parts.pop()
+    secret_name = "/".join(parts)
+    try:
+        response = secretmanager.SecretManagerServiceClient().access_secret_version(
+            request={"name": secret_name}
+        )
+        payload = response.payload.data.decode("utf-8")
+        if json_key:
+            values = json.loads(payload)
+            if not isinstance(values, dict):
                 raise ConfigError(
-                    "Den refererte hemmelighetsverdien er tom eller ugyldig."
+                    f"Kan ikke lese referansen for {config_key} fra GSM: "
+                    "Den lagrede verdien er ikke et JSON-objekt."
                 )
-            return payload
-        except (
-            GoogleAPIError,
-            GoogleAuthError,
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-        ) as exc:
+            if json_key not in values:
+                raise ConfigError(
+                    f"Kan ikke lese referansen for {config_key} fra GSM: "
+                    f"Nøkkelen {json_key!r} finnes ikke i den lagrede verdien."
+                )
+            payload = values[json_key]
+        if not isinstance(payload, str) or not payload:
             raise ConfigError(
-                "Kunne ikke hente den refererte hemmeligheten fra Google Secret Manager."
-            ) from exc
-    raise ConfigError(f"Ukjent hemmelighetsreferanse: {parsed.scheme}://.")
+                f"Kan ikke lese referansen for {config_key} fra GSM: "
+                "Den refererte verdien er tom eller ugyldig."
+            )
+        return payload
+    except (
+        GoogleAPIError,
+        GoogleAuthError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "Feil i kommunikasjon med Google Secret Manager."
+        ) from exc

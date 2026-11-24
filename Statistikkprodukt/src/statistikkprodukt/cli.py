@@ -95,6 +95,33 @@ def _add_id_validation_option(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Utfører valgt testmiljøkommando."""
+    from statistikkprodukt.app import testenv
+
+    if args.testenv_command == "setup":
+        testenv.setup()
+    elif args.testenv_command == "teardown":
+        testenv.teardown()
+    else:
+        arguments = list(args.pytest_args)
+        if arguments:
+            if arguments[0] == "--":
+                arguments.pop(0)
+            else:
+                parser.error("Argumenter til pytest må starte med --.")
+
+        pytest_exit_code = testenv.run_pytest(arguments)
+        raise SystemExit(pytest_exit_code)
+
+
+def _report_error(message: str, *, debug: bool) -> None:
+    """Viser en norsk feilmelding og eventuelle feilsøkingsdetaljer."""
+    LOGGER.error(f"{message}")
+    if debug:
+        LOGGER.exception("Detaljer for feilen:")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Bygger kommandolinjens underkommandoer og argumenter."""
     parser = argparse.ArgumentParser(
@@ -252,33 +279,6 @@ def main() -> None:
             debug=(args.command == "testenv" or args.log_level == "DEBUG"),
         )
         raise SystemExit(1) from None
-
-
-def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """Utfører valgt testmiljøkommando."""
-    from statistikkprodukt.app import testenv
-
-    if args.testenv_command == "setup":
-        testenv.setup()
-    elif args.testenv_command == "teardown":
-        testenv.teardown()
-    else:
-        arguments = list(args.pytest_args)
-        if arguments:
-            if arguments[0] == "--":
-                arguments.pop(0)
-            else:
-                parser.error("Argumenter til pytest må starte med --.")
-
-        pytest_exit_code = testenv.run_pytest(arguments)
-        raise SystemExit(pytest_exit_code)
-
-
-def _report_error(message: str, *, debug: bool) -> None:
-    """Viser en norsk feilmelding og eventuelle feilsøkingsdetaljer."""
-    LOGGER.error(f"{message}")
-    if debug:
-        LOGGER.exception("Detaljer for feilen:")
 
 
 if __name__ == "__main__":

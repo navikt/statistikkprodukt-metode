@@ -10,7 +10,7 @@ from pandas import DataFrame
 from pydantic import SecretStr
 from statistikkprodukt import oracle, csv
 from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer, oslo_now
-from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_secret, StorageOption
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_config, StorageOption
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -78,8 +78,8 @@ def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configurat
     konfigurasjon_json = configuration.model_dump(
         mode="json", by_alias=True, exclude={"connection": {"password"}}
     )
-    konfigurasjon_json_str = json.dumps(konfigurasjon_json, ensure_ascii=False)
-    if "password" in konfigurasjon_json_str or configuration.connection.password.get_secret_value() in konfigurasjon_json_str:
+    # pydantic masks passwords, but we want to be sure that no password ends up in the db
+    if "password" in konfigurasjon_json["connection"]:
         raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
 
     logg = Kjorelogg(
@@ -137,9 +137,11 @@ def _select_aggregates(
 def _connect(configuration: Configuration) -> oracledb.Connection:
     """Oppretter Oracle-tilkobling bare når kilden eller målet trenger den."""
     LOGGER.debug("Kobler til Oracle (skjema=%s).", configuration.connection.schema_name)
-    user = resolve_secret(configuration.connection.user)
-    password = resolve_secret(
-        configuration.connection.password.get_secret_value(), password=True
+    user = resolve_config("user", configuration.connection.user)
+    password = resolve_config(
+        "password",
+        configuration.connection.password.get_secret_value(),
+        password=True,
     )
     resolved_connection = configuration.connection.model_copy(
         update={

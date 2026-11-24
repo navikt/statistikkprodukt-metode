@@ -137,7 +137,8 @@ def test_cli_config_check_only_validates(tmp_path, monkeypatch, capsys, use_envi
     path = _configure(tmp_path, monkeypatch, "21000")
     monkeypatch.delenv("TEST_PASSWORD", raising=False)
     operations = [
-        (loader, "resolve_secret"),
+        (loader, "resolve_config"),
+        (app.last, "resolve_config"),
         (oracledb, "connect"),
         (app.last, "last"),
         (app.skjema, "create_tables"),

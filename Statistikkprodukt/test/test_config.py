@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 from pydantic import ValidationError
 
@@ -6,7 +8,7 @@ from statistikkprodukt.config import (
     Configuration,
     Tellepunkt,
     load_configuration,
-    resolve_secret,
+    resolve_config,
 )
 
 
@@ -296,7 +298,29 @@ aggregater:
 def test_resolve_env_reference(monkeypatch):
     """Slår opp miljøvariabelreferanser for hemmeligheter."""
     monkeypatch.setenv("TEST_PASSWORD", "secret")
-    assert resolve_secret("env://TEST_PASSWORD", password=True) == "secret"
+    assert resolve_config("password", "env://TEST_PASSWORD", password=True) == "secret"
+
+
+def test_resolve_terminal_reference(monkeypatch):
+    """Leser terminalreferanser interaktivt når standard input er en terminal."""
+    from statistikkprodukt.config import loader
+
+    getpass = Mock(return_value="secret")
+    monkeypatch.setattr(loader.sys, "stdin", Mock(isatty=Mock(return_value=True)))
+    monkeypatch.setattr(loader.getpass, "getpass", getpass)
+
+    assert resolve_config("password", "terminal://", password=True) == "secret"
+    getpass.assert_called_once_with("Tast inn verdien for password: ")
+
+
+def test_resolve_terminal_reference_requires_tty(monkeypatch):
+    """Avviser terminalreferanser når standard input ikke er en terminal."""
+    from statistikkprodukt.config import loader
+
+    monkeypatch.setattr(loader.sys, "stdin", Mock(isatty=Mock(return_value=False)))
+
+    with pytest.raises(ConfigError, match="standard input er en terminal"):
+        resolve_config("password", "terminal://", password=True)
 
 
 def test_aggregate_accepts_multiple_tellepunkter():
