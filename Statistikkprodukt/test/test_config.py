@@ -89,8 +89,8 @@ def test_aggregate_id_integer_is_converted_to_string():
 
 
 @pytest.mark.parametrize("agg_id", [
-    "00000", "00001", "09999", "0", "0000", "000000", "10000",
-    "NAV00001", "NAV21000", "nav21000", "20000", "23000",
+    "00000", "00001", "09999", "0", "0000", "000000", "10000", "19999",
+    "NAV00001", "NAV21000", "nav21000", "23000",
 ])
 @pytest.mark.parametrize("allow_development_id", [False, True])
 def test_aggregate_id_validation_only_bypasses_development_id(agg_id, allow_development_id):
@@ -103,6 +103,14 @@ def test_aggregate_id_validation_only_bypasses_development_id(agg_id, allow_deve
     else:
         with pytest.raises(ValidationError, match="uten NAV-prefiks"):
             Configuration.model_validate(config, context=context)
+
+
+@pytest.mark.parametrize("agg_id", ["20000", "22999"])
+def test_aggregate_id_accepts_range_boundaries(agg_id):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = agg_id
+
+    assert Configuration.model_validate(config).aggregater[0].id == agg_id
 
 
 @pytest.mark.parametrize("agg_id", ["00000", "00001", "09999", "21000"])

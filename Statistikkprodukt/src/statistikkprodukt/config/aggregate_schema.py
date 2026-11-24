@@ -53,9 +53,9 @@ def is_not_empty(value: str) -> str:
 
 def is_aggregate_id(value: str) -> str:
     """Validerer aggregat-ID uten NAV-prefiks."""
-    if not re.fullmatch(r"2[1-2][0-9]{3}", value):
+    if not re.fullmatch(r"2[0-2][0-9]{3}", value):
         raise ConfigError(
-            "id må være mellom 21000 og 22999 uten NAV-prefiks. "
+            "id må være mellom 20000 og 22999 uten NAV-prefiks. "
             "Bruk --ingen-id-validering for å tillate test-ID-er fra '00000' til '09999'."
         )
     return value

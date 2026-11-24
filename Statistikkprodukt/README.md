@@ -307,7 +307,7 @@ Fullstendig eksempel på aggregatkonfigurasjon:
 # Samler innstillinger og metadata for ett aggregat.
 definisjon:
   # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.txt.
-  # Produksjons id-er er (21000–22999); test-ID-er '00000'–'09999' (det krever --ingen-id-validering flagg).
+  # Produksjons id-er er (20000–22999); test-ID-er 00000–09999 (det krever --ingen-id-validering flagg).
   # PX: Grunnlag for MATRIX; eksportøren legger på NAV-prefiks ved Nav-publisering.
   id: 21000
   # Angir kildetabellen som leverer manglende metadata gjennom databasekommentarer. OBT tabell.
@@ -484,7 +484,7 @@ NB: Både periode og variabler må være streng.
 
 ### Statistikkproduktregisteret
 
-Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 21000 og 22999, uten `NAV`-prefiks.
+Før publisering må du opprette en ny rad i `statistikkprodukt_register.txt` og velge en unik `id` mellom 20000 og 22999, uten `NAV`-prefiks.
 
 Til utvikling kan du bruke `'00000'` til `'09999'` med `--ingen-id-validering`. Oppgi test-ID-er som strenger i YAML for å bevare innledende nuller.
 
