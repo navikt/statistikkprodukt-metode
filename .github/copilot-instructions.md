@@ -6,15 +6,13 @@ Python biblioteket er i `Statistikkprodukt/`. `pyproject.toml` er i repository r
 
 Kjør enhetstester sånn:
 ```sh
-uv run --frozen statistikkprodukt testenv pytest -- -m "not r_dependent"
+uv run --frozen statistikkprodukt testenv pytest --
 ```
 
 Med argumenter:
 ```sh
-uv run --frozen statistikkprodukt testenv pytest -- -m "not r_dependent" -q
+uv run --frozen statistikkprodukt testenv pytest -- -q
 ```
-
-Tester som krever R er merket `r_dependent`; hopp over dem i vanlige testkjøringer.
 
 Oracle-testcontaineren må startes og stoppes utenfor sandkassen med `statistikkprodukt testenv setup` og `statistikkprodukt testenv teardown`. Ikke start Docker-containere direkte fra sandkassen.
 

@@ -202,14 +202,18 @@ def _process_aggregate(
     # prikk hvert tellepunkt for seg
     for tellepunkt in aggregate.tellepunkter:
         LOGGER.info("%s: Prikker tellepunkt %s.", aggregate.id, tellepunkt.kolonne)
-        prepub_tellepunkt, kontroll_tellepunkt = prikking(
-            data[[*dimension_columns, tellepunkt.kolonne]],
-            aggregate.periodisering.kolonne,
-            aggregate.formula,
-            tellepunkt.kolonne,
-            aggregate.prikking,
-            aggregate.saerskilt,
-        )
+        if data.empty:
+            prepub_tellepunkt = data[[*dimension_columns, tellepunkt.kolonne]].copy()
+            kontroll_tellepunkt = prepub_tellepunkt.assign(primary=0, suppressed=0)
+        else:
+            prepub_tellepunkt, kontroll_tellepunkt = prikking(
+                data[[*dimension_columns, tellepunkt.kolonne]],
+                aggregate.periodisering.kolonne,
+                aggregate.formula,
+                tellepunkt.kolonne,
+                aggregate.prikking,
+                aggregate.saerskilt,
+            )
         _validate_prikking_output(
             dimension_columns, tellepunkt, prepub, prepub_tellepunkt, kontroll_tellepunkt
         )
