@@ -7,6 +7,10 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import pandas as pd
+
+from statistikkprodukt.prikking import prikking
+
 LOGGER = logging.getLogger(__name__)
 
 _PROXY_URLS = {
@@ -37,26 +41,33 @@ def _cran_repository() -> str:
 def _sjekk_proxytilgang() -> None:
     """Kontrollerer om brannmuren er konfigurert riktig før R-pakker lastes ned."""
     missing_allowlist = []
+    timeout_sec = 15
     error = False
     for allowlist_pattern, test_url in _PROXY_URLS.items():
         request = Request(test_url, headers={"Range": "bytes=0-0"})
         try:
-            with urlopen(request, timeout=15) as response:
+            with urlopen(request, timeout=timeout_sec) as response:
                 status = response.status
+
             if status >= 400:
                 LOGGER.error("Kan ikke nå %s (HTTP %s).", test_url, status)
                 missing_allowlist.append(allowlist_pattern)
                 error = True
         except HTTPError as exc:
-            LOGGER.exception("")
             if exc.code >= 400:
                 LOGGER.error("Kan ikke nå %s (HTTP %s).", test_url, exc.code)
                 missing_allowlist.append(allowlist_pattern)
             else:
                 LOGGER.error("Feil under sjekk av brannmuråpninger: %s (HTTP %s).", test_url, exc.code)
+                LOGGER.debug("Detaljer: %s", exc_info=True)
+            error = True
+        except TimeoutError:
+            LOGGER.error("Kan ikke nå %s (timeout etter %ds).", test_url, timeout_sec)
+            missing_allowlist.append(allowlist_pattern)
             error = True
         except (URLError, TimeoutError, OSError) as exc:
             LOGGER.error("Feil under sjekk av brannmuråpninger: %s (%s).", test_url, exc)
+            LOGGER.debug("Detaljer: %s", exc_info=True)
             error = True
 
     if error:
@@ -75,6 +86,27 @@ def _sjekk_proxytilgang() -> None:
         raise SystemExit(1)
 
 
+def _sjekk_r_miljo() -> None:
+    data = pd.DataFrame({
+        "periode": ["202501"] * 4,
+        "gruppe": ["A", "B", "C", "D"],
+        "antall": [2, 10, 20, 30],
+    })
+    try:
+        prikking(
+            data,
+            periode="periode",
+            formula="~ periode * gruppe",
+            tall_kolonne="antall",
+            prikking=True,
+            saerskilt=False,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Funksjonstesten av R-miljøet feilet. Kjør med --log-level=DEBUG for mer informasjon."
+        ) from exc
+
+
 def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
     """Installerer R-pakker som kreves for prikking.
     
@@ -82,7 +114,7 @@ def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
         dev_lokal_r_pakke (bool): Hvis True, installerer R-pakken fra lokal kilde i stedet for fra GitHub. 
             Dette er nyttig for utvikling og testing.
     """
-    LOGGER.info("Installerer R-avhengigheter. R skriver ut mange warnings, men de kan ignoreres.")
+    LOGGER.info("Installerer R-avhengigheter.")
     _sjekk_proxytilgang()
 
     import rpy2.robjects
@@ -91,6 +123,9 @@ def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
     from rpy2.robjects.vectors import StrVector
 
     pkg_dir = Path(__file__).parents[4] / "NavDataprodukt"
+
+    if logging.root.level > logging.DEBUG:
+        logging.getLogger("rpy2").setLevel(logging.ERROR)
 
     LOGGER.debug("Bruker R-pakkekatalog %s.", pkg_dir)
     utils = rpy2.robjects.packages.importr("utils")
@@ -109,10 +144,14 @@ def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
         )
     """)
     try:
-        utils.install_packages(
-            StrVector(["SSBtools", "GaussSuppression", "pak"]),
-            repos=repository,
-        )
+        LOGGER.info("Installerer R avhengighet SSBtools...")
+        utils.install_packages(StrVector(["SSBtools"]), repos=repository)
+        LOGGER.info("Installerer R avhengighet GaussSuppression...")
+        utils.install_packages(StrVector(["GaussSuppression"]), repos=repository)
+        if not dev_lokal_r_pakke:
+            LOGGER.info("Installerer R avhengighet pak...")
+            utils.install_packages(StrVector(["pak"]), repos=repository)
+
         if dev_lokal_r_pakke:
             LOGGER.info("Installerer 'NavDataprodukt' fra lokal repository...")
             utils.install_packages(
@@ -122,12 +161,14 @@ def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
                 upgrade=True
             )
         else:
-            LOGGER.info("Installerer 'NavDataprodukt' fra GitHub...")
+            LOGGER.info("Installerer 'NavDataprodukt' fra GitHub (branch meta-felter)...")
             pak = rpy2.robjects.packages.importr("pak")
             pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)
 
-        LOGGER.info("R-pakker installert.")
+        LOGGER.info("Tester R-miljøet...")
+        _sjekk_r_miljo()
+        LOGGER.info("R-pakker installert og funksjonstest fullført.")
 
     except Exception as exc:
-        LOGGER.error("Feil under installasjon av R-pakker: %s", exc)
+        LOGGER.error("Feil under installasjon eller funksjonstest av R-pakker: %s", exc)
         raise SystemExit(1)

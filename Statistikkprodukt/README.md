@@ -81,9 +81,7 @@ og kjør:
 ```sh
 statistikkprodukt installer-r-pakker
 ```
-Her kommer det mange warnings - det er ikke noe du må gjør noe med. På spørsmålet "Would you like to create a personal library" skal du svare "Yes", og "Y" på "Do you want to continue". Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet.
-
-Om alt har godt bra, skal de siste få linjene inneholde `INFO statistikkprodukt.app.installer_r_pakker: R-pakker installert`.
+På spørsmålet "Would you like to create a personal library" skal du svare "Yes", og "Y" på "Do you want to continue". Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet. Om alt har godt bra, skal de siste få linjene inneholde `R-pakker installert og funksjonstest fullført.`.
 
 Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
 

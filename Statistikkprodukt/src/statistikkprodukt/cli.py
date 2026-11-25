@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from argparse import Namespace
 from pathlib import Path
+from typing import Any
 
 from statistikkprodukt.app import installer_r_pakker, last, skjema
 from statistikkprodukt.config import (
@@ -15,6 +17,29 @@ from statistikkprodukt.config import (
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
 LOGGER = logging.getLogger(__name__)
+
+
+class HideInfoFormatter(logging.Formatter):
+    def __init__(self):
+        super().__init__(fmt="%(levelname)s: %(message)s")
+
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "%(levelname)s: %(message)s"
+        return super().format(record)
+
+
+def setup_logging(args: Namespace) -> Any | str:
+    level = getattr(args, "log_level", "INFO")
+    if level == "INFO":
+        handler = logging.StreamHandler()
+        handler.setFormatter(HideInfoFormatter())
+        logging.basicConfig(level=level, handlers=[handler])
+    else:
+        logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
+    return level
 
 
 def _add_logging_options(parser: argparse.ArgumentParser) -> None:
@@ -223,9 +248,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(args, "log_level", "INFO"), format="%(levelname)s %(name)s: %(message)s")
+    level = setup_logging(args)
 
-    LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, getattr(args, "log_level", "INFO"))
+    LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, level)
 
     try:
         if args.command == "testenv":
