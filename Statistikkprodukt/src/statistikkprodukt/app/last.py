@@ -26,12 +26,13 @@ def last(
         *,
         selected_tables: list[str] | None = None,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
     LOGGER.debug(
-        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, valgte tabeller=%s.",
-        source, target, dry_run, selected_tables or "alle",
+        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, full_relast=%s, valgte tabeller=%s.",
+        source, target, dry_run, full_relast, selected_tables or "alle",
     )
     aggregates = _select_aggregates(configuration, selected_tables)
     LOGGER.debug("Behandler %d aggregater: %s.", len(aggregates), [a.tabell for a in aggregates])
@@ -55,6 +56,7 @@ def last(
                 config_directory,
                 transfer,
                 selected_periods=selected_periods,
+                full_relast=full_relast,
                 dry_run=dry_run,
             )
             logg.resultater.append(resultat)
@@ -159,6 +161,7 @@ def _process_aggregate(
         transfer: Transfer,
         *,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> LasteResultat:
     """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
@@ -173,6 +176,7 @@ def _process_aggregate(
         config_directory,
         transfer,
         selected_periods=selected_periods,
+        full_relast=full_relast,
         dry_run=dry_run,
     )
 
@@ -267,6 +271,7 @@ def _process_aggregate(
         kontroll,
         transfer,
         config_directory=config_directory,
+        full_relast=full_relast,
         dry_run=dry_run,
     )
     resultat.metadata = metadata
@@ -320,9 +325,15 @@ def _get_periods_to_load(
         transfer: Transfer,
         *,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> list[str] | None:
     """Velger perioder før innlesing; None betyr alle, en tom liste betyr ingen."""
+    if full_relast:
+        if selected_periods is not None:
+            raise ValueError("Full relast kan ikke kombineres med valgte perioder.")
+        LOGGER.debug("Full relast av %s: leser alle perioder.", aggregate.tabell)
+        return None
     if selected_periods is not None:
         LOGGER.debug("Bruker eksplisitt valgte perioder for %s: %s.", aggregate.tabell, selected_periods)
         return selected_periods
@@ -429,6 +440,7 @@ def _write_output(
         transfer: Transfer,
         *,
         config_directory: Path,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> TableMetadata | None:
     """Sender prikkede data, kontrolldata og metadata til CSV eller Oracle."""
@@ -448,6 +460,7 @@ def _write_output(
             csv.write_csv(
                 frame.assign(dvh_lastet_tid=loaded_at),
                 directory, aggregate, name, dry_run=dry_run,
+                full_relast=full_relast,
             )
         return metadata
     else:
@@ -457,6 +470,7 @@ def _write_output(
             prepub,
             kontroll,
             transfer,
+            full_relast=full_relast,
             dry_run=dry_run,
         )
 
@@ -483,6 +497,7 @@ def _write_database(
         kontroll: pd.DataFrame,
         transfer: Transfer,
         *,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> TableMetadata | None:
     """Skriver prepub- og kontrolltabellen til Oracle."""
@@ -497,13 +512,21 @@ def _write_database(
             raise RuntimeError("Databasetilkobling mangler.")
 
         for table_name, frame in results:
+            if full_relast:
+                LOGGER.info(
+                    "Ville slettet alle rader fra %s.%s før innsetting av %d rader.",
+                    schema,
+                    table_name,
+                    len(frame),
+                )
+                continue
             LOGGER.info(
                 "Ville skrevet %d rader til %s.%s.",
                 len(frame),
                 schema,
                 table_name,
             )
-        return
+        return None
 
     metadata = None
     if not dry_run:
@@ -524,9 +547,13 @@ def _write_database(
             aggregate,
             table_name,
             frame,
+            full_relast=full_relast,
             dry_run=dry_run,
         )
+
+    for table_name, frame in results:
         if not dry_run:
+            assert metadata is not None
             LOGGER.info("Oppdaterer kommentarer for %s.", table_name)
             if table_name == aggregate.kontroll_tabell:
                 oracle.write_kontroll_comments(
@@ -536,6 +563,7 @@ def _write_database(
                 oracle.write_comments(connection, schema, table_name, metadata)
 
     if not dry_run:
+        assert metadata is not None
         LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
         oracle.write_metadata_table(connection, schema, aggregate, metadata)
     return metadata

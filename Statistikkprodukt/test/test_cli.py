@@ -102,6 +102,25 @@ def test_cli_accepts_repeated_period_filters(tmp_path, monkeypatch):
     assert execute.call_args.kwargs["selected_periods"] == ["202501", "202502"]
 
 
+def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
+    path = _configure(tmp_path, monkeypatch, "21000")
+    execute = Mock()
+    monkeypatch.setattr(app.last, "last", execute)
+    monkeypatch.setattr(
+        sys, "argv",
+        [
+            "statistikkprodukt", "last", "--config", str(path),
+            "--full-relast", "--period", "202501",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+    execute.assert_not_called()
+
+
 @pytest.mark.parametrize("second_id", ["00000", "00001"])
 def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, second_id):
     path = _configure(tmp_path, monkeypatch, "00000")

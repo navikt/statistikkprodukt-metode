@@ -612,6 +612,36 @@ def test_empty_database_result_does_not_inspect_or_mutate_connection():
     )
 
 
+@pytest.mark.parametrize("empty", [False, True])
+def test_full_relast_deletes_all_rows_before_insert(empty):
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    aggregate = configuration().aggregater[0]
+    frame = pd.DataFrame(
+        {
+            "periode": [] if empty else ["202501"],
+            "region": [] if empty else ["Oslo"],
+            "antall": [] if empty else [10],
+        }
+    )
+
+    write_result(
+        connection,
+        "TEST",
+        aggregate,
+        "tabell_prepub",
+        frame,
+        full_relast=True,
+    )
+
+    cursor.execute.assert_called_once_with("DELETE FROM test.tabell_prepub")
+    if empty:
+        cursor.executemany.assert_not_called()
+    else:
+        cursor.executemany.assert_called_once()
+    connection.commit.assert_called_once()
+
+
 def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
     """Lar Oracle avvise kolonner som ikke finnes i måltabellen."""
     table = f"sb_test_{uuid4().hex[:12]}"

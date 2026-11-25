@@ -146,6 +146,28 @@ def test_explicit_periods_override_incremental_mode(monkeypatch, tmp_path, mode)
     fetch.assert_not_called()
 
 
+def test_full_relast_reads_all_periods_without_target_lookup(monkeypatch, tmp_path):
+    config = configuration()
+    fetch = MagicMock(side_effect=AssertionError("Uventet periodeoppslag"))
+    monkeypatch.setattr(app, "_fetch_periods", fetch)
+
+    assert app._get_periods_to_load(
+        config,
+        config.aggregater[0],
+        tmp_path,
+        app.Transfer(
+            MagicMock(),
+            StorageOption.DB,
+            StorageOption.DB,
+            Path("input"),
+            Path("output"),
+        ),
+        full_relast=True,
+        dry_run=False,
+    ) is None
+    fetch.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("target_storage", "dry_run"),
     [(StorageOption.CSV, False), (StorageOption.DB, True), (StorageOption.CSV, True)],
@@ -286,6 +308,45 @@ def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
     assert [call[0] for call in calls.mock_calls] == ["select", "read", "write"]
     assert calls.read.call_args.kwargs["periods_to_load"] == periods
     pd.testing.assert_frame_equal(mask.call_args.args[0], data)
+
+
+def test_process_passes_full_relast_to_read_and_write(monkeypatch, tmp_path):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    data = pd.DataFrame({"periode": ["202502"], "region": ["Oslo"], "antall": [2]})
+    select = MagicMock(return_value=None)
+    read = MagicMock(return_value=data)
+    write = MagicMock()
+    monkeypatch.setattr(app, "_get_periods_to_load", select)
+    monkeypatch.setattr(app, "_read_input", read)
+    monkeypatch.setattr(app, "_write_output", write)
+    monkeypatch.setattr(
+        app,
+        "prikking",
+        lambda frame, *_args: (
+            frame.copy(),
+            frame.assign(primary=False, suppressed=False),
+        ),
+    )
+
+    app._process_aggregate(
+        config,
+        aggregate,
+        tmp_path,
+        app.Transfer(
+            MagicMock(),
+            StorageOption.DB,
+            StorageOption.DB,
+            Path("dummy"),
+            Path("dummy"),
+        ),
+        full_relast=True,
+        dry_run=False,
+    )
+
+    assert select.call_args.kwargs["full_relast"] is True
+    assert read.call_args.kwargs["periods_to_load"] is None
+    assert write.call_args.kwargs["full_relast"] is True
 
 
 def test_process_passes_only_selected_tellepunkt_to_r(monkeypatch, tmp_path):

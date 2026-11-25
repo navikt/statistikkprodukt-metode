@@ -103,6 +103,7 @@ Konfigurasjonsmuligheter:
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
 - `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
 - `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger.
+- `--full-relast` sletter alle eksisterende data og laster alle kildens rader på nytt.
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.
@@ -515,6 +516,8 @@ Alle aggregater i samme konfigurasjon må ha unik `id`, også ved bruk av test-I
 ### Inkrementelle laster
 
 Følgende inkrementelle strategier er støttet. Inkrementelle laster baserer seg på periodekolonnen.
+
+Bruk `--full-relast` for å slette all innhold og laste på nytt fra kilden.
 
 #### `legg_til_nye_perioder`
 

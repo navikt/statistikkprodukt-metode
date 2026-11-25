@@ -22,6 +22,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
    - `legg_til_nye_perioder` appends periods that do not already exist and logs a warning for periods that already exist.
    - `overskriv_eksisterende_perioder` replaces all periods that are returned by the query. Other periods in the target are not removed.
    - `--periode/-p` may be used to override one ore more periods, overriding the incremental mode.
+   - `--full-relast` deletes all existing rows from the target prepub and control tables, reads all source rows, and reloads both tables. It cannot be combined with `--periode/-p`.
 8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
@@ -135,6 +136,9 @@ export STATISTIKKPRODUKT_AGGREGAT_CONFIG=konfigurasjon.yml
 
 # Bare vis hva som ville skjedd
 statistikkprodukt last --dry-run
+
+# Slett alle data i måltabellene og last alle rader på nytt
+statistikkprodukt last --full-relast
 
 # kontroller logging
 statistikkprodukt last --log-level=WARN

@@ -13,6 +13,9 @@ def prikking(
         saerskilt: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Kjører og samler R-resultater per periode når integrasjonen aktiveres."""
+    if data.empty:
+        raise ValueError("Datasettet er tomt. Kan ikke kjøre prikking.")
+
     if logging.root.level > logging.DEBUG:
         logging.getLogger("rpy2").setLevel(logging.ERROR)
 
@@ -66,10 +69,8 @@ def prikking(
             raise TypeError(f"R-funksjonen returnerte ikke et pandas-datasett for 'kvalitetssikring'.")
         all_results_kontroll.append(df_kontroll)
 
-    if not all_results_smalt:
-        LOGGER.debug("Ingen perioder å prikke; returnerer tomme resultater.")
-        empty_df = data.iloc[0:0].copy()
-        return empty_df, empty_df.copy()
+    assert all_results_kontroll, "Ingen kontrollresultater ble generert. Sjekk R-funksjonen for feil."
+    assert all_results_smalt, "Ingen smalt resultater ble generert. Sjekk R-funksjonen for feil."
 
     final_smalt = pd.concat(all_results_smalt, ignore_index=True)
     final_kontroll = pd.concat(all_results_kontroll, ignore_index=True)

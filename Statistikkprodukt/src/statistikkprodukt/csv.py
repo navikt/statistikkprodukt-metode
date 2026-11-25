@@ -65,11 +65,12 @@ def write_csv(
         aggregate: Aggregate,
         name: str,
         *,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> None:
     """Skriver aggregatresultatet til {name}.csv med konfigurert inkrementell oppførsel."""
     path = directory / f"{name}.csv"
-    if frame.empty:
+    if frame.empty and not full_relast:
         print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 

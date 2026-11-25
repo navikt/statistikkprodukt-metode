@@ -303,14 +303,23 @@ def write_result(
         table_name: str,
         frame: pd.DataFrame,
         *,
+        full_relast: bool = False,
         dry_run: bool = False,
 ) -> None:
     """Skriver aggregatresultatet til tabellen table_name transaksjonelt."""
-    if frame.empty:
+    if frame.empty and not full_relast:
         LOGGER.info("Ingen rader for %s; databasen endres ikke.", table_name)
         return
 
     if dry_run:
+        if full_relast:
+            LOGGER.info(
+                "Ville slettet alle rader fra %s.%s før innsetting av %d rader.",
+                schema,
+                table_name,
+                len(frame),
+            )
+            return
         LOGGER.info(
             "Ville skrevet %d rader til %s.%s.",
             len(frame),
@@ -332,9 +341,15 @@ def write_result(
 
     try:
         with connection.cursor() as cursor:
+            if full_relast:
+                LOGGER.debug("Sletter alle eksisterende rader i %s.", qualified_table_name)
+                execute_sql(cursor, f"DELETE FROM {qualified_table_name}")
+            else:
+                _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
+
             LOGGER.debug("Skriver %d rader til %s (periodekolonne=%s).", len(frame), qualified_table_name, period_column)
-            _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
             _insert_rows(cursor, qualified_table_name, frame)
+
         connection.commit()
         LOGGER.debug("Committet skriving til %s.", qualified_table_name)
     except Exception:

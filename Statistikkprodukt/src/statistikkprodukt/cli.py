@@ -46,13 +46,20 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG eller konfigurasjon.yml).",
     )
-    parser.add_argument(
+    period_mode = parser.add_mutually_exclusive_group()
+    period_mode.add_argument(
         "-p",
         "--period",
         action="append",
         dest="periods",
         metavar="PERIODE",
         help="Begrens innlesingen til denne perioden. Kan angis flere ganger. Lastes uansett inkrementell strategi.",
+    )
+    period_mode.add_argument(
+        "--full-relast",
+        dest="full_relast",
+        action="store_true",
+        help="Slett alle data i måltabellene og last alle rader fra kilden på nytt.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Vis hva som ville blitt gjort uten å skrive data.")
     parser.add_argument(
@@ -251,6 +258,7 @@ def main() -> None:
                 args.maal_mappe,
                 selected_tables=args.aggregater,
                 selected_periods=args.periods,
+                full_relast=args.full_relast,
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":
