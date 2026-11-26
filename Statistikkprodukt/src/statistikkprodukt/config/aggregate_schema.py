@@ -45,6 +45,16 @@ def validate_table_identifier(value: str) -> str:
     return ".".join(validate_identifier(part) for part in parts)
 
 
+def validate_aggregate_name(value: Any) -> str:
+    """Kontrollerer at aggregatnavnet er skrevet med små bokstaver."""
+    if not isinstance(value, str) or not re.fullmatch(r"ost_[a-z0-9_]+", value):
+        raise ValueError(
+            "Aggregatnavnet må være skrevet med små bokstaver og følge formatet "
+            "ost_<subject-code>_<subject-kort>_<periode>_<fordeling>."
+        )
+    return value
+
+
 def validate_period(value: Any) -> str:
     """Kontrollerer år, måned (M01–M12) eller kvartal (K1–K4)."""
     if not isinstance(value, str) or not re.fullmatch(
@@ -92,6 +102,9 @@ def normalize_yes_no(value: Any) -> Any:
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
+AggregateName = Annotated[
+    str, BeforeValidator(validate_aggregate_name), AfterValidator(validate_identifier)
+]
 AggregateId = Annotated[
     str, BeforeValidator(normalize_aggregate_id), AfterValidator(is_aggregate_id)
 ]
@@ -197,15 +210,15 @@ class TableStatistikkbank(StrictModel):
     subject_en: str | None = Field(
         default=None, alias="subject-en", description="Engelsk tema."
     )
-    subject_kort: str | None = Field(
-        default=None, alias="subject-kort", description="Statistikkbankens temakode."
+    subject_kort: str = Field(
+        min_length=1, alias="subject-kort", description="Statistikkbankens temakode."
     )
     subject_area: str | None = Field(
         default=None, alias="subject-area",
         description="Norsk fagområde på nivå 1 i menyhierarkiet.",
     )
-    subject_code: str | None = Field(
-        default=None, alias="subject-code",
+    subject_code: str = Field(
+        min_length=1, alias="subject-code",
         description="Fagområdets kode fra Statistikkbankens kodeverk.",
     )
     note: str | None = Field(
@@ -286,7 +299,6 @@ class YamlSqlPathPair(StrictModel):
 
 class Aggregate(StrictModel):
     statistikkbank: TableStatistikkbank = Field(
-        default_factory=TableStatistikkbank,
         description="Tabellens metadata og startvisningsinnstillinger for Statistikkbanken.",
     )
     ansvarlig_team: str | None = Field(
@@ -295,7 +307,9 @@ class Aggregate(StrictModel):
     id: AggregateId = Field(description="Aggregatets ID.")
     navn: str = Field(description="Navn på aggregatet.")
     navn_en: str = Field(alias="navn-en", description="Engelsk navn på aggregatet.")
-    tabell: OracleIdentifier = Field(description="Navn på måltabellen.")
+    tabell: AggregateName = Field(
+        description="Navn på småagregat, definerer <tabell>_PREPUB, <tabell>_META og <tabell>_KONTROLL."
+    )
     referanse_tabell: OracleTableIdentifier = Field(
         alias="referanse-tabell",
         description="Kildetabellen som brukes til å hente metadata.",
@@ -414,6 +428,30 @@ class Aggregate(StrictModel):
             [self.periodisering.kolonne, *columns, *tellepunkt_columns]
         ):
             raise ConfigError("tellepunkt og verdi er reserverte kolonnenavn")
+        return self
+
+    @model_validator(mode="after")
+    def validate_aggregate_name_parts(self) -> Aggregate:
+        """Kontrollerer at aggregatnavnet samsvarer med statistikkbank og periode."""
+        subject_code = self.statistikkbank.subject_code.lower()
+        subject_kort = self.statistikkbank.subject_kort.lower()
+        period = self.periodisering.kolonne
+        prefix = f"ost_{subject_code}_{subject_kort}_{period}_"
+        # 'else ""' for å feile i følgende regex check
+        user_configurable_suffix = self.tabell[len(prefix):] if self.tabell.startswith(prefix) else ""
+        distribution_parts = user_configurable_suffix.split("_")
+        if (
+            not re.fullmatch(r"[a-z]+(?:_[a-z]+)*", user_configurable_suffix)
+            or distribution_parts != sorted(distribution_parts)
+        ):
+            raise ConfigError(
+                "Aggregatnavnet må følge formatet "
+                "ost_<subject-code>_<subject-kort>_<periode>_<fordeling>, "
+                "der subject-code, subject-kort og periode samsvarer med "
+                "statistikkbank og periodisering, og fordeling består av "
+                "identifikatorer adskilt med _ i alfabetisk sortering. "
+                f"Mottatt: {self.tabell!r}."
+            )
         return self
 
     @model_validator(mode="after")

@@ -6,6 +6,8 @@ import yaml
 from statistikkprodukt import app, cli
 from test.test_config import configuration
 
+AGGREGATE_NAME = "ost_am_befolkning_periode_tabell"
+
 
 def _configure(tmp_path, monkeypatch, agg_id):
     config = configuration().model_dump(mode="json", by_alias=True)
@@ -16,16 +18,16 @@ def _configure(tmp_path, monkeypatch, agg_id):
     aggregate.pop("sporring_sql")
     aggregate_directory = tmp_path / "aggregater"
     aggregate_directory.mkdir()
-    (aggregate_directory / "tabell.yml").write_text(
+    (aggregate_directory / f"{AGGREGATE_NAME}.yml").write_text(
         yaml.safe_dump({"version": 1, "definisjon": aggregate}), encoding="utf-8"
     )
-    (aggregate_directory / "tabell.sql").write_text("select 1 from dual")
+    (aggregate_directory / f"{AGGREGATE_NAME}.sql").write_text("select 1 from dual")
     (tmp_path / "konfigurasjon.yml").write_text(
         yaml.safe_dump({
             "version": config["version"],
             "connection": config["connection"],
             "mapper": ["aggregater/*.yml", "aggregater/*.sql"],
-            "aggregater": ["tabell"],
+            "aggregater": [AGGREGATE_NAME],
         }),
         encoding="utf-8",
     )
@@ -33,7 +35,7 @@ def _configure(tmp_path, monkeypatch, agg_id):
     register.write_text(
         "| Løpenr | Team | Statistikkprodukt |\n"
         "|--------+------+-------------------|\n"
-        "| 21000 | Team A | tabell |\n", encoding="utf-8"
+        f"| 21000 | Team A | {AGGREGATE_NAME} |\n", encoding="utf-8"
     )
     monkeypatch.setenv("STATISTIKKPRODUKT_REGISTER_FIL", str(register))
     return tmp_path / "konfigurasjon.yml"
@@ -142,16 +144,17 @@ def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
 @pytest.mark.parametrize("second_id", ["00000", "00001"])
 def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, second_id):
     path = _configure(tmp_path, monkeypatch, "00000")
+    second_name = "ost_am_befolkning_periode_annen"
     second = yaml.safe_load(
-        (tmp_path / "aggregater" / "tabell.yml").read_text(encoding="utf-8")
+        (tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml").read_text(encoding="utf-8")
     )
     second["definisjon"]["id"] = second_id
-    (tmp_path / "aggregater" / "annen.yml").write_text(
+    (tmp_path / "aggregater" / f"{second_name}.yml").write_text(
         yaml.safe_dump(second), encoding="utf-8"
     )
-    (tmp_path / "aggregater" / "annen.sql").write_text("select 1 from dual")
+    (tmp_path / "aggregater" / f"{second_name}.sql").write_text("select 1 from dual")
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    config["aggregater"].append("annen")
+    config["aggregater"].append(second_name)
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
     execute = Mock()
     monkeypatch.setattr(app.last, "last", execute)
@@ -222,7 +225,7 @@ def test_cli_config_check_warns_about_formula(
     tmp_path, monkeypatch, caplog, capsys, formula, warn_start, missing
 ):
     path = _configure(tmp_path, monkeypatch, "21000")
-    aggregate_path = tmp_path / "aggregater" / "tabell.yml"
+    aggregate_path = tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml"
     aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
     aggregate["definisjon"]["formula"] = formula
     aggregate["definisjon"]["variabler"] = [
@@ -239,10 +242,10 @@ def test_cli_config_check_warns_about_formula(
     warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
     expected = []
     if warn_start:
-        expected.append("Aggregat tabell: formula starter ikke med ~ periode.")
+        expected.append(f"Aggregat {AGGREGATE_NAME}: formula starter ikke med ~ periode.")
     if missing:
         expected.append(
-            "Aggregat tabell: formula bruker ikke følgende kolonner fra variabler "
+            f"Aggregat {AGGREGATE_NAME}: formula bruker ikke følgende kolonner fra variabler "
             f"og periodisering: {', '.join(missing)}."
         )
     assert warnings == expected
@@ -254,7 +257,7 @@ def test_cli_formula_warnings_are_only_emitted_by_config_check(
     tmp_path, monkeypatch, caplog, command
 ):
     path = _configure(tmp_path, monkeypatch, "21000")
-    aggregate_path = tmp_path / "aggregater" / "tabell.yml"
+    aggregate_path = tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml"
     aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
     aggregate["definisjon"]["formula"] = "~ region"
     aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
@@ -281,12 +284,12 @@ def test_cli_config_check_reports_configuration_errors(tmp_path, monkeypatch, ca
         if error == "invalid_yaml":
             path.write_text("connection: [", encoding="utf-8")
         elif error == "unknown_field":
-            aggregate_path = tmp_path / "aggregater" / "tabell.yml"
+            aggregate_path = tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml"
             aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
             aggregate["definisjon"]["ukjent"] = True
             aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
         elif error == "missing_aggregate":
-            (tmp_path / "aggregater" / "tabell.yml").unlink()
+            (tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml").unlink()
     monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "konfig", "sjekk", *flags])
 
     with pytest.raises(SystemExit) as exc:

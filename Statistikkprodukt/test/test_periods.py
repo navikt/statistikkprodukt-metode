@@ -22,23 +22,25 @@ INVALID_PERIODS = [
 @pytest.mark.parametrize("period", VALID_PERIODS)
 @pytest.mark.parametrize("column", ["periode", "PERIODE", "PeRiOdE"])
 def test_csv_accepts_supported_period_formats(tmp_path, period, column):
+    aggregate = configuration().aggregater[0]
     pd.DataFrame(
         {column: [period], "region": ["Oslo"], "antall": [10]}
-    ).to_csv(tmp_path / "tabell.csv", index=False)
+    ).to_csv(tmp_path / f"{aggregate.tabell}.csv", index=False)
 
-    frame = csv.read_csv(tmp_path, configuration().aggregater[0])
+    frame = csv.read_csv(tmp_path, aggregate)
 
     assert frame["periode"].tolist() == [period]
 
 
 @pytest.mark.parametrize("period", INVALID_PERIODS)
 def test_csv_rejects_invalid_period_formats(tmp_path, period):
+    aggregate = configuration().aggregater[0]
     pd.DataFrame(
         {"periode": [period], "region": ["Oslo"], "antall": [10]}
-    ).to_csv(tmp_path / "tabell.csv", index=False)
+    ).to_csv(tmp_path / f"{aggregate.tabell}.csv", index=False)
 
     with pytest.raises(ValueError, match="Ugyldig periode"):
-        csv.read_csv(tmp_path, configuration().aggregater[0])
+        csv.read_csv(tmp_path, aggregate)
 
 
 @pytest.mark.parametrize(
@@ -239,7 +241,7 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
         input_directory.mkdir()
         pd.DataFrame(
             {"periode": ['2025M01', '2025M02', '2025M02'], "region": ["Oslo"] * 3, "antall": [1, 2, 3]}
-        ).to_csv(input_directory / "tabell.csv", index=False)
+        ).to_csv(input_directory / f"{aggregate.tabell}.csv", index=False)
 
     assert app._fetch_periods(
         config,
@@ -265,7 +267,7 @@ def test_read_csv_period_selection(tmp_path, periods):
     aggregate = configuration().aggregater[0]
     pd.DataFrame(
         {"periode": ["2025M01", "2025M02"], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
-    ).to_csv(tmp_path / "tabell.csv", index=False)
+    ).to_csv(tmp_path / f"{aggregate.tabell}.csv", index=False)
 
     data = app._read_input(
         aggregate,
@@ -288,7 +290,7 @@ def test_read_csv_filter_returns_string_period_from_numeric_csv(tmp_path):
     aggregate = configuration().aggregater[0]
     pd.DataFrame(
         {"periode": [2025, 2026], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
-    ).to_csv(tmp_path / "tabell.csv", index=False)
+    ).to_csv(tmp_path / f"{aggregate.tabell}.csv", index=False)
 
     data = app._read_input(
         aggregate,

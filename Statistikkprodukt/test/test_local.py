@@ -49,7 +49,7 @@ def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, s
         cursor = connection.cursor.return_value.__enter__.return_value
         cursor.fetchone.side_effect = [(1,), (last_updated,)]
     transfer = Transfer(connection, source, StorageOption.CSV, tmp_path, tmp_path)
-    path = tmp_path / "tabell_meta.csv"
+    path = tmp_path / f"{aggregate.meta_tabell}.csv"
     path.write_text("utdatert metadata", encoding="utf-8")
     data = pd.DataFrame() if empty_data else pd.DataFrame({"antall": [12]})
 
@@ -92,7 +92,7 @@ def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, s
 def test_csv_metadata_dry_run_does_not_write(tmp_path, capsys, existing_file):
     aggregate = aggregate_with_metadata()
     output = tmp_path / "data_ut"
-    path = output / "tabell_meta.csv"
+    path = output / f"{aggregate.meta_tabell}.csv"
     if existing_file:
         output.mkdir()
         path.write_text("Behold eksisterende metadata", encoding="utf-8")
@@ -101,7 +101,7 @@ def test_csv_metadata_dry_run_does_not_write(tmp_path, capsys, existing_file):
         configuration(), aggregate, pd.DataFrame(), pd.DataFrame(), transfer,
         config_directory=tmp_path, dry_run=True,
     )
-    assert "tabell_meta.csv" in capsys.readouterr().out
+    assert f"{aggregate.meta_tabell}.csv" in capsys.readouterr().out
     if existing_file:
         assert path.read_text(encoding="utf-8") == "Behold eksisterende metadata"
     else:
@@ -112,12 +112,13 @@ def test_csv_pipeline_writes_metadata_without_database_or_r(tmp_path, monkeypatc
     import statistikkprodukt.app.last as app
 
     config = configuration()
+    aggregate = config.aggregater[0]
     input_directory = tmp_path / "data_inn"
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
         {"periode": ['2025M01'], "region": ["Oslo"], "antall": [12]}
-    ).to_csv(input_directory / "tabell.csv", index=False)
+    ).to_csv(input_directory / f"{aggregate.tabell}.csv", index=False)
 
     def mask(data, *args):
         control = data.copy()
@@ -131,9 +132,15 @@ def test_csv_pipeline_writes_metadata_without_database_or_r(tmp_path, monkeypatc
     last(config, tmp_path, StorageOption.CSV, StorageOption.CSV,
          input_directory, output_directory)
     assert {path.name for path in output_directory.iterdir()} == {
-        "tabell_prepub.csv", "tabell_kontroll.csv", "tabell_meta.csv",
+        f"{aggregate.prepub_tabell}.csv",
+        f"{aggregate.kontroll_tabell}.csv",
+        f"{aggregate.meta_tabell}.csv",
     }
-    frame = pd.read_csv(output_directory / "tabell_meta.csv", dtype=str, keep_default_na=False)
+    frame = pd.read_csv(
+        output_directory / f"{aggregate.meta_tabell}.csv",
+        dtype=str,
+        keep_default_na=False,
+    )
     assert frame.loc[frame["keyword"] == "MATRIX", "value"].tolist() == ["21000"]
     connect.assert_not_called()
 
@@ -142,12 +149,13 @@ def test_csv_pipeline_writes_metadata_without_database_or_r(tmp_path, monkeypatc
 def test_csv_masked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()
+    aggregate = config.aggregater[0]
     input_directory = tmp_path / "data_inn"
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
         {"periode": ['2025M01'], "region": ["Oslo"], "antall": [3]}
-    ).to_csv(input_directory / "tabell.csv", index=False)
+    ).to_csv(input_directory / f"{aggregate.tabell}.csv", index=False)
 
     last(
         config,
@@ -179,8 +187,12 @@ def test_csv_masked(tmp_path):
     ]
     expected_prepub = [row.copy() | dict(antall=None) for row in expected]
 
-    prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
-    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
+    prepub = pd.read_csv(
+        output_directory / f"{aggregate.prepub_tabell}.csv", dtype={"periode": str}
+    )
+    kontroll = pd.read_csv(
+        output_directory / f"{aggregate.kontroll_tabell}.csv", dtype={"periode": str}
+    )
     prepub = prepub.drop(columns="dvh_lastet_tid")
     kontroll = kontroll.drop(columns="dvh_lastet_tid")
 
@@ -198,12 +210,13 @@ def test_csv_masked(tmp_path):
 def test_csv_unmasked(tmp_path):
     """Kjører CSV-pipelinen uten database og skriver prikkingmarkør."""
     config = configuration()
+    aggregate = config.aggregater[0]
     input_directory = tmp_path / "data_inn"
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
         {"periode": ['2025M01'], "region": ["Oslo"], "antall": [12]}
-    ).to_csv(input_directory / "tabell.csv", index=False)
+    ).to_csv(input_directory / f"{aggregate.tabell}.csv", index=False)
 
     last(
         config,
@@ -234,8 +247,12 @@ def test_csv_unmasked(tmp_path):
         for row in expected_prepub
     ]
 
-    prepub = pd.read_csv(output_directory / "tabell_prepub.csv", dtype={"periode": str})
-    kontroll = pd.read_csv(output_directory / "tabell_kontroll.csv", dtype={"periode": str})
+    prepub = pd.read_csv(
+        output_directory / f"{aggregate.prepub_tabell}.csv", dtype={"periode": str}
+    )
+    kontroll = pd.read_csv(
+        output_directory / f"{aggregate.kontroll_tabell}.csv", dtype={"periode": str}
+    )
     prepub = prepub.drop(columns="dvh_lastet_tid")
     kontroll = kontroll.drop(columns="dvh_lastet_tid")
 

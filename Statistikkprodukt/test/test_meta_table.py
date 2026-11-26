@@ -20,7 +20,7 @@ def aggregate_with_metadata():
     data["statistikkbank"] = {
         "subject": "Befolkning",
         "subject-en": "Population",
-        "subject-kort": "BEF",
+        "subject-kort": "BEFOLKNING",
         "subject-area": "Arbeidsmarked",
         "subject-code": "AM",
         "note": "Norsk merknad",
@@ -144,6 +144,8 @@ def test_language_columns_are_rejected_before_database_write(field, suffix):
     variable = data[field] if field == "periodisering" else data[field][0]
     column = f"{variable['kolonne']}__{suffix}"
     variable["kolonne"] = column
+    if field == "periodisering":
+        data["tabell"] = f"ost_am_befolkning_{column}_region"
     data["formula"] = (
         f"~ {data['periodisering']['kolonne']} / {data['variabler'][0]['kolonne']}"
     )
@@ -166,16 +168,17 @@ def test_negative_precision_rejected(field):
 
 
 def test_last_updated_skips_timestamp_query_when_prepub_table_is_missing():
+    aggregate = aggregate_with_metadata()
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = None
 
-    assert read_aggregate_last_updated(connection, "TEST", aggregate_with_metadata()) is None
+    assert read_aggregate_last_updated(connection, "TEST", aggregate) is None
 
     connection.cursor.assert_called_once()
     cursor.execute.assert_called_once_with(
         "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-        owner="TEST", table_name="TABELL_PREPUB",
+        owner="TEST", table_name=f"{aggregate.tabell.upper()}_PREPUB",
     )
 
 
@@ -189,11 +192,11 @@ def test_write_replaces_metadata_transactionally():
     write_metadata_table(connection, "TEST", aggregate, metadata)
     assert [call.args[0] for call in cursor.execute.call_args_list] == [
         "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-        "SELECT MAX(dvh_lastet_tid) FROM test.tabell_prepub",
-        "DELETE FROM test.tabell_meta",
+        f"SELECT MAX(dvh_lastet_tid) FROM test.{aggregate.tabell}_prepub",
+        f"DELETE FROM test.{aggregate.tabell}_meta",
     ]
     cursor.executemany.assert_called_once_with(
-        "INSERT INTO test.tabell_meta (type, keyword, scope, language, value) "
+        f"INSERT INTO test.{aggregate.tabell}_meta (type, keyword, scope, language, value) "
         "VALUES (:type, :keyword, :scope, :language, :value)",
         metadata_rows(aggregate, metadata, last_updated),
     )

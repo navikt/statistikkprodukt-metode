@@ -150,6 +150,11 @@ def _find_aggregate_configurations(
                     continue
                 if (name := path.stem.lower()) not in aggregate_names:
                     continue
+                if path.stem != path.stem.lower():
+                    raise ConfigError(
+                        "Aggregatnavnet (filnavnet uten filendelse) må være skrevet "
+                        f"med små bokstaver: {path.stem}."
+                    )
 
                 suffix = path.suffix.lower()
                 if suffix not in {".yaml", ".yml", ".sql"}:

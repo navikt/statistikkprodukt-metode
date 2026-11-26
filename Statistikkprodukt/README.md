@@ -111,7 +111,7 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-statistikkprodukt last ost_befolkning_alder ost_befolkning_kjonn
+statistikkprodukt last ost_ga_befolkning_periode_alder ost_ga_befolkning_periode_kjonn
 ```
 
 > [!WARNING]
@@ -171,7 +171,7 @@ statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
 
 Sjekk resultatene i Oracle:
 ```sql
-select * from ost_befolkning_alder_kontroll;
+select * from ost_ga_befolkning_periode_alder_kontroll;
 -- ... og andre ost tabeller
 ```
 
@@ -310,50 +310,33 @@ mapper:
 
 # Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `mapper`.
 aggregater:
-  - ost_befolkning_alder
-  - ost_befolkning_kjonn
+  - ost_ga_befolkning_periode_alder
+  - ost_ga_befolkning_periode_kjonn
 ```
 
-Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfilen,
-uavhengig av hvilken mappe kommandoen kjøres fra. YAML- og SQL-filene må ligge i
-undermapper til denne mappen, enten sammen, som i eksemplet over, eller i separate
-undermapper. Undermappene kan ha flere nivåer:
+Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfilen. `*` treffer alle filer i mappen, `*.sql` kun SQL-filer, `**` treffer alle undermapper rekursivt.
 
 ```text
 produkt/
 ├── konfigurasjon.yml
-├── yaml/
-│   ├── ost_befolkning_alder.yml
-│   └── ost_befolkning_kjonn.yml
-└── sql/
-    ├── ost_befolkning_alder.sql
-    └── ost_befolkning_kjonn.sql
+└── aggregater/
+    ├── ost_ga_befolkning_periode_alder.yml
+    ├── ost_ga_befolkning_periode_alder.sql
+    ├── ost_ga_befolkning_periode_kjonn.yml
+    └── ost_ga_befolkning_periode_kjonn.sql
 ```
 
-For denne strukturen brukes følgende søkemønstre i `konfigurasjon.yml`:
+For denne strukturen brukes:
 
 ```yaml
 mapper:
-  - yaml/**
-  - sql/**
+  - aggregater/**
 aggregater:
-  - ost_befolkning_alder
-  - ost_befolkning_kjonn
+  - ost_ga_befolkning_periode_alder
+  - ost_ga_befolkning_periode_kjonn
 ```
 
-Filene kobles sammen etter filnavnet uten filendelse; store og små bokstaver
-behandles likt. Hvert valgt aggregat må ha én `.yml`- eller `.yaml`-fil og én
-`.sql`-fil, også ved bruk av CSV. Søkemønstrene må dekke begge filtypene:
-`yaml/*.yml` finner for eksempel ikke SQL-filer, så legg også til `sql/*.sql`.
-Flere treff på samme fil er tillatt, men ulike YAML-filer eller ulike SQL-filer
-med samme aggregatnavn gir en konfigurasjonsfeil.
-
-SQL-stien utledes automatisk og lagres relativt til hovedkonfigurasjonsfilen.
-I eksemplet blir den `sql/ost_befolkning_alder.sql`, ikke en sti relativt til
-aggregatets YAML-fil. Filer direkte ved siden av hovedkonfigurasjonen eller
-utenfor dens mappe er ikke tillatt. Dette gjelder også symbolske lenker som peker
-til slike filer.
-Ikke oppgi `sporring_sql` manuelt i aggregatfilen.
+Hver aggregat trenger én `<aggregat>.sql` fil og én `<aggregat>.yml` fil funnet av et mønster i `mapper` konfigurasjon.
 
 Mer om lasting av hemmeligheter følger.
 
@@ -363,7 +346,11 @@ Per småaggregat må det lages:
 - `{aggregatnavn}.yml` eller `{aggregatnavn}.yaml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
-For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
+For et eksempel for en SQL fil, se `eksempel/aggregater/ost_ga_befolkning_periode_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
+
+Aggregatets YAML-filnavn må være småskrevet og følge formatet
+`ost_<subject-code>_<subject-kort>_<periode>_<fordeling>`. `<fordeling>` er brukerdefinert og består av én
+eller flere identifikatorer adskilt med `_` i alfabetisk rekkefølge.
 
 Fullstendig eksempel på aggregatkonfigurasjon:
 
