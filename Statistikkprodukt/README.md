@@ -253,6 +253,8 @@ CREATE TABLE ost_logg (
   kilde                 VARCHAR2(10 CHAR),
   maal                  VARCHAR2(10 CHAR),
   antall_aggregater     NUMBER,
+  python_pakke_versjon  VARCHAR2(128 CHAR),
+  r_pakke_versjon       VARCHAR2(128 CHAR),
   feilmelding           CLOB,
   aggregat_id           VARCHAR2(5 CHAR) NOT NULL,
   tabell                VARCHAR2(128 CHAR) NOT NULL,

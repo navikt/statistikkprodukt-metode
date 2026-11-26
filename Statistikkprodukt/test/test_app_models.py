@@ -37,6 +37,8 @@ def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
     assert first_row["feilmelding"] == long_text
     assert first_row["status"] == "FEILET"
     assert first_row["db_bruker"] == "testuser"
+    assert first_row["python_pakke_versjon"] is None
+    assert first_row["r_pakke_versjon"] is None
     assert json.loads(first_row["perioder"]) == ["2025,01", "2025-02"]
     assert first_row["antall_rader"] == 8
     assert second_row["antall_rader"] is None

@@ -263,13 +263,17 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
             assert cursor.fetchone() == (0,)
 
             cursor.execute(
-                "SELECT status, db_bruker, commit_hash, konfigurasjon, perioder, feilmelding, "
+                "SELECT status, db_bruker, commit_hash, python_pakke_versjon, "
+                "r_pakke_versjon, konfigurasjon, perioder, feilmelding, "
                 "navn, starttid, sluttid, antall_rader, "
                 "JSON_VALUE(konfigurasjon, '$.beskrivelse' RETURNING CLOB) "
                 "FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
                 id=logg.kjoring_id,
             )
-            status, user, commit_hash, config, periods, error, name, start, end, rows, json_text = cursor.fetchone()
+            (
+                status, user, commit_hash, python_version, r_version, config, periods,
+                error, name, start, end, rows, json_text,
+            ) = cursor.fetchone()
             assert status == "FEILET"
             assert user == "testuser"
             assert commit_hash == logg.commit_hash

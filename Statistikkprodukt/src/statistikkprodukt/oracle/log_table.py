@@ -21,6 +21,8 @@ LOG_COLUMNS = {
     "status": "#NAVN Status #NAVN_EN Status #INNHOLD Status for kjøringen #INNHOLD_EN Status for the run",
     "db_bruker": "#NAVN Databasebruker #NAVN_EN Database user #INNHOLD Databasebruker ansvarlig for kjøringen #INNHOLD_EN Database user responsible for the run",
     "commit_hash": "#NAVN Commit hash #NAVN_EN Commit hash #INNHOLD Commit hash for programversjonen som utførte kjøringen #INNHOLD_EN Commit hash of the program version used for the run",
+    "python_pakke_versjon": "#NAVN Python-pakkeversjon #NAVN_EN Python package version #INNHOLD Versjon av Python-pakken som utførte kjøringen #INNHOLD_EN Version of the Python package used for the run",
+    "r_pakke_versjon": "#NAVN R-pakkeversjon #NAVN_EN R package version #INNHOLD Versjon av R-pakken som ble brukt under kjøringen #INNHOLD_EN Version of the R package used for the run",
     "konfigurasjon": "#NAVN Konfigurasjon #NAVN_EN Configuration #INNHOLD Konfigurasjonen som ble brukt under kjøringen, lagret som JSON #INNHOLD_EN Configuration used for the run, stored as JSON",
     "kilde": "#NAVN Kilde #NAVN_EN Source #INNHOLD Om dataene ble lest fra database eller CSV #INNHOLD_EN Whether data was read from the database or CSV",
     "maal": "#NAVN Mål #NAVN_EN Target #INNHOLD Navn på smalt aggregat #INNHOLD_EN Name of the small aggregat",
@@ -74,6 +76,8 @@ def create_log_table_statement(schema: str) -> str:
         "  maal                  VARCHAR2(10 CHAR),\n"
         "  db_bruker             VARCHAR2(128 CHAR),\n"
         "  commit_hash           VARCHAR2(64 CHAR),\n"
+        "  python_pakke_versjon  VARCHAR2(128 CHAR),\n"
+        "  r_pakke_versjon       VARCHAR2(128 CHAR),\n"
         "  navn                  VARCHAR2(4000 char),\n"
         "  navn_en               VARCHAR2(4000 char),\n"
         "  innhold               CLOB,\n"

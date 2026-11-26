@@ -133,6 +133,8 @@ class Kjorelogg:
             "sluttid": self.sluttid or oslo_now(),
             "status": self.status,
             "commit_hash": self.commit_hash,
+            "python_pakke_versjon": None,
+            "r_pakke_versjon": None,
             "konfigurasjon": json.dumps(self.konfigurasjon, ensure_ascii=False),
             "kilde": self.kilde,
             "maal": self.maal,
