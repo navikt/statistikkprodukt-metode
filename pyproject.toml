@@ -7,6 +7,7 @@ authors = []
 requires-python = ">=3.12"
 dependencies = [
     "oracledb>=26.0.1",
+    "packaging>=26.0",
     "pandas>=3.0.6",
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
@@ -14,6 +15,11 @@ dependencies = [
     "google-cloud-secret-manager>=2.26.0",
     "pytz>=2026.6",
 ]
+
+[tool.statistikkprodukt]
+minimum_version = "0.1.0"
+# Oppdater sammen med kompatibiliteten i NavDataprodukt/DESCRIPTION.
+r_package_requirement = ">=0.1.1,<0.2"
 
 [project.scripts]
 statistikkprodukt = "statistikkprodukt.cli:main"

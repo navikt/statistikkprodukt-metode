@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from statistikkprodukt.app import installer_r_pakker, konfig, last, skjema
+from statistikkprodukt.version import require_compatible_python_version_interactive
 from statistikkprodukt.config import (
     ConfigError,
     StorageOption,
@@ -266,6 +267,8 @@ def main() -> None:
     LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, level)
 
     try:
+        require_compatible_python_version_interactive(args.command)
+
         if args.command == "testenv":
             _run_testenv(args, parser)
 

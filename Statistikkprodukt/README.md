@@ -59,6 +59,8 @@ Har du allerede installert, oppdater til nyeste versjon med:
 uv tool upgrade statistikkprodukt
 ```
 
+Ved oppstart kontrollerer verktøyet om en ny versjon er tilgjengelig.
+
 Test om installasjonen er vellykket:
 ```sh
 statistikkprodukt --help
@@ -73,6 +75,7 @@ KNAST har allerede R installert. For å installere eller oppdatere R avhengighet
 - packagemanager.posit.co/*
 - rspm-sync.rstudio.com/bin/*
 - codeload.github.com/navikt/statistikkprodukt-metode/*
+- raw.githubusercontent.com/navikt/statistikkprodukt-metode/*
 
 og kjør:
 ```sh

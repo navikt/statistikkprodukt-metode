@@ -5,6 +5,7 @@ ARG COMMIT_SHA
 ENV DEBIAN_FRONTEND=noninteractive \
     R_HOME=/usr/lib/R \
     UV_LINK_MODE=copy \
+    STATISTIKKPRODUKT_CHECK_VERSION=0 \
     STATISTIKKPRODUKT_COMMIT_SHA=${COMMIT_SHA}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

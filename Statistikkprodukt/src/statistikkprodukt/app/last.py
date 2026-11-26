@@ -12,6 +12,7 @@ from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata
 from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_config, StorageOption
 from statistikkprodukt.oracle.aggregate_table import read_aggregate_last_updated
 from statistikkprodukt.prikking import prikking
+from statistikkprodukt.version import require_compatible_r_package_interactive
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ def last(
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
+    require_compatible_r_package_interactive(offer_installation=True)
     LOGGER.debug(
         "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, full_relast=%s, valgte tabeller=%s.",
         source, target, dry_run, full_relast, selected_tables or "alle",

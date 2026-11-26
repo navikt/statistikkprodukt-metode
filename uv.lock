@@ -1287,6 +1287,7 @@ source = { editable = "." }
 dependencies = [
     { name = "google-cloud-secret-manager" },
     { name = "oracledb" },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "pydantic" },
     { name = "pytz" },
@@ -1305,6 +1306,7 @@ dev = [
 requires-dist = [
     { name = "google-cloud-secret-manager", specifier = ">=2.26.0" },
     { name = "oracledb", specifier = ">=26.0.1" },
+    { name = "packaging", specifier = ">=26.0" },
     { name = "pandas", specifier = ">=3.0.6" },
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pytz", specifier = ">=2026.6" },

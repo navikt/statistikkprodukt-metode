@@ -14,6 +14,11 @@ from uuid import uuid4
 import oracledb
 import pytz
 from statistikkprodukt.config import Aggregate, Metadata, StorageOption, Configuration
+from statistikkprodukt.version import (
+    format_r_package_version,
+    get_python_version,
+    get_r_package_info,
+)
 
 
 def oslo_now() -> datetime:
@@ -97,6 +102,12 @@ class Kjorelogg:
     feilmelding: str | None = None
     resultater: list[LasteResultat] = field(default_factory=list)
     commit_hash: str | None = field(default_factory=_program_commit)
+    python_pakke_versjon: str | None = field(
+        default_factory=lambda: get_python_version()
+    )
+    r_pakke_versjon: str | None = field(
+        default_factory=lambda: format_r_package_version()
+    )
 
     @classmethod
     def from_configuration(cls, configuration: Configuration, aggregates: list[Aggregate], kilde: str, maal: str) -> Kjorelogg:
@@ -112,7 +123,9 @@ class Kjorelogg:
             kilde=kilde,
             maal=maal,
             aggregater=aggregates,
-            db_bruker=configuration.connection.user
+            db_bruker=configuration.connection.user,
+            python_pakke_versjon=get_python_version(),
+            r_pakke_versjon=format_r_package_version(get_r_package_info()),
         )
 
     def fullfor_feil(self, feil: BaseException) -> None:
@@ -133,8 +146,8 @@ class Kjorelogg:
             "sluttid": self.sluttid or oslo_now(),
             "status": self.status,
             "commit_hash": self.commit_hash,
-            "python_pakke_versjon": None,
-            "r_pakke_versjon": None,
+            "python_pakke_versjon": self.python_pakke_versjon,
+            "r_pakke_versjon": self.r_pakke_versjon,
             "konfigurasjon": json.dumps(self.konfigurasjon, ensure_ascii=False),
             "kilde": self.kilde,
             "maal": self.maal,

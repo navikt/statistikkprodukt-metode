@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 import pandas as pd
 
 from statistikkprodukt.prikking import prikking
+from statistikkprodukt.version import GITHUB_BRANCH, require_compatible_r_package_interactive
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +20,11 @@ _PROXY_URLS = {
     "rspm-sync.rstudio.com/bin/*": "https://rspm-sync.rstudio.com/bin/4.6-noble/bde8c393c22d39782ea6858fc9975b38edb5fc53bbb7729bf9d00b2aee99ed57.tar.gz",
     "codeload.github.com/navikt/statistikkprodukt-metode/*": (
         "https://codeload.github.com/navikt/statistikkprodukt-metode/"
-        "legacy.tar.gz/refs/heads/meta-felter"
+        f"legacy.tar.gz/refs/heads/{GITHUB_BRANCH}"
+    ),
+    "raw.githubusercontent.com/navikt/statistikkprodukt-metode/*": (
+        "https://raw.githubusercontent.com/navikt/"
+        f"statistikkprodukt-metode/{GITHUB_BRANCH}/pyproject.toml"
     ),
 }
 
@@ -161,12 +166,20 @@ def installer_r_pakker(dev_lokal_r_pakke: bool) -> None:
                 upgrade=True
             )
         else:
-            LOGGER.info("Installerer 'NavDataprodukt' fra GitHub (branch meta-felter)...")
+            LOGGER.info(
+                "Installerer 'NavDataprodukt' fra GitHub (branch %s)...",
+                GITHUB_BRANCH,
+            )
             pak = rpy2.robjects.packages.importr("pak")
-            pak.pkg_install("navikt/statistikkprodukt-metode/NavDataprodukt@meta-felter", upgrade=True)
+            pak.pkg_install(
+                "navikt/statistikkprodukt-metode/"
+                f"NavDataprodukt@{GITHUB_BRANCH}",
+                upgrade=True,
+            )
 
         LOGGER.info("Tester R-miljøet...")
         _sjekk_r_miljo()
+        require_compatible_r_package_interactive(offer_installation=False)
         LOGGER.info("R-pakker installert og funksjonstest fullført.")
 
     except Exception as exc:

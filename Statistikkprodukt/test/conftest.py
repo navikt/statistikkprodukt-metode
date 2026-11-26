@@ -18,6 +18,11 @@ from testcontainers.community.oracle import OracleDbContainer
 EXTERNAL = os.environ.get("STATISTIKKPRODUKT_TESTENV_EXTERNAL") == "1"
 
 
+@pytest.fixture(autouse=True)
+def deactivate_automatic_version_check(monkeypatch):
+    monkeypatch.setenv("STATISTIKKPRODUKT_CHECK_VERSION", "0")
+
+
 @pytest.fixture(scope="session")
 def oracle_container():
     """Oppretter Oracle-containeren når en ekstern testdatabase ikke brukes."""

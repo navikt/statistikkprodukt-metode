@@ -23,7 +23,11 @@ def test_timestamps_are_naive_oslo_time_independent_of_host(monkeypatch, month, 
     assert logg.starttid.tzinfo is None
 
 
-def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
+def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates(monkeypatch):
+    monkeypatch.setattr(app_models, "get_python_version", lambda: "1.5.0")
+    monkeypatch.setattr(
+        app_models, "format_r_package_version", lambda: "0.1.1 (abc1234)"
+    )
     config = configuration()
     first = config.aggregater[0]
     second = first.model_copy(update={"tabell": "annen"})
@@ -37,8 +41,8 @@ def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
     assert first_row["feilmelding"] == long_text
     assert first_row["status"] == "FEILET"
     assert first_row["db_bruker"] == "testuser"
-    assert first_row["python_pakke_versjon"] is None
-    assert first_row["r_pakke_versjon"] is None
+    assert first_row["python_pakke_versjon"] == "1.5.0"
+    assert first_row["r_pakke_versjon"] == "0.1.1 (abc1234)"
     assert json.loads(first_row["perioder"]) == ["2025,01", "2025-02"]
     assert first_row["antall_rader"] == 8
     assert second_row["antall_rader"] is None
