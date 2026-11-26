@@ -22,12 +22,12 @@ from statistikkprodukt.oracle.operations import (
     read_periods,
     read_query,
     read_target_periods,
-    table_exists,
     validate_string_columns,
     write_comments,
     write_kontroll_comments,
     write_result,
 )
+from statistikkprodukt.oracle.utils import table_exists
 
 __all__ = [
     "META_COLUMNS",

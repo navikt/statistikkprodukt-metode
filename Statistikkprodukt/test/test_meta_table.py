@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -5,6 +6,7 @@ from pydantic import ValidationError
 
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, Metadata
+from statistikkprodukt.oracle.aggregate_table import read_aggregate_last_updated
 from statistikkprodukt.oracle.meta_table import (
     create_meta_table_statement,
     metadata_rows,
@@ -65,7 +67,8 @@ def resolved_metadata(aggregate):
 
 def test_metadata_mapping():
     aggregate = aggregate_with_metadata()
-    rows = metadata_rows(aggregate, resolved_metadata(aggregate))
+    last_updated = datetime(2026, 11, 24, 13, 45, 12)
+    rows = metadata_rows(aggregate, resolved_metadata(aggregate), last_updated)
     assert all(row["scope"] is None for row in rows)
     values = {(row["type"], row["keyword"], row["language"]): row["value"]
               for row in rows if row["keyword"] != "CONTACT"}
@@ -85,6 +88,7 @@ def test_metadata_mapping():
         ("PX", "NOTEX", "EN"): "Break",
         ("PX", "DISCONTINUED", None): "NO",
         ("PX", "OFFICIAL-STATISTICS", None): "YES",
+        ("PX", "LAST-UPDATED", None): "2026-11-24 13:45:12",
         ("CS", "STUB", None): "region,periode",
         ("CS", "TIMEVAL", None): "periode",
         ("CS", "DATA", None): "antall#1#unit_antall",
@@ -128,7 +132,7 @@ def test_optional_data_settings(precision, unit, expected):
         "enhet": unit, "statistikkbank": {"precision": precision},
     })
     aggregate = Aggregate.model_validate(data)
-    rows = metadata_rows(aggregate, resolved_metadata(aggregate))
+    rows = metadata_rows(aggregate, resolved_metadata(aggregate), None)
     assert next(row["value"] for row in rows if row["keyword"] == "DATA") == expected
     assert not any(row["value"] == "None" for row in rows)
 
@@ -147,7 +151,6 @@ def test_language_columns_are_rejected_before_database_write(field, suffix):
         match=f"Kolonnenavn {column} med __no-/__en suffiks er ikke implementert enda",
     ):
         write_metadata_table(connection, "TEST", aggregate, resolved_metadata(aggregate))
-    connection.cursor.assert_not_called()
     connection.commit.assert_not_called()
 
 
@@ -159,20 +162,40 @@ def test_negative_precision_rejected(field):
         Aggregate.model_validate(data)
 
 
+def test_last_updated_skips_timestamp_query_when_prepub_table_is_missing():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = None
+
+    assert read_aggregate_last_updated(connection, "TEST", aggregate_with_metadata()) is None
+
+    connection.cursor.assert_called_once()
+    cursor.execute.assert_called_once_with(
+        "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
+        owner="TEST", table_name="TABELL_PREPUB",
+    )
+
+
 def test_write_replaces_metadata_transactionally():
     aggregate = aggregate_with_metadata()
     metadata = resolved_metadata(aggregate)
+    last_updated = datetime(2026, 11, 24, 13, 45, 12)
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [(1,), (last_updated,)]
     write_metadata_table(connection, "TEST", aggregate, metadata)
-    cursor.execute.assert_called_once_with("DELETE FROM test.tabell_meta")
+    assert [call.args[0] for call in cursor.execute.call_args_list] == [
+        "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
+        "SELECT MAX(dvh_lastet_tid) FROM test.tabell_prepub",
+        "DELETE FROM test.tabell_meta",
+    ]
     cursor.executemany.assert_called_once_with(
         "INSERT INTO test.tabell_meta (type, keyword, scope, language, value) "
         "VALUES (:type, :keyword, :scope, :language, :value)",
-        metadata_rows(aggregate, metadata),
+        metadata_rows(aggregate, metadata, last_updated),
     )
     assert [call[0] for call in cursor.method_calls] == [
-        "execute", "executemany",
+        "execute", "fetchone", "execute", "fetchone", "execute", "executemany",
     ]
     connection.commit.assert_called_once()
     connection.rollback.assert_not_called()
@@ -182,6 +205,7 @@ def test_failed_insert_rolls_back_delete():
     aggregate = aggregate_with_metadata()
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (None,)
     cursor.executemany.side_effect = ValueError("Innsetting feilet")
     with pytest.raises(ValueError, match="Innsetting feilet"):
         write_metadata_table(connection, "TEST", aggregate, resolved_metadata(aggregate))
@@ -197,7 +221,7 @@ def test_long_value_rejected_before_delete(text):
     connection = MagicMock()
     with pytest.raises(ValueError, match="PX/CONTENTS overskrider 4000 byte i UTF-8"):
         write_metadata_table(connection, "TEST", aggregate, metadata)
-    connection.cursor.assert_not_called()
+    connection.commit.assert_not_called()
 
 
 @pytest.mark.parametrize("text", ["a" * 4000, "ø" * 2000, "😀" * 1000])
@@ -205,7 +229,7 @@ def test_value_at_utf8_byte_limit_is_accepted(text):
     aggregate = aggregate_with_metadata()
     metadata = resolved_metadata(aggregate)
     metadata.table.innhold = text
-    rows = metadata_rows(aggregate, metadata)
+    rows = metadata_rows(aggregate, metadata, None)
     assert next(row["value"] for row in rows
                 if row["keyword"] == "CONTENTS" and row["language"] == "NO") == text
 

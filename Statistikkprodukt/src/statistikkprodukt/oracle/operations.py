@@ -154,22 +154,6 @@ def _raise_friendly_sql_error(exc: oracledb.DatabaseError, source_query: bool) -
             ) from exc
 
 
-def table_exists(
-        connection: oracledb.Connection, schema: str, table_name: str
-) -> bool:
-    """Sjekker om en tabell finnes i det angitte Oracle-skjemaet."""
-    with connection.cursor() as cursor:
-        execute_sql(
-            cursor,
-            "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-            owner=schema.upper(),
-            table_name=table_name.upper(),
-        )
-        exists = cursor.fetchone() is not None
-    LOGGER.debug("Tabellen %s.%s finnes: %s.", schema, table_name, exists)
-    return exists
-
-
 def validate_string_columns(
         connection: oracledb.Connection,
         schema: str,

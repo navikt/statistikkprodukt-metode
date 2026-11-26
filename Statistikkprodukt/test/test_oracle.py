@@ -201,7 +201,10 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
                 f"FROM SYSTEM.{aggregate.meta_tabell}"
             )
             meta = [dict(zip(meta_table.META_COLUMNS, row)) for row in cursor.fetchall()]
-            expected = meta_table.metadata_rows(aggregate, table_metadata)
+            expected = meta_table.metadata_rows(aggregate, table_metadata, None)
+            for row in expected:
+                if row["keyword"] == "LAST-UPDATED":
+                    row["value"] = None
             assert sorted(meta, key=repr) == sorted(expected, key=repr)
             assert next(row["value"] for row in meta
                         if row["keyword"] == "TITLE" and row["language"] == "NO") == "Oppdatert"
@@ -498,7 +501,8 @@ def test_write_database_writes_column_comments_to_all_comments(
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{aggregate.prepub_tabell} ("
-                "periode NUMBER, region VARCHAR2(100 CHAR), antall NUMBER)"
+                "periode NUMBER, region VARCHAR2(100 CHAR), antall NUMBER, "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{aggregate.kontroll_tabell} ("
@@ -784,7 +788,8 @@ def test_process_aggregate_only_masks_selected_periods(
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{prepub_table} ("
-                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER)"
+                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{kontroll_table} ("
@@ -795,7 +800,8 @@ def test_process_aggregate_only_masks_selected_periods(
             cursor.execute(oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell))
             existing = [("202500", "Oslo", 0), ("202501", "Oslo", 1), ("202502", "Oslo", 2)]
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{prepub_table} VALUES (:1, :2, :3)", existing
+                f"INSERT INTO SYSTEM.{prepub_table} (periode, region, antall) VALUES (:1, :2, :3)",
+                existing,
             )
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, 'antall', :3, 1, 1)",

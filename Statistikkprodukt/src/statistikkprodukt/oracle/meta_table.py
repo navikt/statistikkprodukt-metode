@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 import oracledb
 
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, validate_identifier
+from statistikkprodukt.oracle.aggregate_table import read_aggregate_last_updated
 from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
@@ -74,7 +76,7 @@ class _Rows:
                 self.add(row_type, keyword, value, language)
 
 
-def _px_rows(rows: _Rows, aggregate: Aggregate, metadata: TableMetadata) -> None:
+def _px_rows(rows: _Rows, aggregate: Aggregate, metadata: TableMetadata, aggregate_last_updated: datetime|None) -> None:
     """Mapper tabellmetadata til PX-nøkkelord og én CONTACT-rad per kontakt."""
     rows.add("PX", "MATRIX", aggregate.id, language="NO")
     rows.translated("PX", "TITLE", metadata.table, "navn")
@@ -88,6 +90,8 @@ def _px_rows(rows: _Rows, aggregate: Aggregate, metadata: TableMetadata) -> None
     rows.add("PX", "SUBJECT-CODE", statistikkbank_config.subject_code, language="NO")
     rows.add("PX", "DISCONTINUED", statistikkbank_config.discontinued, None)
     rows.add("PX", "OFFICIAL-STATISTICS", statistikkbank_config.official_statistics, None)
+    last_updated_str = "" if aggregate_last_updated is None else aggregate_last_updated.strftime("%Y-%m-%d %H:%M:%S")
+    rows.add("PX", "LAST-UPDATED", last_updated_str, None)
 
     for contact in statistikkbank_config.ekstra_kontakter:
         parts = [
@@ -177,10 +181,10 @@ def _sq_rows(rows: _Rows, aggregate: Aggregate) -> None:
             rows.add("SQ", column, source_query_value, None)
 
 
-def metadata_rows(aggregate: Aggregate, metadata: TableMetadata) -> list[dict]:
+def metadata_rows(aggregate: Aggregate, metadata: TableMetadata, aggregate_last_updated: datetime|None) -> list[dict]:
     """Oversetter konfigurasjon og løste metadata til PX-, CS-, CR- og SQ-rader."""
     rows = _Rows()
-    _px_rows(rows, aggregate, metadata)
+    _px_rows(rows, aggregate, metadata, aggregate_last_updated)
     _cs_rows(rows, aggregate)
     _cr_rows(rows, aggregate, metadata)
     _sq_rows(rows, aggregate)
@@ -196,7 +200,8 @@ def write_metadata_table(
     """Overskriver hele {tabell}_meta med gjeldende metadata i én transaksjon."""
 
     table = f"{validate_identifier(schema)}.{validate_identifier(aggregate.meta_tabell)}"
-    rows = metadata_rows(aggregate, metadata)
+    aggregate_last_updated = read_aggregate_last_updated(connection, schema, aggregate)
+    rows = metadata_rows(aggregate, metadata, aggregate_last_updated)
     names = ", ".join(META_COLUMNS)
     binds = ", ".join(f":{name}" for name in META_COLUMNS)
 
@@ -208,6 +213,7 @@ def write_metadata_table(
             executemany_sql(
                 cursor, f"INSERT INTO {table} ({names}) VALUES ({binds})", rows
             )
+
         connection.commit()
     except Exception as exc:
         LOGGER.debug("Feil ved skriving av %s; ruller tilbake: %r.", table, exc)

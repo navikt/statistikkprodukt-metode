@@ -11,6 +11,7 @@ from pydantic import SecretStr
 from statistikkprodukt import oracle, csv
 from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer, oslo_now
 from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_config, StorageOption
+from statistikkprodukt.oracle.aggregate_table import read_aggregate_last_updated
 from statistikkprodukt.prikking import prikking
 
 LOGGER = logging.getLogger(__name__)
@@ -480,16 +481,26 @@ def _write_output(
 
 def _get_meta_table_data(aggregate: Aggregate, configuration: Configuration, transfer: Transfer) -> tuple[
     DataFrame, TableMetadata]:
+    aggregate_last_updated = None
     if transfer.source == StorageOption.DB:
         if transfer.connection is None:
             raise RuntimeError("Databasetilkobling mangler.")
+
+        aggregate_last_updated = read_aggregate_last_updated(
+            transfer.connection,
+            configuration.connection.schema_name,
+            aggregate
+        )
+
         metadata = oracle.read_metadata(
-            transfer.connection, configuration.connection.schema_name, aggregate
+            transfer.connection,
+            configuration.connection.schema_name,
+            aggregate
         )
     else:
         metadata = TableMetadata.from_aggregate(aggregate)
     meta = pd.DataFrame(
-        oracle.metadata_rows(aggregate, metadata), columns=oracle.META_COLUMNS
+        oracle.metadata_rows(aggregate, metadata, aggregate_last_updated), columns=oracle.META_COLUMNS
     )
     return meta, metadata
 

@@ -43,6 +43,11 @@ def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, s
     read_metadata = MagicMock(return_value=expected)
     monkeypatch.setattr(oracle, "read_metadata", read_metadata)
     connection = MagicMock() if source == StorageOption.DB else None
+    last_updated = None
+    if connection is not None:
+        last_updated = datetime(2026, 11, 22, 14, 30)
+        cursor = connection.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect = [(1,), (last_updated,)]
     transfer = Transfer(connection, source, StorageOption.CSV, tmp_path, tmp_path)
     path = tmp_path / "tabell_meta.csv"
     path.write_text("utdatert metadata", encoding="utf-8")
@@ -57,7 +62,7 @@ def test_csv_output_replaces_metadata_even_without_data(tmp_path, monkeypatch, s
     assert list(frame.columns) == [*oracle.META_COLUMNS, "dvh_lastet_tid"]
     assert frame.drop(columns="dvh_lastet_tid").to_dict("records") == [
         {key: value if value is not None else "" for key, value in row.items()}
-        for row in oracle.metadata_rows(aggregate, expected)
+        for row in oracle.metadata_rows(aggregate, expected, last_updated)
     ]
     assert metadata == expected
     assert frame["dvh_lastet_tid"].nunique() == 1

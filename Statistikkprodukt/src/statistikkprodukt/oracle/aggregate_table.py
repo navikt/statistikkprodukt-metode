@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 import oracledb
 from oracledb import Cursor
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.config import Aggregate, Metadata, validate_identifier
-from statistikkprodukt.oracle.utils import execute_sql
+from statistikkprodukt.oracle.utils import execute_sql, table_exists
 
 LOGGER = logging.getLogger(__name__)
 
@@ -172,3 +173,21 @@ def parse_metadata(comment: str | None) -> Metadata:
             values[tag.lower()] = value
 
     return Metadata.model_validate(values)
+
+
+def read_aggregate_last_updated(connection: oracledb.Connection, schema: str, aggregate: Aggregate) -> datetime | None:
+    """Henter siste lastetid fra prepub-tabellen hvis den finnes."""
+    schema = validate_identifier(schema)
+    table_name = validate_identifier(aggregate.prepub_tabell)
+    table = f"{schema}.{table_name}"
+    try:
+        # dette kan skje når man laster fra DB til CSV før prepub-tabellen er opprettet
+        if not table_exists(connection, schema, table_name):
+            return None
+        with connection.cursor() as cursor:
+            execute_sql(cursor, f"SELECT MAX(dvh_lastet_tid) FROM {table}")
+            row = cursor.fetchone()
+            return row[0] if row else None
+    except Exception as exc:
+        LOGGER.debug("Feil ved henting av siste oppdateringstid for %s", table, exc_info=True)
+        raise

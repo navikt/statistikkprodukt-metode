@@ -140,7 +140,7 @@ group by periode, region
             f"FROM {SCHEMA}.{self.aggregate_table}_kontroll"
         ))
 
-    def les_meta_tabell(self) -> dict[tuple, str]:
+    def les_meta_tabell(self) -> dict[tuple, str | None]:
         return {
             (row_type, keyword, language): value
             for row_type, keyword, language, value in self._hent(
@@ -299,6 +299,11 @@ def test_e2e_run(e2e):
     meta = e2e.les_meta_tabell()
     assert meta["PX", "MATRIX", "NO"] == "21000"
     assert meta["PX", "TITLE", "NO"] == "Aggregerte verdier"
+    [(siste_lastetid,)] = e2e._hent(
+        f"SELECT MAX(dvh_lastet_tid) FROM {SCHEMA}.{e2e.aggregate_table}_prepub"
+    )
+    assert siste_lastetid is not None
+    assert meta["PX", "LAST-UPDATED", None] == siste_lastetid.strftime("%Y-%m-%d %H:%M:%S")
     assert meta["CS", "TIMEVAL", None] == "periode"
     assert e2e.les_logg_tabell() == [("OK", "21000", e2e.aggregate_table, "Aggregerte verdier", 6, 4)]
 
@@ -337,6 +342,7 @@ def test_e2e_tom_kilde_fra_starten(e2e, strategi):
     meta = e2e.les_meta_tabell()
     assert meta["PX", "MATRIX", "NO"] == "21000"
     assert meta["PX", "TITLE", "NO"] == "Aggregerte verdier"
+    assert meta["PX", "LAST-UPDATED", None] is None
     assert meta["CS", "TIMEVAL", None] == "periode"
     assert e2e.les_logg_tabell() == [
         ("OK", "21000", e2e.aggregate_table, "Aggregerte verdier", 0, 0)
