@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -106,6 +107,7 @@ class DatabaseConnection(StrictModel):
 
 
 class ConfigurationSource(StrictModel):
+    version: Literal[1] = Field(description="Versjon av hovedkonfigurasjonens format.")
     connection: DatabaseConnection = Field(
         description="Tilkoblingsinnstillinger for databasen."
     )
@@ -136,6 +138,7 @@ class ConfigurationSource(StrictModel):
 
 
 class Configuration(StrictModel):
+    version: Literal[1] = Field(description="Versjon av hovedkonfigurasjonens format.")
     connection: DatabaseConnection = Field(
         description="Tilkoblingsinnstillinger for databasen."
     )

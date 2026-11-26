@@ -418,4 +418,5 @@ class Aggregate(StrictModel):
 
 
 class AggregateConfiguration(StrictModel):
+    version: Literal[1] = Field(description="Versjon av aggregatkonfigurasjonens format.")
     definisjon: Aggregate = Field(description="Definisjonen av ett aggregat.")

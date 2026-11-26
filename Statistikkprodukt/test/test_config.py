@@ -4,8 +4,10 @@ import pytest
 from pydantic import ValidationError
 
 from statistikkprodukt.config import (
+    AggregateConfiguration,
     ConfigError,
     Configuration,
+    ConfigurationSource,
     Tellepunkt,
     load_configuration,
     resolve_config,
@@ -16,6 +18,7 @@ def configuration():
     """Bygger en gyldig konfigurasjon for en liten aggregattabell."""
     return Configuration.model_validate(
         {
+            "version": 1,
             "connection": {
                 "database": "DWHP",
                 "schema": "TEST",
@@ -57,6 +60,58 @@ def test_configuration_rejects_unknown_keys():
     config["unknown"] = True
     with pytest.raises(ValidationError):
         Configuration.model_validate(config)
+
+
+def test_configuration_version_is_required():
+    config = configuration().model_dump(by_alias=True)
+    config.pop("version")
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_configuration_rejects_unsupported_version():
+    config = configuration().model_dump(by_alias=True)
+    config["version"] = 2
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_source_and_aggregate_configuration_versions_are_required():
+    config = configuration()
+    with pytest.raises(ValidationError):
+        ConfigurationSource.model_validate(
+            {
+                "connection": config.connection.model_dump(by_alias=True),
+                "mapper": ["aggregater/**"],
+                "aggregater": ["tabell"],
+            }
+        )
+    with pytest.raises(ValidationError):
+        AggregateConfiguration.model_validate(
+            {"definisjon": config.aggregater[0].model_dump(by_alias=True)}
+        )
+
+
+def test_source_and_aggregate_configuration_reject_unsupported_versions():
+    config = configuration()
+    with pytest.raises(ValidationError):
+        ConfigurationSource.model_validate(
+            {
+                "version": 2,
+                "connection": config.connection.model_dump(by_alias=True),
+                "mapper": ["aggregater/**"],
+                "aggregater": ["tabell"],
+            }
+        )
+    with pytest.raises(ValidationError):
+        AggregateConfiguration.model_validate(
+            {
+                "version": 2,
+                "definisjon": config.aggregater[0].model_dump(by_alias=True),
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -253,6 +308,7 @@ def test_loads_aggregate_configurations_matching_mapper(tmp_path):
     aggregate_directory.mkdir()
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST
@@ -268,6 +324,7 @@ aggregater:
     for table in ("tabell", "annen"):
         (aggregate_directory / f"{table}.yml").write_text(
             f"""
+version: 1
 definisjon:
   navn: {table}
   navn-en: {table}
@@ -304,6 +361,7 @@ definisjon:
     config, config_directory = load_configuration(tmp_path / "konfigurasjon.yml")
 
     assert config_directory == tmp_path
+    assert config.version == 1
     assert [aggregate.tabell for aggregate in config.aggregater] == ["tabell"]
     aggregate = config.aggregater[0]
     assert aggregate.referanse_tabell == "obt_tabell"
@@ -320,6 +378,7 @@ def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
     aggregate_directory.mkdir()
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST
@@ -334,6 +393,7 @@ aggregater:
     )
     (aggregate_directory / "annet_navn.yml").write_text(
         """
+version: 1
 definisjon:
   navn: dummy
   navn-en: dummy
@@ -369,6 +429,7 @@ def test_aggregate_names_must_be_unique_across_search_paths(tmp_path):
         (aggregate_directory / "tabell.yml").write_text("", encoding="utf-8")
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST

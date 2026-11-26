@@ -181,6 +181,7 @@ group by periode, region
 
 def _aggregat_yml(source_table: str, strategi: IncrementalMode) -> str:
     return f"""
+version: 1
 definisjon:
   id: "21000"
   referanse-tabell: {source_table}
@@ -237,6 +238,7 @@ def e2e(oracle_connection, monkeypatch, tmp_path):
     config_path = tmp_path / "konfigurasjon.yml"
     config_path.write_text(
         f"""
+version: 1
 connection:
   database: DWHP
   schema: {SCHEMA}

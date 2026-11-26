@@ -15,10 +15,11 @@ def _configure(tmp_path, monkeypatch, agg_id):
     aggregate.pop("tabell")
     aggregate.pop("sporring_sql")
     (tmp_path / "tabell.yml").write_text(
-        yaml.safe_dump({"definisjon": aggregate}), encoding="utf-8"
+        yaml.safe_dump({"version": 1, "definisjon": aggregate}), encoding="utf-8"
     )
     (tmp_path / "konfigurasjon.yml").write_text(
         yaml.safe_dump({
+            "version": config["version"],
             "connection": config["connection"],
             "mapper": ["*.yml"],
             "aggregater": ["tabell"],

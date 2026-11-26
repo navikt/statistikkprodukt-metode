@@ -1,3 +1,4 @@
+version: 1
 # Samler innstillinger og metadata for ett aggregat.
 definisjon:
   # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.md.

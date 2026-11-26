@@ -62,6 +62,7 @@ Do not change the database schema. If an insert is incompatible with the existin
 
 The shared configuration file contains connection settings and patterns for finding aggregate definitions:
 ```yaml
+version: 1
 connection:
   # Select either a predefined profile ...
   database: DWHP
@@ -91,6 +92,7 @@ aggregater:
 
 Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `aggregater` must be globally unique:
 ```yaml
+version: 1
 definisjon:
   navn: Befolkning etter alder
   navn-en: Population by age

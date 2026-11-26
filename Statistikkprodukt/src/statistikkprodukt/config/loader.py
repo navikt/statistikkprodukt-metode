@@ -71,6 +71,7 @@ def load_configuration(
 
     try:
         config = Configuration(
+            version=source.version,
             connection=source.connection,
             aggregater=aggregates,
         )

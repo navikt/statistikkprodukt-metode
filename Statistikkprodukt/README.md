@@ -142,6 +142,7 @@ Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test ob
 
 Modifiser `eksempel/konfigurasjon.yml` med riktig databaseprofil:
 ```yaml
+version: 1
 connection:
   host: oracle.example.no
   port: 1521
@@ -328,6 +329,7 @@ For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørrin
 Fullstendig eksempel på aggregatkonfigurasjon:
 
 ```yaml
+version: 1
 # Samler innstillinger og metadata for ett aggregat.
 definisjon:
   # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.md.

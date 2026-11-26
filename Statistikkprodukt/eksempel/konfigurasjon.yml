@@ -1,3 +1,4 @@
+version: 1
 connection:
   database: DWHP
   schema: STATISTIKKPRODUKT
