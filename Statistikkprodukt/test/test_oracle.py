@@ -294,7 +294,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
     aggregate.tabell = f"sb_test_{uuid4().hex[:12]}"
     aggregate.sporring_sql = "create_test.sql"
     (tmp_path / aggregate.sporring_sql).write_text(
-        "select cast(202501 as varchar2(6)) as periode, 'Oslo' as region, 10 as antall from dual",
+        "select cast('2025M01' as varchar2(7)) as periode, 'Oslo' as region, 10 as antall from dual",
         encoding="utf-8",
     )
 
@@ -350,7 +350,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
             with oracle_connection.cursor() as cursor:
                 cursor.execute(
                     f"INSERT INTO SYSTEM.{table_name} (periode, region) "
-                    "VALUES ('202501', 'Oslo')"
+                    "VALUES ('2025M01', 'Oslo')"
                 )
                 cursor.execute(f"SELECT dvh_lastet_tid FROM SYSTEM.{table_name}")
                 assert cursor.fetchone()[0] is not None
@@ -438,11 +438,11 @@ def test_validate_string_columns_rejects_non_text_columns(oracle_connection):
     ("sql", "column_name"),
     [
         (
-            "select 202501 as periode, 'Oslo' as region, 10 as antall from dual",
+            "select 2025 as periode, 'Oslo' as region, 10 as antall from dual",
             "periode",
         ),
         (
-            "select '202501' as periode, 10 as region, 10 as antall from dual",
+            "select '2025M01' as periode, 10 as region, 10 as antall from dual",
             "region",
         ),
     ],
@@ -456,7 +456,7 @@ def test_read_query_rejects_non_text_period_and_variables(
 
 def test_read_periods_rejects_non_text_period(oracle_connection):
     with pytest.raises(ValueError, match="Kolonnen periode.*tekstkolonne"):
-        read_periods(oracle_connection, "select 202501 as periode from dual", "periode")
+        read_periods(oracle_connection, "select 2025 as periode from dual", "periode")
 
 
 def test_write_database_writes_column_comments_to_all_comments(
@@ -501,12 +501,12 @@ def test_write_database_writes_column_comments_to_all_comments(
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{aggregate.prepub_tabell} ("
-                "periode NUMBER, region VARCHAR2(100 CHAR), antall NUMBER, "
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
                 "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{aggregate.kontroll_tabell} ("
-                "periode NUMBER, region VARCHAR2(100 CHAR), "
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), "
                 "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
                 "primary NUMBER(1), suppressed NUMBER(1))"
             )
@@ -516,7 +516,7 @@ def test_write_database_writes_column_comments_to_all_comments(
 
         frame = pd.DataFrame(
             {
-                "periode": [202501],
+                "periode": ['2025M01'],
                 "region": ["Oslo"],
                 "antall": [10],
                 "primary": [True],
@@ -623,7 +623,7 @@ def test_full_relast_deletes_all_rows_before_insert(empty):
     aggregate = configuration().aggregater[0]
     frame = pd.DataFrame(
         {
-            "periode": [] if empty else ["202501"],
+            "periode": [] if empty else ["2025M01"],
             "region": [] if empty else ["Oslo"],
             "antall": [] if empty else [10],
         }
@@ -665,7 +665,7 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
                 aggregate,
                 table,
                 pd.DataFrame(
-                    {"periode": [202501], "region": ["Oslo"], "ukjent": [10]}
+                    {"periode": ['2025M01'], "region": ["Oslo"], "ukjent": [10]}
                 ),
             )
 
@@ -678,31 +678,31 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
         oracle_connection.commit()
 
 
-@pytest.mark.parametrize("periods", [None, [], ["202502"], ["202501", "202502"]])
+@pytest.mark.parametrize("periods", [None, [], ["2025M02"], ["2025M01", "2025M02"]])
 def test_read_query_filters_periods_in_oracle(oracle_connection, periods):
     sql = (
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
-        "union all select '202502', 'Oslo', 20 from dual;"
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual "
+        "union all select '2025M02', 'Oslo', 20 from dual;"
     )
     aggregate = configuration().aggregater[0]
-    assert read_periods(oracle_connection, sql, "periode") == {"202501", "202502"}
+    assert read_periods(oracle_connection, sql, "periode") == {"2025M01", "2025M02"}
 
     frame = read_query(
         oracle_connection, sql, aggregate, periods_to_load=periods
     )
-    assert sorted(frame["periode"].tolist()) == (["202501", "202502"] if periods is None else [str(value) for value in periods])
+    assert sorted(frame["periode"].tolist()) == (["2025M01", "2025M02"] if periods is None else [str(value) for value in periods])
 
 
-def test_read_query_binds_string_periods_in_oracle(oracle_connection):
+def test_read_query_rejects_invalid_period_after_binding_in_oracle(oracle_connection):
     period = "x') OR 1=1 --"
     sql = (
         "select 'x'') OR 1=1 --' as periode, 'Oslo' as region, 10 as antall from dual "
         "union all select '2025-02', 'Oslo', 20 from dual"
     )
-    frame = read_query(
-        oracle_connection, sql, configuration().aggregater[0], periods_to_load=[period]
-    )
-    assert frame["periode"].tolist() == [period]
+    with pytest.raises(ValueError, match="Ugyldig periode"):
+        read_query(
+            oracle_connection, sql, configuration().aggregater[0], periods_to_load=[period]
+        )
 
 
 def test_read_target_periods_uses_configured_schema(oracle_connection):
@@ -711,12 +711,12 @@ def test_read_target_periods_uses_configured_schema(oracle_connection):
     aggregate = configuration().aggregater[0].model_copy(update={"tabell": table})
     try:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode VARCHAR2(6 CHAR))")
+            cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode VARCHAR2(7 CHAR))")
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{prepub_table} (periode) VALUES (:1)",
-                [("202501",), ("202502",), ("202502",)],
+                [("2025M01",), ("2025M02",), ("2025M02",)],
             )
-        assert read_target_periods(oracle_connection, "SYSTEM", aggregate) == {"202501", "202502"}
+        assert read_target_periods(oracle_connection, "SYSTEM", aggregate) == {"2025M01", "2025M02"}
     finally:
         with oracle_connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE SYSTEM.{prepub_table} PURGE")
@@ -726,11 +726,13 @@ def test_read_target_periods_uses_configured_schema(oracle_connection):
 def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
     frame = read_query(
         oracle_connection,
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual",
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual",
         configuration().aggregater[0],
-        periods_to_load=[str(period) for period in range(202000, 203001)],
+        periods_to_load=[
+            f"{year}M{month:02d}" for year in range(2000, 2100) for month in range(1, 13)
+        ],
     )
-    assert frame["periode"].tolist() == ["202501"]
+    assert frame["periode"].tolist() == ["2025M01"]
 
 
 @pytest.mark.parametrize(
@@ -738,13 +740,13 @@ def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
     [
         (
                 "legg_til_nye_perioder",
-                ["202503"],
-                [("202500", 0), ("202501", 1), ("202502", 2), ("202503", 30)],
+                ["2025M03"],
+                [("2024M12", 0), ("2025M01", 1), ("2025M02", 2), ("2025M03", 30)],
         ),
         (
                 "overskriv_eksisterende_perioder",
-                ["202501", "202502", "202503"],
-                [("202500", 0), ("202501", 10), ("202502", 20), ("202503", 30)],
+                ["2025M01", "2025M02", "2025M03"],
+                [("2024M12", 0), ("2025M01", 10), ("2025M02", 20), ("2025M03", 30)],
         ),
     ],
 )
@@ -758,9 +760,9 @@ def test_process_aggregate_only_masks_selected_periods(
     aggregate.tabell = table
     aggregate.inkrementell_strategi = IncrementalMode(mode)
     (tmp_path / aggregate.sporring_sql).write_text(
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
-        "union all select '202502', 'Oslo', 20 from dual "
-        "union all select '202503', 'Oslo', 30 from dual;"
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual "
+        "union all select '2025M02', 'Oslo', 20 from dual "
+        "union all select '2025M03', 'Oslo', 30 from dual;"
     )
     # == periods passed to prikking will be loaded in the database.
     # Store those here to use in an assert later on
@@ -788,17 +790,17 @@ def test_process_aggregate_only_masks_selected_periods(
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{prepub_table} ("
-                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
                 "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{kontroll_table} ("
-                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), "
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), "
                 "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
                 "primary NUMBER(1), suppressed NUMBER(1))"
             )
             cursor.execute(oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell))
-            existing = [("202500", "Oslo", 0), ("202501", "Oslo", 1), ("202502", "Oslo", 2)]
+            existing = [("2024M12", "Oslo", 0), ("2025M01", "Oslo", 1), ("2025M02", "Oslo", 2)]
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{prepub_table} (periode, region, antall) VALUES (:1, :2, :3)",
                 existing,
@@ -865,7 +867,7 @@ def test_process_aggregate_prikker_hvert_tellepunkt_og_navngir_kontroll(monkeypa
     aggregate = config.aggregater[0]
     aggregate.tellepunkter = [Tellepunkt(kolonne="antall"), Tellepunkt(kolonne="kvinner")]
     data = pd.DataFrame(
-        {"periode": ["202501", "202501"], "region": ["Oslo", "Bergen"],
+        {"periode": ["2025M01", "2025M01"], "region": ["Oslo", "Bergen"],
          "antall": [10, 20], "kvinner": [4, 8]}
     )
     prikket = []

@@ -144,6 +144,9 @@ def test_language_columns_are_rejected_before_database_write(field, suffix):
     variable = data[field] if field == "periodisering" else data[field][0]
     column = f"{variable['kolonne']}__{suffix}"
     variable["kolonne"] = column
+    data["formula"] = (
+        f"~ {data['periodisering']['kolonne']} / {data['variabler'][0]['kolonne']}"
+    )
     aggregate = Aggregate.model_validate(data)
     connection = MagicMock()
     with pytest.raises(

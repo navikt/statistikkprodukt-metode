@@ -44,6 +44,18 @@ def validate_table_identifier(value: str) -> str:
     return ".".join(validate_identifier(part) for part in parts)
 
 
+def validate_period(value: Any) -> str:
+    """Kontrollerer år, måned (M01–M12) eller kvartal (K1–K4)."""
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[0-9]{4}(?:M(?:0[1-9]|1[0-2])|K[1-4])?", value
+    ):
+        raise ValueError(
+            f"Ugyldig periode {value!r}. Må være YYYY, YYYYM01–YYYYM12 "
+            "eller YYYYK1–YYYYK4."
+        )
+    return value
+
+
 def is_not_empty(value: str) -> str:
     """Validerer at en streng ikke er tom eller bare mellomrom."""
     if not value.strip():

@@ -116,7 +116,7 @@ def test_csv_pipeline_writes_metadata_without_database_or_r(tmp_path, monkeypatc
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
-        {"periode": [202501], "region": ["Oslo"], "antall": [12]}
+        {"periode": ['2025M01'], "region": ["Oslo"], "antall": [12]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
     def mask(data, *args):
@@ -146,7 +146,7 @@ def test_csv_masked(tmp_path):
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
-        {"periode": [202501], "region": ["Oslo"], "antall": [3]}
+        {"periode": ['2025M01'], "region": ["Oslo"], "antall": [3]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
     last(
@@ -159,8 +159,8 @@ def test_csv_masked(tmp_path):
     )
 
     expected = [
-        {'periode': '202501', 'region': 'I alt', 'antall': 3.0},
-        {'periode': '202501', 'region': 'Oslo', 'antall': 3.0}
+        {'periode': '2025M01', 'region': 'I alt', 'antall': 3.0},
+        {'periode': '2025M01', 'region': 'Oslo', 'antall': 3.0}
     ]
     col_order = ["periode", "region", "antall"]
 
@@ -202,7 +202,7 @@ def test_csv_unmasked(tmp_path):
     output_directory = tmp_path / "data_ut"
     input_directory.mkdir()
     pd.DataFrame(
-        {"periode": [202501], "region": ["Oslo"], "antall": [12]}
+        {"periode": ['2025M01'], "region": ["Oslo"], "antall": [12]}
     ).to_csv(input_directory / "tabell.csv", index=False)
 
     last(
@@ -215,8 +215,8 @@ def test_csv_unmasked(tmp_path):
     )
 
     expected_prepub = [
-        {'periode': '202501', 'region': 'I alt', 'antall': 12.0},
-        {'periode': '202501', 'region': 'Oslo', 'antall': 12.0}
+        {'periode': '2025M01', 'region': 'I alt', 'antall': 12.0},
+        {'periode': '2025M01', 'region': 'Oslo', 'antall': 12.0}
     ]
     col_order = ["periode", "region", "antall"]
 

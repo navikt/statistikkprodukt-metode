@@ -34,17 +34,17 @@ OVERSKRIV = IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER
 # Kildedata der ingen celler prikkes, slik at forventet innhold kan regnes ut direkte.
 # Rader: (periode, region, antall, antall_kvinner)
 KILDE_START = [
-    ("202501", "Bergen", 20, 12),
-    ("202501", "Oslo", 30, 15),
-    ("202502", "Bergen", 25, 11),
-    ("202502", "Oslo", 40, 20),
+    ("2025M01", "Bergen", 20, 12),
+    ("2025M01", "Oslo", 30, 15),
+    ("2025M02", "Bergen", 25, 11),
+    ("2025M02", "Oslo", 40, 20),
 ]
-# 202501 er endret, 202502 er fjernet fra kilden og 202503 er ny.
+# 2025M01 er endret, 2025M02 er fjernet fra kilden og 2025M03 er ny.
 KILDE_ENDRET = [
-    ("202501", "Bergen", 22, 13),
-    ("202501", "Oslo", 35, 18),
-    ("202503", "Bergen", 50, 25),
-    ("202503", "Oslo", 60, 30),
+    ("2025M01", "Bergen", 22, 13),
+    ("2025M01", "Oslo", 35, 18),
+    ("2025M03", "Bergen", 50, 25),
+    ("2025M03", "Oslo", 60, 30),
 ]
 
 
@@ -100,7 +100,7 @@ group by periode, region
         with self.connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE {SCHEMA}.{self.source_table} ("
-                "periode varchar2(6 CHAR), region VARCHAR2(100 CHAR), "
+                "periode varchar2(7 CHAR), region VARCHAR2(100 CHAR), "
                 "antall NUMBER, antall_kvinner NUMBER)"
             )
         self.sett_kilde_data(kilde)
@@ -264,28 +264,28 @@ aggregater:
 def test_e2e_run(e2e):
     """Oppretter og fyller ett småaggregat fra en OBT-tabell, inkludert prikking."""
     e2e.konfigurer(OVERSKRIV, [
-        ("202501", "Bergen", 7, 7),
-        ("202501", "Oslo", 10, 10),
-        ("202502", "Bergen", 6, 6),
-        ("202502", "Oslo", 3, 3),
+        ("2025M01", "Bergen", 7, 7),
+        ("2025M01", "Oslo", 10, 10),
+        ("2025M02", "Bergen", 6, 6),
+        ("2025M02", "Oslo", 3, 3),
     ])
     e2e.kjor_last()
 
     expected_prepub = [
-        ("202501", "I alt", 17, 17),
-        ("202501", "Bergen", 7, 7),
-        ("202501", "Oslo", 10, 10),
-        ("202502", "I alt", 9, 9),
-        ("202502", "Bergen", None, None),
-        ("202502", "Oslo", None, None),
+        ("2025M01", "I alt", 17, 17),
+        ("2025M01", "Bergen", 7, 7),
+        ("2025M01", "Oslo", 10, 10),
+        ("2025M02", "I alt", 9, 9),
+        ("2025M02", "Bergen", None, None),
+        ("2025M02", "Oslo", None, None),
     ]
     expected_kontroll_per_tellepunkt = [
-        ("202501", "I alt", 17, 0, 0),
-        ("202501", "Bergen", 7, 0, 0),
-        ("202501", "Oslo", 10, 0, 0),
-        ("202502", "I alt", 9, 0, 0),
-        ("202502", "Bergen", 6, 0, 1),
-        ("202502", "Oslo", 3, 1, 1),
+        ("2025M01", "I alt", 17, 0, 0),
+        ("2025M01", "Bergen", 7, 0, 0),
+        ("2025M01", "Oslo", 10, 0, 0),
+        ("2025M02", "I alt", 9, 0, 0),
+        ("2025M02", "Bergen", 6, 0, 1),
+        ("2025M02", "Oslo", 3, 1, 1),
     ]
     expected_kontroll = [
         (*row[:2], tellepunkt, *row[2:])
@@ -317,7 +317,7 @@ def test_e2e_legg_til_nye_perioder(e2e):
     e2e.sett_kilde_data(KILDE_ENDRET)
     e2e.kjor_last()
 
-    e2e.assert_innhold(KILDE_START + _filtrer_perioder(KILDE_ENDRET, "202503"))
+    e2e.assert_innhold(KILDE_START + _filtrer_perioder(KILDE_ENDRET, "2025M03"))
 
 
 def test_e2e_overskriv_eksisterende_perioder(e2e):
@@ -329,7 +329,7 @@ def test_e2e_overskriv_eksisterende_perioder(e2e):
     e2e.sett_kilde_data(KILDE_ENDRET)
     e2e.kjor_last()
 
-    e2e.assert_innhold(KILDE_ENDRET + _filtrer_perioder(KILDE_START, "202502"))
+    e2e.assert_innhold(KILDE_ENDRET + _filtrer_perioder(KILDE_START, "2025M02"))
 
 
 @pytest.mark.parametrize("strategi", [LEGG_TIL, OVERSKRIV])
@@ -356,7 +356,7 @@ def test_e2e_inkrementell_beholder_perioder_som_forsvinner_fra_kilden(e2e, strat
     e2e.kjor_last()
     e2e.assert_innhold(KILDE_START)
 
-    e2e.sett_kilde_data(_filtrer_perioder(KILDE_START, "202501"))
+    e2e.sett_kilde_data(_filtrer_perioder(KILDE_START, "2025M01"))
     e2e.kjor_last()
     e2e.assert_innhold(KILDE_START)
 
@@ -395,8 +395,8 @@ def test_e2e_valgte_perioder(e2e, strategi):
     e2e.kjor_last()
 
     e2e.sett_kilde_data(KILDE_ENDRET)
-    e2e.kjor_last(selected_periods=["202501"])
+    e2e.kjor_last(selected_periods=["2025M01"])
 
     e2e.assert_innhold(
-        _filtrer_perioder(KILDE_ENDRET, "202501") + _filtrer_perioder(KILDE_START, "202502")
+        _filtrer_perioder(KILDE_ENDRET, "2025M01") + _filtrer_perioder(KILDE_START, "2025M02")
     )

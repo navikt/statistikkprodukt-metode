@@ -18,6 +18,7 @@ from .aggregate_schema import (
     is_not_empty,
     is_test_id,
     validate_identifier,
+    validate_period,
     validate_table_identifier,
 )
 from .app_schema import (
@@ -57,5 +58,6 @@ __all__ = [
     "load_configuration",
     "resolve_config",
     "validate_identifier",
+    "validate_period",
     "validate_table_identifier",
 ]

@@ -6,10 +6,40 @@ import oracledb
 import pandas as pd
 import pytest
 import statistikkprodukt.app.last as app
-from statistikkprodukt import oracle
+from statistikkprodukt import csv, oracle
 from statistikkprodukt.app.models import LasteResultat
 from statistikkprodukt.config import IncrementalMode, StorageOption
 from test.test_config import configuration
+
+VALID_PERIODS = ["0001", "2025", "2025M01", "2025M12", "2025K1", "2025K4"]
+INVALID_PERIODS = [
+    "202501", "2025-01", "2025M00", "2025M13", "2025M1", "2025m01",
+    "2025K0", "2025K5", "2025K01", "202", "20255", " 2025", "2025\n",
+    "２０２５", "", None,
+]
+
+
+@pytest.mark.parametrize("period", VALID_PERIODS)
+@pytest.mark.parametrize("column", ["periode", "PERIODE", "PeRiOdE"])
+def test_csv_accepts_supported_period_formats(tmp_path, period, column):
+    pd.DataFrame(
+        {column: [period], "region": ["Oslo"], "antall": [10]}
+    ).to_csv(tmp_path / "tabell.csv", index=False)
+
+    frame = csv.read_csv(tmp_path, configuration().aggregater[0])
+
+    assert frame["periode"].tolist() == [period]
+
+
+@pytest.mark.parametrize("period", INVALID_PERIODS)
+def test_csv_rejects_invalid_period_formats(tmp_path, period):
+    pd.DataFrame(
+        {"periode": [period], "region": ["Oslo"], "antall": [10]}
+    ).to_csv(tmp_path / "tabell.csv", index=False)
+
+    with pytest.raises(ValueError, match="Ugyldig periode"):
+        csv.read_csv(tmp_path, configuration().aggregater[0])
+
 
 @pytest.mark.parametrize(
     ("kilde", "maal"),
@@ -52,7 +82,7 @@ def test_run_logs_outcome_and_configuration_without_password(monkeypatch, tmp_pa
     failure = ValueError("Lasting feilet")
     process = MagicMock(
         side_effect=failure if fails else None,
-        return_value=LasteResultat(aggregate.id, aggregate.tabell, ["202501"], 10, 1, 2),
+        return_value=LasteResultat(aggregate.id, aggregate.tabell, ["2025M01"], 10, 1, 2),
     )
     captured = []
     monkeypatch.setattr(app, "_process_aggregate", process)
@@ -88,13 +118,13 @@ def test_log_failure_does_not_hide_original_load_failure(monkeypatch, tmp_path):
 @pytest.mark.parametrize(
     ("mode", "available", "existing", "expected"),
     [
-        ("legg_til_nye_perioder", {"202501", "202502", "202503"}, {"202502"}, ["202501", "202503"]),
-        ("legg_til_nye_perioder", {"202501"}, {"202501"}, []),
-        ("legg_til_nye_perioder", {"202501"}, set(), ["202501"]),
-        ("legg_til_nye_perioder", set(), {"202501"}, []),
-        ("overskriv_eksisterende_perioder", {"202501", "202502"}, {"202502", "202503"}, ["202501", "202502"]),
-        ("overskriv_eksisterende_perioder", set(), {"202501"}, []),
-        ("legg_til_nye_perioder", {"2025-01", "2025-02"}, {"2025-01"}, ["2025-02"]),
+        ("legg_til_nye_perioder", {"2025M01", "2025M02", "2025M03"}, {"2025M02"}, ["2025M01", "2025M03"]),
+        ("legg_til_nye_perioder", {"2025M01"}, {"2025M01"}, []),
+        ("legg_til_nye_perioder", {"2025M01"}, set(), ["2025M01"]),
+        ("legg_til_nye_perioder", set(), {"2025M01"}, []),
+        ("overskriv_eksisterende_perioder", {"2025M01", "2025M02"}, {"2025M02", "2025M03"}, ["2025M01", "2025M02"]),
+        ("overskriv_eksisterende_perioder", set(), {"2025M01"}, []),
+        ("legg_til_nye_perioder", {"2025K1", "2025K2"}, {"2025K1"}, ["2025K2"]),
     ],
 )
 def test_get_periods_to_load(monkeypatch, tmp_path, mode, available, existing, expected):
@@ -127,7 +157,7 @@ def test_explicit_periods_override_incremental_mode(monkeypatch, tmp_path, mode)
     aggregate.inkrementell_strategi = mode
     fetch = MagicMock(side_effect=AssertionError("Uventet periodeoppslag"))
     monkeypatch.setattr(app, "_fetch_periods", fetch)
-    periods = ["202501", "202503"]
+    periods = ["2025M01", "2025M03"]
 
     assert app._get_periods_to_load(
         config,
@@ -200,15 +230,15 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
     connection = MagicMock()
     sql = "select periode, region, antall from kilde;"
     (tmp_path / aggregate.sporring_sql).write_text(sql)
-    read_source = MagicMock(return_value={"202501", "202502"})
-    read_target = MagicMock(return_value={"202501"})
+    read_source = MagicMock(return_value={"2025M01", "2025M02"})
+    read_target = MagicMock(return_value={"2025M01"})
     monkeypatch.setattr(oracle, "read_periods", read_source)
     monkeypatch.setattr(oracle, "read_target_periods", read_target)
     input_directory = tmp_path / "input"
     if csv_input:
         input_directory.mkdir()
         pd.DataFrame(
-            {"periode": [202501, 202502, 202502], "region": ["Oslo"] * 3, "antall": [1, 2, 3]}
+            {"periode": ['2025M01', '2025M02', '2025M02'], "region": ["Oslo"] * 3, "antall": [1, 2, 3]}
         ).to_csv(input_directory / "tabell.csv", index=False)
 
     assert app._fetch_periods(
@@ -222,7 +252,7 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
             input_directory,
             Path("output")
         ),
-    ) == ({"202501", "202502"}, {"202501"})
+    ) == ({"2025M01", "2025M02"}, {"2025M01"})
     read_target.assert_called_once_with(connection, "test", aggregate)
     if csv_input:
         read_source.assert_not_called()
@@ -230,11 +260,11 @@ def test_fetch_periods_from_source_and_target(monkeypatch, tmp_path, csv_input):
         read_source.assert_called_once_with(connection, sql, "periode")
 
 
-@pytest.mark.parametrize("periods", [None, [], ["202502"]])
+@pytest.mark.parametrize("periods", [None, [], ["2025M02"]])
 def test_read_csv_period_selection(tmp_path, periods):
     aggregate = configuration().aggregater[0]
     pd.DataFrame(
-        {"periode": [202501, 202502], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
+        {"periode": ["2025M01", "2025M02"], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
     ).to_csv(tmp_path / "tabell.csv", index=False)
 
     data = app._read_input(
@@ -250,14 +280,14 @@ def test_read_csv_period_selection(tmp_path, periods):
         periods_to_load=periods,
     )
     assert data["periode"].tolist() == (
-        ["202501", "202502"] if periods is None else periods
+        ["2025M01", "2025M02"] if periods is None else periods
     )
 
 
 def test_read_csv_filter_returns_string_period_from_numeric_csv(tmp_path):
     aggregate = configuration().aggregater[0]
     pd.DataFrame(
-        {"periode": [202501, 202502], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
+        {"periode": [2025, 2026], "region": ["Oslo", "Oslo"], "antall": [1, 2]}
     ).to_csv(tmp_path / "tabell.csv", index=False)
 
     data = app._read_input(
@@ -270,18 +300,18 @@ def test_read_csv_filter_returns_string_period_from_numeric_csv(tmp_path):
             tmp_path,
             Path("dummy"),
         ),
-        periods_to_load=["202502"],
+        periods_to_load=["2026"],
     )
 
-    assert data["periode"].tolist() == ["202502"]
+    assert data["periode"].tolist() == ["2026"]
 
 
-@pytest.mark.parametrize("periods", [None, [], ["202502"]])
+@pytest.mark.parametrize("periods", [None, [], ["2025M02"]])
 def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
     config = configuration()
     aggregate = config.aggregater[0]
     calls = MagicMock()
-    data = pd.DataFrame({"periode": [202502], "region": ["Oslo"], "antall": [2]})
+    data = pd.DataFrame({"periode": ['2025M02'], "region": ["Oslo"], "antall": [2]})
     calls.select.return_value = periods
     calls.read.return_value = data
     monkeypatch.setattr(app, "_get_periods_to_load", calls.select)
@@ -313,7 +343,7 @@ def test_process_selects_periods_before_reading(monkeypatch, tmp_path, periods):
 def test_process_passes_full_relast_to_read_and_write(monkeypatch, tmp_path):
     config = configuration()
     aggregate = config.aggregater[0]
-    data = pd.DataFrame({"periode": ["202502"], "region": ["Oslo"], "antall": [2]})
+    data = pd.DataFrame({"periode": ["2025M02"], "region": ["Oslo"], "antall": [2]})
     select = MagicMock(return_value=None)
     read = MagicMock(return_value=data)
     write = MagicMock()
@@ -356,7 +386,7 @@ def test_process_passes_only_selected_tellepunkt_to_r(monkeypatch, tmp_path):
         aggregate.tellepunkter[0].model_copy(update={"kolonne": "antall_kvinner"})
     )
     data = pd.DataFrame({
-        "periode": ["202501"],
+        "periode": ["2025M01"],
         "region": ["Oslo"],
         "antall": [10],
         "antall_kvinner": [7],
@@ -400,7 +430,35 @@ def query_connection():
     return connection, cursor
 
 
-@pytest.mark.parametrize("periods", [None, [], ["202501"], ["x') OR 1=1 --"]])
+@pytest.mark.parametrize("read_distinct", [False, True])
+@pytest.mark.parametrize("period", VALID_PERIODS)
+def test_oracle_accepts_supported_period_formats(period, read_distinct):
+    connection, cursor = query_connection()
+    if read_distinct:
+        cursor.fetchall.return_value = [(period,)]
+        assert oracle.read_periods(connection, "select periode from kilde", "periode") == {period}
+    else:
+        cursor.fetchall.return_value = [(period, "Oslo", 10)]
+        frame = oracle.read_query(
+            connection, "select * from kilde", configuration().aggregater[0]
+        )
+        assert frame["periode"].tolist() == [period]
+
+
+@pytest.mark.parametrize("read_distinct", [False, True])
+@pytest.mark.parametrize("period", INVALID_PERIODS)
+def test_oracle_rejects_invalid_period_formats(period, read_distinct):
+    connection, cursor = query_connection()
+    cursor.fetchall.return_value = [(period,)] if read_distinct else [(period, "Oslo", 10)]
+
+    with pytest.raises(ValueError, match="Ugyldig periode"):
+        if read_distinct:
+            oracle.read_periods(connection, "select periode from kilde", "periode")
+        else:
+            oracle.read_query(connection, "select * from kilde", configuration().aggregater[0])
+
+
+@pytest.mark.parametrize("periods", [None, [], ["2025M01"], ["x') OR 1=1 --"]])
 def test_read_query_binds_period_values(periods):
     connection, cursor = query_connection()
     sql = "select periode, region, antall from kilde;"
@@ -438,11 +496,11 @@ def test_read_query_splits_large_period_lists():
 
 def test_read_periods_only_selects_distinct_periods():
     connection, cursor = query_connection()
-    cursor.fetchall.return_value = [("202501",), ("202502",)]
+    cursor.fetchall.return_value = [("2025M01",), ("2025M02",)]
 
-    assert oracle.read_periods(connection, "select * from kilde;", "periode") == {"202501", "202502"}
+    assert oracle.read_periods(connection, "select * from kilde;", "periode") == {"2025M01", "2025M02"}
     cursor.execute.assert_called_once_with(
-        "SELECT DISTINCT periode FROM (\nselect * from kilde\n) WHERE periode IS NOT NULL"
+        "SELECT DISTINCT periode FROM (\nselect * from kilde\n)"
     )
 
 
@@ -461,10 +519,10 @@ def test_read_query_reports_friendly_missing_source_table(oracle_connection):
 
 def test_read_periods_reports_friendly_with_subquery_error(oracle_connection):
     sql = (
-        "WITH data AS (SELECT '202501' AS periode FROM dual) "
+        "WITH data AS (SELECT '2025M01' AS periode FROM dual) "
         "SELECT periode FROM data "
         "UNION ALL "
-        "WITH other_data AS (SELECT '202502' AS periode FROM dual) "
+        "WITH other_data AS (SELECT '2025M02' AS periode FROM dual) "
         "SELECT periode FROM other_data"
     )
     with pytest.raises(ValueError, match="WITH-spørring"):
@@ -496,5 +554,5 @@ def test_period_identifiers_are_validated(identifier):
         update={"periodisering": periodisering}
     )
     with pytest.raises(ValueError, match="Oracle-navn"):
-        oracle.read_query(connection, "select * from kilde", aggregate, periods_to_load=["202501"])
+        oracle.read_query(connection, "select * from kilde", aggregate, periods_to_load=["2025M01"])
     cursor.execute.assert_not_called()

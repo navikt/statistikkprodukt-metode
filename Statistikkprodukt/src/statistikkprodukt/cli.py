@@ -13,6 +13,7 @@ from statistikkprodukt.config import (
     StorageOption,
     StatistikkproduktRegister,
     load_configuration,
+    validate_period,
 )
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
@@ -58,6 +59,13 @@ def _add_logging_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _parse_period(value: str) -> str:
+    try:
+        return validate_period(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
     """Legger til valg for konfigurasjon, filer og aggregater."""
     parser.add_argument(
@@ -77,8 +85,13 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         "--period",
         action="append",
         dest="periods",
+        type=_parse_period,
         metavar="PERIODE",
-        help="Begrens innlesingen til denne perioden. Kan angis flere ganger. Lastes uansett inkrementell strategi.",
+        help=(
+            "Begrens innlesingen til denne perioden (YYYY, YYYYM01–YYYYM12 "
+            "eller YYYYK1–YYYYK4). Kan angis flere ganger. "
+            "Lastes uansett inkrementell strategi."
+        ),
     )
     period_mode.add_argument(
         "--full-relast",

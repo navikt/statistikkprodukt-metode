@@ -93,13 +93,27 @@ def test_cli_accepts_repeated_period_filters(tmp_path, monkeypatch):
         sys, "argv",
         [
             "statistikkprodukt", "last", "--config", str(path),
-            "-p", "202501", "--period", "202502",
+            "-p", "2025", "--period", "2025M02", "-p", "2025K4",
         ],
     )
 
     cli.main()
 
-    assert execute.call_args.kwargs["selected_periods"] == ["202501", "202502"]
+    assert execute.call_args.kwargs["selected_periods"] == ["2025", "2025M02", "2025K4"]
+
+
+@pytest.mark.parametrize("period", ["202501", "2025M13", "2025K01", "2025K5", "ABC"])
+def test_cli_rejects_invalid_period_before_loading(monkeypatch, capsys, period):
+    execute = Mock()
+    monkeypatch.setattr(app.last, "last", execute)
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "last", "-p", period])
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main()
+
+    assert exc.value.code == 2
+    assert "Ugyldig periode" in capsys.readouterr().err
+    execute.assert_not_called()
 
 
 def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
@@ -110,7 +124,7 @@ def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
         sys, "argv",
         [
             "statistikkprodukt", "last", "--config", str(path),
-            "--full-relast", "--period", "202501",
+            "--full-relast", "--period", "2025M01",
         ],
     )
 

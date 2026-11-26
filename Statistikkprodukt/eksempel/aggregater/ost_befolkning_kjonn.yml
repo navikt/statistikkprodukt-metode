@@ -75,9 +75,9 @@ definisjon:
     # PX: Navs CS TIMEVAL-kolonnereferanse; dimensjonen inngår også i STUB eller HEADING.
     kolonne: periode
     # Beskriver periodenes betydning og format på norsk.
-    innhold: Månedsperiode på formatet YYYYMM.
+    innhold: Månedsperiode på formatet YYYYM01–YYYYM12.
     # Beskriver periodenes betydning og format på engelsk.
-    innhold-en: Month in YYYYMM format.
+    innhold-en: Month in YYYYM01–YYYYM12 format.
     # Samler Statistikkbankens visningsinnstillinger for tidsdimensjonen.
     statistikkbank:
       # Velger antall perioder i startvisning; positivt velger første N, negativt siste N, 0 skjuler variabelen. Alfabetisk sortering må følge kronologien.

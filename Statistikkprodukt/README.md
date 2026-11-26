@@ -100,8 +100,11 @@ Konfigurasjonsmuligheter:
 - `--kilde`/`--maal` er enten `db` (default) eller `csv`
 - `--kilde-mappe`/`--maal-mappe` angir mappene for CSV-filer (default: `data_inn` og `data_ut`)
 - `--log-level=DEBUG` for å se mer detaljer om hva som skjer.
-- `--periode/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger.
+- `--period/-p` for å begrense til én periode uansett inkrementell strategi. Kan brukes flere ganger.
 - `--full-relast` sletter alle eksisterende data og laster alle kildens rader på nytt.
+
+Perioder i `--period/-p` og i CSV-/Oracle-data må være år (`2025`), måned
+(`2025M01`–`2025M12`) eller kvartal (`2025K1`–`2025K4`).
 
 Det betyr man kan:
 - Skrive fra Oracle til Oracle, normal ETL.
@@ -403,9 +406,9 @@ definisjon:
     # PX: Engelsk visningsnavn via Navs CR-metadata for periodekolonnen.
     navn-en: Period
     # Beskriver periodenes betydning og format på norsk.
-    innhold: Månedsperiode på formatet YYYYMM.
+    innhold: Månedsperiode på formatet YYYYM01–YYYYM12.
     # Beskriver periodenes betydning og format på engelsk.
-    innhold-en: Month in YYYYMM format.
+    innhold-en: Month in YYYYM01–YYYYM12 format.
     # Samler Statistikkbankens visningsinnstillinger for tidsdimensjonen.
     statistikkbank:
       # Velger antall perioder i startvisning; positivt velger første N, negativt siste N, 0 skjuler variabelen. Alfabetisk sortering må følge kronologien.
@@ -504,16 +507,16 @@ Bruk `--full-relast` for å slette all innhold og laste på nytt fra kilden.
 Laster kun nye perioder:
 ```text
 # I kilden
-202501
-202502
-202503
+2025M01
+2025M02
+2025M03
 
 # I målet
-202502
+2025M02
 
 # Lastet
-202501
-202503
+2025M01
+2025M03
 ```
 
 #### `overskriv_eksisterende_perioder`
@@ -522,20 +525,20 @@ Overskrive alle perioder som finnes i kilden. Perioder som ikke finnes i kilden,
 
 ```text
 # I kilden
-202501
-202502
-202503
+2025M01
+2025M02
+2025M03
 
 # I målet
-202412
-202502
+2024M12
+2025M02
 
 # Lastet
-202501
-202501
-202503
+2025M01
+2025M01
+2025M03
 
-# Perioden 202412 beholdes.
+# Perioden 2024M12 beholdes.
 ```
 
 ### Hemmeligheter

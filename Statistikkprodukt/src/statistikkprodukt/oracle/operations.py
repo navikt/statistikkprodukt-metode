@@ -10,6 +10,7 @@ from statistikkprodukt.config import (
     DatabaseConnection,
     Aggregate,
     validate_identifier,
+    validate_period,
 )
 from statistikkprodukt.app.models import TableMetadata
 from statistikkprodukt.oracle.aggregate_table import comment_statements, kontroll_comment_statements
@@ -87,6 +88,8 @@ def read_query(
         rows = cursor.fetchall()
 
     frame = pd.DataFrame(rows, columns=columns)
+    for period in frame[aggregate.periodisering.kolonne].unique():
+        validate_period(period)
     LOGGER.debug("Spørringen for %s ga %d rader med kolonnene %s.", aggregate.tabell, len(frame), columns)
     return frame
 
@@ -98,21 +101,20 @@ def read_periods(
         *,
         source_query: bool = True,
 ) -> set[str]:
-    """Henter bare unike, ikke-tomme perioder fra en kildespørring."""
+    """Henter og validerer unike perioder fra en kildespørring."""
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
     with connection.cursor() as cursor:
         try:
             execute_sql(
                 cursor,
-                f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
-                f"WHERE {period} IS NOT NULL",
+                f"SELECT DISTINCT {period} FROM (\n{sql}\n)",
             )
         except oracledb.DatabaseError as exc:
             _raise_friendly_sql_error(exc, source_query=source_query)
             raise
         _validate_string_type(cursor.description, period)
-        periods = {row[0] for row in cursor.fetchall()}
+        periods = {validate_period(row[0]) for row in cursor.fetchall()}
     LOGGER.debug("Fant %d perioder i %s.", len(periods), "kildespørringen" if source_query else "måltabellen")
     return periods
 
