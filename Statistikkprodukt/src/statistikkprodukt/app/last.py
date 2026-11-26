@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import json
 from pathlib import Path
 
 import oracledb
@@ -78,18 +77,11 @@ def last(
 
 def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configuration, source: StorageOption,
                           target: StorageOption) -> Kjorelogg:
-    konfigurasjon_json = configuration.model_dump(
-        mode="json", by_alias=True, exclude={"connection": {"password"}}
-    )
-    # pydantic masks passwords, but we want to be sure that no password ends up in the db
-    if "password" in konfigurasjon_json["connection"]:
-        raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
-
-    logg = Kjorelogg(
-        konfigurasjon=konfigurasjon_json,
-        kilde=str(source),
-        maal=str(target),
-        aggregater=aggregates,
+    logg = Kjorelogg.from_configuration(
+        configuration,
+        aggregates,
+        str(source),
+        str(target)
     )
     return logg
 

@@ -123,7 +123,7 @@ def test_development_id_warns_only_when_writing_to_database(monkeypatch, tmp_pat
 def test_write_log_only_inserts_and_binds_all_lobs():
     connection = MagicMock()
     aggregate = configuration().aggregater[0]
-    logg = Kjorelogg({}, "db", "db", [aggregate])
+    logg = Kjorelogg({}, "db", "db", [aggregate], "testuser")
     logg.fullfor_suksess()
     oracle.write_log(connection, "TEST", logg)
 
@@ -143,7 +143,7 @@ def test_write_log_rolls_back_its_own_failed_insert():
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.executemany.side_effect = ValueError("Innsetting feilet")
-    logg = Kjorelogg({}, "db", "db", configuration().aggregater)
+    logg = Kjorelogg({}, "db", "db", configuration().aggregater, "testuser")
     logg.fullfor_suksess()
 
     with pytest.raises(ValueError, match="Innsetting feilet"):
@@ -223,12 +223,12 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
         Metadata(navn="OBT navn", navn_en="Name", innhold="Æøå" * 600, innhold_en="Content"),
         TableMetadata.from_aggregate(aggregate).columns,
     )
-    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [aggregate])
+    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [aggregate], "testuser")
     logg.resultater = [
         LasteResultat(aggregate.id, aggregate.tabell, ["2025,01", "2025-02"], 8, 1, 2, table_metadata)
     ]
     logg.fullfor_feil(ValueError(long_text))
-    success = Kjorelogg({}, "db", "db", [aggregate])
+    success = Kjorelogg({}, "db", "db", [aggregate], "testuser")
     success.fullfor_suksess()
     if oracle.table_exists(oracle_connection, "SYSTEM", oracle.LOG_TABLE):
         with oracle_connection.cursor() as cursor:
@@ -271,7 +271,7 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
             )
             status, user, commit_hash, config, periods, error, name, start, end, rows, json_text = cursor.fetchone()
             assert status == "FEILET"
-            assert user == "SYSTEM"
+            assert user == "testuser"
             assert commit_hash == logg.commit_hash
             assert config == {"beskrivelse": long_text}
             assert periods == ["2025,01", "2025-02"]

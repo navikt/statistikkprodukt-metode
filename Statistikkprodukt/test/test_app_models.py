@@ -16,7 +16,7 @@ def test_timestamps_are_naive_oslo_time_independent_of_host(monkeypatch, month, 
     clock.now.side_effect = lambda zone: fixed.astimezone(zone)
     monkeypatch.setattr(app_models, "datetime", clock)
 
-    logg = Kjorelogg({}, "db", "db", [])
+    logg = Kjorelogg({}, "db", "db", [], "testuser")
     logg.fullfor_suksess()
     assert logg.starttid == datetime(2026, month, 15, expected_hour)
     assert logg.sluttid == logg.starttid
@@ -28,7 +28,7 @@ def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
     first = config.aggregater[0]
     second = first.model_copy(update={"tabell": "annen"})
     long_text = "Æøå" * 5000
-    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [first, second])
+    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [first, second], "testuser")
     logg.resultater.append(LasteResultat(first.id, first.tabell, ["2025,01", "2025-02"], 8, 1, 2))
     logg.fullfor_feil(ValueError(long_text))
 
@@ -36,6 +36,7 @@ def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
     assert json.loads(first_row["konfigurasjon"]) == {"beskrivelse": long_text}
     assert first_row["feilmelding"] == long_text
     assert first_row["status"] == "FEILET"
+    assert first_row["db_bruker"] == "testuser"
     assert json.loads(first_row["perioder"]) == ["2025,01", "2025-02"]
     assert first_row["antall_rader"] == 8
     assert second_row["antall_rader"] is None
@@ -45,7 +46,7 @@ def test_log_preserves_json_and_long_error_and_handles_unfinished_aggregates():
 def test_log_matches_development_results_by_table():
     aggregate = configuration().aggregater[0].model_copy(update={"id": "00000"})
     other = aggregate.model_copy(update={"tabell": "annen"})
-    logg = Kjorelogg({}, "db", "db", [aggregate, other])
+    logg = Kjorelogg({}, "db", "db", [aggregate, other], "testuser")
     logg.resultater = [
         LasteResultat("00000", aggregate.tabell, ["202501"], 10, 0, 0),
         LasteResultat("00000", other.tabell, ["202502"], 20, 1, 2),
@@ -62,7 +63,7 @@ def test_log_records_commit_hash_from_environment_when_checkout_unavailable(monk
         app_models.subprocess, "run", Mock(side_effect=FileNotFoundError)
     )
 
-    assert Kjorelogg({}, "db", "db", []).commit_hash == commit
+    assert Kjorelogg({}, "db", "db", [], "testuser").commit_hash == commit
 
 
 def test_log_records_commit_hash_from_local_checkout(monkeypatch):
@@ -87,4 +88,4 @@ def test_log_records_commit_hash_from_vcs_install_metadata(monkeypatch):
     package.read_text.return_value = json.dumps({"vcs_info": {"commit_id": commit}})
     monkeypatch.setattr(app_models, "distribution", Mock(return_value=package))
 
-    assert Kjorelogg({}, "db", "db", []).commit_hash == commit
+    assert Kjorelogg({}, "db", "db", [], "testuser").commit_hash == commit

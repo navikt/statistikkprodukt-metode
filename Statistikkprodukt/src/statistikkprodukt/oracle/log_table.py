@@ -47,7 +47,7 @@ LOG_COLUMNS = {
 }
 
 LOG_INSERT_COLUMNS = tuple(
-    column for column in LOG_COLUMNS if column not in {"db_bruker", "dvh_lastet_tid"}
+    column for column in LOG_COLUMNS if column not in {"dvh_lastet_tid"}
 )
 
 
@@ -57,33 +57,33 @@ def create_log_table_statement(schema: str) -> str:
     return (
         f"CREATE TABLE {table} (\n"
         "  kjoring_id            VARCHAR2(36 CHAR)   NOT NULL,\n"
+        "  aggregat_id           VARCHAR2(5 CHAR)    NOT NULL,\n"
         "  starttid              TIMESTAMP      NOT NULL,\n"
         "  sluttid               TIMESTAMP      NOT NULL,\n"
         "  status                VARCHAR2(10 CHAR)   NOT NULL,\n"  # OK eller FEILET
-        "  db_bruker             VARCHAR2(128 CHAR)  DEFAULT SYS_CONTEXT('USERENV', 'SESSION_USER'),\n"
-        "  commit_hash           VARCHAR2(64 CHAR),\n"
-        "  konfigurasjon         CLOB CHECK (konfigurasjon IS JSON),\n"
+        "  tabell                VARCHAR2(128 CHAR)  NOT NULL,\n"
+        "  referanse_tabell      VARCHAR2(261 CHAR),\n"
+        "  formula               VARCHAR2(4000 CHAR),\n"
+        "  inkrementell          VARCHAR2(128 CHAR),\n"
+        "  antall_aggregater     NUMBER,\n"
+        "  antall_rader          NUMBER,\n"
+        "  antall_primaerprikket NUMBER,\n"
+        "  antall_prikket        NUMBER,\n"
+        "  periodisering         VARCHAR2(128 CHAR),\n"
         "  kilde                 VARCHAR2(10 CHAR),\n"
         "  maal                  VARCHAR2(10 CHAR),\n"
-        "  antall_aggregater     NUMBER,\n"
-        "  feilmelding           CLOB,\n"
-        "  aggregat_id           VARCHAR2(5 CHAR)    NOT NULL,\n"
-        "  tabell                VARCHAR2(128 CHAR)  NOT NULL,\n"
+        "  db_bruker             VARCHAR2(128 CHAR),\n"
+        "  commit_hash           VARCHAR2(64 CHAR),\n"
         "  navn                  VARCHAR2(4000 char),\n"
         "  navn_en               VARCHAR2(4000 char),\n"
         "  innhold               CLOB,\n"
         "  innhold_en            CLOB,\n"
-        "  referanse_tabell      VARCHAR2(261 CHAR),\n"
-        "  periodisering         VARCHAR2(128 CHAR),\n"
-        "  inkrementell          VARCHAR2(128 CHAR),\n"
-        "  formula               VARCHAR2(4000 CHAR),\n"
         "  prikking              NUMBER(1),\n"
         "  saerskilt             NUMBER(1),\n"
         "  sporring_sql          CLOB,\n"
+        "  feilmelding           CLOB,\n"
         "  perioder              CLOB CHECK (perioder IS JSON),\n"
-        "  antall_rader          NUMBER,\n"
-        "  antall_primaerprikket NUMBER,\n"
-        "  antall_prikket        NUMBER,\n"
+        "  konfigurasjon         CLOB CHECK (konfigurasjon IS JSON),\n"
         "  dvh_lastet_tid        DATE DEFAULT SYSDATE NOT NULL\n"
         ")"
     )

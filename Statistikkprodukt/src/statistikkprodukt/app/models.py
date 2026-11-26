@@ -89,6 +89,7 @@ class Kjorelogg:
     kilde: str
     maal: str
     aggregater: list[Aggregate]
+    db_bruker: str
     kjoring_id: str = field(default_factory=lambda: str(uuid4()))
     starttid: datetime = field(default_factory=oslo_now)
     sluttid: datetime | None = None
@@ -96,6 +97,23 @@ class Kjorelogg:
     feilmelding: str | None = None
     resultater: list[LasteResultat] = field(default_factory=list)
     commit_hash: str | None = field(default_factory=_program_commit)
+
+    @classmethod
+    def from_configuration(cls, configuration: Configuration, aggregates: list[Aggregate], kilde: str, maal: str) -> Kjorelogg:
+        konfigurasjon_json = configuration.model_dump(
+            mode="json", by_alias=True, exclude={"connection": {"password"}}
+        )
+        # pydantic masks passwords, but we want to be sure that no password ends up in the db
+        if "password" in konfigurasjon_json["connection"]:
+            raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
+
+        return cls(
+            konfigurasjon=konfigurasjon_json,
+            kilde=kilde,
+            maal=maal,
+            aggregater=aggregates,
+            db_bruker=configuration.connection.user
+        )
 
     def fullfor_feil(self, feil: BaseException) -> None:
         self.sluttid = oslo_now()
@@ -120,6 +138,7 @@ class Kjorelogg:
             "maal": self.maal,
             "antall_aggregater": len(self.aggregater),
             "feilmelding": self.feilmelding,
+            "db_bruker": self.db_bruker,
         }
         resultater = {resultat.tabell: resultat for resultat in self.resultater}
         rows = []
