@@ -151,6 +151,31 @@ def test_python_interactive_update_runs_python_and_r_updates(monkeypatch, caplog
     assert "Kjør kommandoen på nytt" in caplog.text
 
 
+def test_update_packages_runs_python_then_r_installer():
+    run = Mock()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(version.subprocess, "run", run)
+        version.update_packages()
+
+    assert run.call_args_list == [
+        call(["uv", "tool", "upgrade", "statistikkprodukt"], check=True),
+        call(["statistikkprodukt", "installer-r-pakker"], check=True),
+    ]
+
+
+def test_update_packages_can_skip_r_installer():
+    run = Mock()
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(version.subprocess, "run", run)
+        version.update_packages(update_r_packages=False)
+
+    run.assert_called_once_with(
+        ["uv", "tool", "upgrade", "statistikkprodukt"], check=True
+    )
+
+
 def test_failed_python_update_does_not_run_r_installer(monkeypatch):
     monkeypatch.setattr(version, "_read_python_version_info", lambda: _python_info())
     monkeypatch.setattr(version, "get_python_version", lambda: "1.3.9")

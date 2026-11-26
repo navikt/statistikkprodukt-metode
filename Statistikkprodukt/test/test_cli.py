@@ -208,6 +208,32 @@ def test_cli_config_check_only_validates(tmp_path, monkeypatch, capsys, use_envi
         operation.assert_not_called()
 
 
+def test_cli_update_runs_python_and_r_packages(monkeypatch):
+    update = Mock()
+    version_check = Mock()
+    monkeypatch.setattr(cli, "update_packages", update)
+    monkeypatch.setattr(cli, "require_compatible_python_version_interactive", version_check)
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "oppdater"])
+
+    cli.main()
+
+    version_check.assert_called_once_with("oppdater")
+    update.assert_called_once_with(update_r_packages=True)
+
+
+def test_cli_update_can_skip_r_packages(monkeypatch):
+    update = Mock()
+    monkeypatch.setattr(cli, "update_packages", update)
+    monkeypatch.setattr(
+        sys, "argv",
+        ["statistikkprodukt", "oppdater", "--ikke-oppdater-r-pakker"],
+    )
+
+    cli.main()
+
+    update.assert_called_once_with(update_r_packages=False)
+
+
 @pytest.mark.parametrize(
     ("formula", "warn_start", "missing"),
     [

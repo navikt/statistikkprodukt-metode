@@ -27,6 +27,17 @@ VERSION_CHECK_TIMEOUT_SECONDS = 2
 LOGGER = logging.getLogger(__name__)
 
 
+def update_packages(*, update_r_packages: bool = True) -> None:
+    """Oppdaterer Python-verktøyet og installerer deretter R-avhengighetene."""
+    LOGGER.info("Oppdaterer Python-pakken.")
+    subprocess.run(["uv", "tool", "upgrade", "statistikkprodukt"], check=True)
+    if not update_r_packages:
+        LOGGER.info("Oppdatering av R-pakker er hoppet over.")
+        return
+    LOGGER.info("Oppdaterer R-pakker.")
+    subprocess.run(["statistikkprodukt", "installer-r-pakker"], check=True)
+
+
 def _read_r_package_requirement() -> SpecifierSet:
     packaged_config = files("statistikkprodukt").joinpath("_version_requirements.toml")
     try:
@@ -126,11 +137,7 @@ def _update_or_stop(version_info: PythonVersionInfo) -> None:
         answer = ""
     if answer in {"", "j"}:
         try:
-            LOGGER.debug("Oppdaterer statistikkprodukt med uv tool upgrade statistikkprodukt.")
-            subprocess.run(["uv", "tool", "upgrade", "statistikkprodukt"], check=True)
-
-            LOGGER.debug("Installerer R-pakker med statistikkprodukt installer-r-pakker.")
-            subprocess.run(["statistikkprodukt", "installer-r-pakker"], check=True)
+            update_packages()
         except (OSError, subprocess.CalledProcessError):
             LOGGER.error(
                 "Automatisk oppdatering av Python- og R-pakkene feilet. "
@@ -152,7 +159,7 @@ def require_compatible_python_version_interactive(command: str) -> None:
     if is_editable_installation():
         LOGGER.debug("Hopper over sjekk av Python-versjon for editable installasjon.")
         return
-    if command in {"installer-r-pakker", "testenv"}:
+    if command in {"installer-r-pakker", "oppdater", "testenv"}:
         LOGGER.debug("Hopper over sjekk av Python-versjon for kommando %s.", command)
         return
 

@@ -56,7 +56,7 @@ uv tool install git+https://github.com/navikt/statistikkprodukt-metode@meta-felt
 
 Har du allerede installert, oppdater til nyeste versjon med:
 ```sh
-uv tool upgrade statistikkprodukt
+statistikkprodukt oppdater
 ```
 
 Ved oppstart kontrollerer verktøyet om en ny versjon er tilgjengelig.

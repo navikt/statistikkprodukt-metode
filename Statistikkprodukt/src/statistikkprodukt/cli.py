@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from statistikkprodukt.app import installer_r_pakker, konfig, last, skjema
-from statistikkprodukt.version import require_compatible_python_version_interactive
+from statistikkprodukt.version import (
+    require_compatible_python_version_interactive,
+    update_packages,
+)
 from statistikkprodukt.config import (
     ConfigError,
     StorageOption,
@@ -234,6 +237,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_logging_options(installer_r_pakker)
 
+    update = commands.add_parser(
+        "oppdater",
+        help="Oppdater Python-verktøyet og R-pakkene.",
+        description="Oppdaterer statistikkprodukt med uv og installerer deretter nødvendige R-pakker.",
+    )
+    update.add_argument(
+        "--ikke-oppdater-r-pakker",
+        action="store_true",
+        help="Oppdater bare Python-verktøyet, uten å oppdatere R-pakkene.",
+    )
+    _add_logging_options(update)
+
     testenv = commands.add_parser(
         "testenv", help="Administrer Oracle-miljøet som brukes av tester."
     )
@@ -315,6 +330,9 @@ def main() -> None:
         elif args.command == "installer-r-pakker":
             LOGGER.debug("Kjører 'installer-r-pakker'.")
             installer_r_pakker.installer_r_pakker(args.dev_lokal_r_pakke)
+        elif args.command == "oppdater":
+            LOGGER.debug("Kjører 'oppdater'.")
+            update_packages(update_r_packages=not args.ikke_oppdater_r_pakker)
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)
     except ConfigError as exc:
