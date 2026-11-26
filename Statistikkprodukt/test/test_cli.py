@@ -25,7 +25,7 @@ def _configure(tmp_path, monkeypatch, agg_id):
         }),
         encoding="utf-8",
     )
-    register = tmp_path / "statistikkprodukt_register.txt"
+    register = tmp_path / "statistikkprodukt_register.md"
     register.write_text(
         "| Løpenr | Team | Statistikkprodukt |\n"
         "|--------+------+-------------------|\n"

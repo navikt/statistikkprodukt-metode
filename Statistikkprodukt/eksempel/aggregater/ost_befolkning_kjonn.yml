@@ -1,6 +1,6 @@
 # Samler innstillinger og metadata for ett aggregat.
 definisjon:
-  # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.txt.
+  # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.md.
   # Produksjons id-er er (20000–22999); test-ID-er '00000'–'09999' (det krever --ingen-id-validering flagg).
   # PX: Grunnlag for MATRIX; eksportøren legger på NAV-prefiks ved Nav-publisering.
   id: '00001'

@@ -10,7 +10,7 @@ HEADER = (
 
 
 def _write(tmp_path, text):
-    path = tmp_path / "statistikkprodukt_register.txt"
+    path = tmp_path / "statistikkprodukt_register.md"
     path.write_text(text, encoding="utf-8")
     return path
 

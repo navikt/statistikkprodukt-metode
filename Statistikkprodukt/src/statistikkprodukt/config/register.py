@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .aggregate_schema import Aggregate, ConfigError, is_aggregate_id, is_test_id, validate_identifier
 
-STATISTIKKREGISTER_FIL_DEFAULT = "statistikkprodukt_register.txt"
+STATISTIKKREGISTER_FIL_DEFAULT = "statistikkprodukt_register.md"
 STATISTIKKREGISTER_FIL = "STATISTIKKPRODUKT_REGISTER_FIL"
 
 _COLUMN_ID = "Løpenr"
