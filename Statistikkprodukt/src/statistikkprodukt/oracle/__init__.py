@@ -7,11 +7,13 @@ from statistikkprodukt.oracle.aggregate_table import (
 from statistikkprodukt.oracle.log_table import (
     LOG_TABLE,
     create_log_table_statement,
+    log_comment_statements,
     write_log,
 )
 from statistikkprodukt.oracle.meta_table import (
     META_COLUMNS,
     create_meta_table_statement,
+    meta_comment_statements,
     metadata_rows,
     write_metadata_table,
 )
@@ -38,7 +40,9 @@ __all__ = [
     "create_kontroll_table_statement",
     "write_kontroll_comments",
     "create_meta_table_statement",
+    "meta_comment_statements",
     "create_log_table_statement",
+    "log_comment_statements",
     "create_table_statement",
     "parse_metadata",
     "read_metadata",

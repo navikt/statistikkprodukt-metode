@@ -16,6 +16,32 @@ from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 LOGGER = logging.getLogger(__name__)
 
 META_COLUMNS = ("type", "keyword", "scope", "language", "value")
+META_COLUMN_COMMENTS = {
+    "type": (
+        "#NAVN PX type #NAVN_EN PX type "
+        "#INNHOLD Type relatert til PX-fil genererering "
+        "#INNHOLD_EN Type related to generating PX-files"
+    ),
+    "keyword": (
+        "#NAVN Nøkkelord #NAVN_EN Keyword "
+        "#INNHOLD Nøkkelord relatert til PX-fil generering "
+        "#INNHOLD_EN Keyword related to generating PX-files"
+    ),
+    "language": (
+        "#NAVN Språk #NAVN_EN Language "
+        "#INNHOLD Språk tagg for verdien #INNHOLD_EN Language tag for the value"
+    ),
+    "value": (
+        "#NAVN Verdi #NAVN_EN Value "
+        "#INNHOLD Metadata verdier til PX-fil generering "
+        "#INNHOLD_EN Meta data values for PX-files genereation"
+    ),
+    "dvh_lastet_tid": (
+        "#NAVN DVH lastet tidspunkt #NAVN_EN DWH loaded timestamp "
+        "#INNHOLD Lastetidspunkt for når raden ble skrevet til databasen "
+        "#INNHOLD_EN Timestamp for when the row was written to the database"
+    ),
+}
 
 
 def create_meta_table_statement(schema: str, table_name: str) -> str:
@@ -31,6 +57,19 @@ def create_meta_table_statement(schema: str, table_name: str) -> str:
         "  dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL\n"
         ")"
     )
+
+
+def meta_comment_statements(schema: str, table_name: str) -> list[str]:
+    """Lager Oracle-setninger for kommentarer på PX-metadatatabellens kolonner."""
+    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+    statements = []
+    for column, comment in META_COLUMN_COMMENTS.items():
+        escaped_comment = comment.replace("'", "''")
+        statements.append(
+            f"COMMENT ON COLUMN {table}.{validate_identifier(column)} IS "
+            f"'{escaped_comment}'"
+        )
+    return statements
 
 
 def _normalize_column_name(column: str) -> str:

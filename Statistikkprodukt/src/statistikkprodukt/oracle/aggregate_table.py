@@ -60,6 +60,24 @@ def kontroll_comment_statements(
         innhold="Verdien for tellepunktet.",
         innhold_en="The value for the count point.",
     )
+    columns["primary"] = Metadata(
+        navn="Primær prikket flagg",
+        navn_en="Primary suppressed flag",
+        innhold="Binær verdi som sier om en verdi ble primærprikket eller ikke",
+        innhold_en="Binary value that tells what values were primary suppressed",
+    )
+    columns["suppressed"] = Metadata(
+        navn="Prikket flagg",
+        navn_en="Suppressed flag",
+        innhold="Binær verdi som sier om en verdi ble prikket eller ikke",
+        innhold_en="Binary value that tells what values were suppressed",
+    )
+    columns["dvh_lastet_tid"] = Metadata(
+        navn="DVH lastet tidspunkt",
+        navn_en="DWH loaded timestamp",
+        innhold="Lastetidspunkt for når raden ble skrevet til databasen",
+        innhold_en="Timestamp for when the row was written to the database",
+    )
     return comment_statements(
         schema,
         table_name,

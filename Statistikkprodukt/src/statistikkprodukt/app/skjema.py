@@ -57,6 +57,11 @@ def create_tables(
                             schema, table_name, sql, aggregate
                         )
                     )
+                    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+                    statements.append(
+                        f"ALTER TABLE {table} ADD ("
+                        "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
+                    )
                     statements.extend(
                         oracle.kontroll_comment_statements(
                             schema, table_name, aggregate, metadata
@@ -66,14 +71,14 @@ def create_tables(
                     statements.append(
                         oracle.create_table_statement(schema, table_name, sql)
                     )
+                    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+                    statements.append(
+                        f"ALTER TABLE {table} ADD ("
+                        "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
+                    )
                     statements.extend(
                         oracle.comment_statements(schema, table_name, metadata)
                     )
-                table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
-                statements.append(
-                    f"ALTER TABLE {table} ADD ("
-                    "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
-                )
 
             if create_in_database:
                 with connection.cursor() as cursor:
@@ -111,9 +116,15 @@ def _create_log_and_meta_tables(
 ) -> None:
     """Sjekker dictionary før DDL for én loggtabell og aggregatenes metadatatabeller."""
     statements = {
-        oracle.LOG_TABLE: oracle.create_log_table_statement(schema),
+        oracle.LOG_TABLE: (
+            oracle.create_log_table_statement(schema),
+            *oracle.log_comment_statements(schema),
+        ),
         **{
-            aggregate.meta_tabell: oracle.create_meta_table_statement(schema, aggregate.meta_tabell)
+            aggregate.meta_tabell: (
+                oracle.create_meta_table_statement(schema, aggregate.meta_tabell),
+                *oracle.meta_comment_statements(schema, aggregate.meta_tabell),
+            )
             for aggregate in aggregates
         },
     }
@@ -124,11 +135,12 @@ def _create_log_and_meta_tables(
             owner=schema.upper(),
         )
         existing = {row[0].lower() for row in cursor.fetchall()}
-        for table_name, statement in statements.items():
+        for table_name, table_statements in statements.items():
             if table_name in existing:
                 LOGGER.info("Tabellen %s.%s finnes allerede; hopper over.", schema, table_name)
             elif create_in_database:
-                execute_sql(cursor, statement)
+                for statement in table_statements:
+                    execute_sql(cursor, statement)
                 LOGGER.info("Opprettet tabellen %s.%s.", schema, table_name)
             else:
-                print(statement + ";")
+                print(";\n".join(table_statements) + ";")

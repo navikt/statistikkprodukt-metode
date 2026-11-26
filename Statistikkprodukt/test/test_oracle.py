@@ -11,6 +11,7 @@ import statistikkprodukt.app.skjema as table_app
 from statistikkprodukt import oracle
 from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption, Tellepunkt
 from statistikkprodukt.oracle import aggregate_table, meta_table
+from statistikkprodukt.oracle import log_table
 from statistikkprodukt.oracle import (
     write_result,
     parse_metadata,
@@ -163,6 +164,53 @@ def test_auxiliary_schema_creation_checks_dictionary_and_reuses_cursor():
     cursor.execute.assert_called_once_with(
         "SELECT table_name FROM all_tables WHERE owner = :owner", owner="TEST"
     )
+
+
+def test_auxiliary_schema_creation_applies_log_column_comments():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = []
+    aggregate = configuration().aggregater[0]
+
+    table_app._create_log_and_meta_tables(
+        connection, "TEST", [aggregate], create_in_database=True
+    )
+
+    statements = [call.args[0] for call in cursor.execute.call_args_list]
+    log_comments = [
+        statement for statement in statements
+        if statement.startswith("COMMENT ON COLUMN test.ost_logg.")
+    ]
+    assert len(log_comments) == len(log_table.LOG_COLUMNS)
+    assert (
+        "COMMENT ON COLUMN test.ost_logg.kjoring_id IS "
+        "'#NAVN Kjøre ID #NAVN_EN Run ID #INNHOLD Unik kjøre ID "
+        "#INNHOLD_EN Unique run ID'"
+    ) in log_comments
+    meta_comments = [
+        statement for statement in statements
+        if statement.startswith(f"COMMENT ON COLUMN test.{aggregate.meta_tabell}.")
+    ]
+    assert len(meta_comments) == len(oracle.meta_table.META_COLUMN_COMMENTS)
+    assert (
+        f"COMMENT ON COLUMN test.{aggregate.meta_tabell}.type IS "
+        "'#NAVN PX type #NAVN_EN PX type #INNHOLD Type relatert til PX-fil "
+        "genererering #INNHOLD_EN Type related to generating PX-files'"
+    ) in meta_comments
+
+
+def test_kontroll_comments_cover_suppression_flags_and_load_timestamp():
+    aggregate = configuration().aggregater[0]
+    metadata = TableMetadata.from_aggregate(aggregate)
+    table_name = "target_kontroll"
+
+    statements = aggregate_table.kontroll_comment_statements(
+        "TEST", table_name, aggregate, metadata
+    )
+
+    assert any(f"test.{table_name}.primary IS" in statement for statement in statements)
+    assert any(f"test.{table_name}.suppressed IS" in statement for statement in statements)
+    assert any(f"test.{table_name}.dvh_lastet_tid IS" in statement for statement in statements)
 
 
 def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
@@ -392,6 +440,26 @@ def test_create_tables_writes_column_comments_to_all_comments(
             }
             if table_name == aggregate.kontroll_tabell:
                 assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                expected_comments.update({
+                    "PRIMARY": (
+                        "#NAVN Primær prikket flagg #NAVN_EN Primary suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble primærprikket "
+                        "eller ikke #INNHOLD_EN Binary value that tells what values "
+                        "were primary suppressed"
+                    ),
+                    "SUPPRESSED": (
+                        "#NAVN Prikket flagg #NAVN_EN Suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble prikket eller "
+                        "ikke #INNHOLD_EN Binary value that tells what values were "
+                        "suppressed"
+                    ),
+                    "DVH_LASTET_TID": (
+                        "#NAVN DVH lastet tidspunkt #NAVN_EN DWH loaded timestamp "
+                        "#INNHOLD Lastetidspunkt for når raden ble skrevet til "
+                        "databasen #INNHOLD_EN Timestamp for when the row was written "
+                        "to the database"
+                    ),
+                })
                 comments = {
                     column: comment
                     for column, comment in comments.items()
@@ -508,7 +576,8 @@ def test_write_database_writes_column_comments_to_all_comments(
                 f"CREATE TABLE SYSTEM.{aggregate.kontroll_tabell} ("
                 "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), "
                 "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
-                "primary NUMBER(1), suppressed NUMBER(1))"
+                "primary NUMBER(1), suppressed NUMBER(1), "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell)
@@ -574,6 +643,26 @@ def test_write_database_writes_column_comments_to_all_comments(
             }
             if table_name == aggregate.kontroll_tabell:
                 assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                expected_comments.update({
+                    "PRIMARY": (
+                        "#NAVN Primær prikket flagg #NAVN_EN Primary suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble primærprikket "
+                        "eller ikke #INNHOLD_EN Binary value that tells what values "
+                        "were primary suppressed"
+                    ),
+                    "SUPPRESSED": (
+                        "#NAVN Prikket flagg #NAVN_EN Suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble prikket eller "
+                        "ikke #INNHOLD_EN Binary value that tells what values were "
+                        "suppressed"
+                    ),
+                    "DVH_LASTET_TID": (
+                        "#NAVN DVH lastet tidspunkt #NAVN_EN DWH loaded timestamp "
+                        "#INNHOLD Lastetidspunkt for når raden ble skrevet til "
+                        "databasen #INNHOLD_EN Timestamp for when the row was written "
+                        "to the database"
+                    ),
+                })
                 comments = {
                     column: comment
                     for column, comment in comments.items()
