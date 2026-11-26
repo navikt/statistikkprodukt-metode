@@ -172,8 +172,6 @@ def test_language_columns_are_rejected_before_database_write(field, suffix):
     variable = data[field] if field == "periodisering" else data[field][0]
     column = f"{variable['kolonne']}__{suffix}"
     variable["kolonne"] = column
-    if field == "periodisering":
-        data["tabell"] = f"ost_am_befolkning_{column}_region"
     data["formula"] = (
         f"~ {data['periodisering']['kolonne']} / {data['variabler'][0]['kolonne']}"
     )
