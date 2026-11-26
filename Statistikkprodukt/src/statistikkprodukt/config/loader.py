@@ -7,11 +7,13 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import SplitResult, urlsplit
+from urllib.parse import urlsplit, SplitResult
+from collections import defaultdict
+from typing import cast
 
 from pydantic import ValidationError
 
-from .aggregate_schema import AggregateConfiguration, ConfigError, Aggregate
+from .aggregate_schema import AggregateConfiguration, ConfigError, Aggregate, YamlSqlPathPair
 from .app_schema import (
     Configuration,
     ConfigurationSource,
@@ -45,25 +47,23 @@ def load_configuration(
 
     aggregate_paths = _find_aggregate_configurations(
         source.mapper, source.aggregater, path.parent
-    )
+    ) # note: casting since pylance doesnt think both paths are not None
     aggregates: list[Aggregate] = []
-    for aggregate_path in aggregate_paths:
-        LOGGER.debug("Leser aggregatkonfigurasjon %s.", aggregate_path)
-        aggregate_data = _read_yaml(aggregate_path, yaml)
+    for name, pathpair in aggregate_paths.items():
+        LOGGER.debug("Leser aggregatkonfigurasjon %s.", name)
+        aggregate_data = _read_yaml(cast(Path, pathpair.yaml) , yaml)
         if isinstance(aggregate_data, dict) and isinstance(
             aggregate_data.get("definisjon"), dict
         ):
-            aggregate_data["definisjon"]["tabell"] = aggregate_path.stem
-            aggregate_data["definisjon"]["sporring_sql"] = Path(
-                os.path.relpath(aggregate_path.with_suffix(".sql"), path.parent)
-            ).as_posix()
+            aggregate_data["definisjon"]["tabell"] = name
+            aggregate_data["definisjon"]["sporring_sql"] = cast(Path, pathpair.sql).as_posix()
         try:
             aggregate_config = AggregateConfiguration.model_validate(
                 aggregate_data, context={"ingen_id_validering": ingen_id_validering}
             )
         except ValidationError as exc:
             raise ConfigError(
-                f"Konfigurasjonen i {aggregate_path} er ugyldig:\n"
+                f"Konfigurasjonen i {name} er ugyldig:\n"
                 + "\n".join(format_validation_error(error) for error in exc.errors())
             ) from exc
 
@@ -120,42 +120,46 @@ def _read_yaml(path: Path, yaml: Any) -> Any:
 
 def _find_aggregate_configurations(
     patterns: list[str], aggregate_names: list[str], directory: Path
-) -> list[Path]:
+) -> dict[str, YamlSqlPathPair]:
     """Finner konfigurasjonsfiler for valgte aggregater i søkemønstrene."""
-    paths: set[Path] = set()
+    paths_by_name: dict[str, YamlSqlPathPair] = defaultdict(YamlSqlPathPair)
+    errstr_toomany = "{} har for mange {} filer, f.eks. {} og {}"
     for pattern in patterns:
         try:
             file_pattern = (
                 f"{pattern}/*" if pattern == "**" or pattern.endswith("/**") else pattern
             )
-            matches = directory.glob(file_pattern)
-            paths.update(
-                path.resolve()
-                for path in matches
-                if path.is_file() and path.suffix.lower() in {".yml", ".yaml"}
-            )
+            for path in directory.glob(file_pattern):
+                if not path.is_file():
+                    continue
+                if (name := path.stem) not in aggregate_names:
+                    continue
+                suff, newpath = path.suffix.lower(), path.resolve()
+                if suff in {".yaml", ".yml"}:
+                    if (existingpath := paths_by_name[name].yaml):
+                        raise ConfigError(errstr_toomany.format(name, "yaml", existingpath, newpath))
+                    paths_by_name[name].yaml = newpath
+                elif suff == ".sql":
+                    if (existingpath := paths_by_name[name].sql):
+                        raise ConfigError(errstr_toomany.format(name, "sql", existingpath, newpath))
+                    paths_by_name[name].sql = newpath
+
         except (OSError, ValueError) as exc:
             raise ConfigError(
                 f"Ugyldig mønster for aggregatkonfigurasjoner: {pattern}"
             ) from exc
 
-    paths_by_name: dict[str, Path] = {}
-    for path in sorted(paths):
-        name = path.stem.lower()
-        if name in paths_by_name:
-            raise ConfigError(
-                f"Aggregatnavnet {name} finnes i flere konfigurasjonsfiler: "
-                f"{paths_by_name[name]} og {path}."
-            )
-        paths_by_name[name] = path
-
     LOGGER.debug("Fant aggregatkonfigurasjoner: %s.", sorted(paths_by_name))
-    missing = [name for name in aggregate_names if name not in paths_by_name]
+    missing = [
+        name for name in aggregate_names
+        if name not in paths_by_name
+        or not (paths_by_name[name].yaml and paths_by_name[name].sql)
+    ]
     if missing:
         raise ConfigError(
             f"Fant ikke konfigurasjonsfiler for aggregatene: {', '.join(missing)}."
         )
-    return [paths_by_name[name] for name in aggregate_names]
+    return dict(paths_by_name)
 
 
 def format_validation_error(error: dict[str, Any]) -> str:

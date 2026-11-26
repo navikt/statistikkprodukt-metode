@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from enum import StrEnum
 from typing import Annotated, Any, Literal
+from pathlib import Path
 
 from pydantic import (
     AfterValidator,
@@ -276,6 +277,11 @@ class Tellepunkt(KolonneMetadata):
         default_factory=MeasureStatistikkbank,
         description="Statistikkbankens innstillinger for måltallets visning og PX-eksport.",
     )
+
+
+class YamlSqlPathPair(StrictModel):
+    yaml: Path | None = Field(description="YAML filbane. Internt", default=None)
+    sql: Path | None = Field(description="SQL filbane. Internet", default=None)
 
 
 class Aggregate(StrictModel):
