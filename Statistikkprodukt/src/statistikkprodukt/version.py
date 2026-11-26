@@ -21,7 +21,7 @@ VERSION_URL = (
     "https://raw.githubusercontent.com/navikt/"
     f"statistikkprodukt-metode/{GITHUB_BRANCH}/pyproject.toml"
 )
-UPDATE_COMMAND = "uv tool upgrade statistikkprodukt"
+UPDATE_COMMAND = "statistikkprodukt oppdater"
 VERSION_CHECK_TIMEOUT_SECONDS = 2
 
 LOGGER = logging.getLogger(__name__)
