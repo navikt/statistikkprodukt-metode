@@ -11,7 +11,6 @@ dependencies = [
     "pydantic>=2.13.5",
     "pyyaml>=6.0.3",
     "rpy2[pandas]>=3.6.5",
-    "docker>=7.1.0",
     "google-cloud-secret-manager>=2.26.0",
     "pytz>=2026.6",
 ]
@@ -25,8 +24,8 @@ markers = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.19,<0.13.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=80.0.0"]
+build-backend = "setuptools.build_meta"
 
 [tool.uv]
 # not supported by dependabot
@@ -40,12 +39,19 @@ override-dependencies = [
     "certifi>=2026.10.19"
 ]
 
-[tool.uv.build-backend]
-wheel-include = ["NavDataprodukt/R/*.R"]
-module-root = "Statistikkprodukt/src"
+[tool.setuptools]
+package-dir = {"" = "Statistikkprodukt/src"}
+
+[tool.setuptools.packages.find]
+where = ["Statistikkprodukt/src"]
+
+[tool.setuptools.package-data]
+statistikkprodukt = ["statistikkprodukt_register.md"]
+module-root = ["Statistikkprodukt/src"]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
     "testcontainers[oracle-free]>=4.15.0",
+    "docker>=7.1.0"
 ]

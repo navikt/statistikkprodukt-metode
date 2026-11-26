@@ -8,9 +8,7 @@ import sys
 import time
 from typing import Sequence, Any
 
-import docker
 import oracledb
-from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 
 from statistikkprodukt.oracle.utils import execute_sql
 
@@ -60,6 +58,7 @@ def setup() -> None:
 
 
 def _run_container(client):
+    from docker.errors import APIError
     LOGGER.debug("Oppretter container %s fra %s på port %d.", CONTAINER_NAME, CONTAINER_IMAGE, CONTAINER_PORT)
     try:
         client.containers.run(
@@ -88,6 +87,7 @@ def _run_container(client):
 
 def _assert_container_is_running(container: Any | None):
     """Sjekker at den administrerte testcontaineren kjører, og starter den hvis den er stoppet."""
+    from docker.errors import APIError
     was_running = container.status == "running"
     LOGGER.debug("Containerstatus: %s.", container.status)
     if not was_running:
@@ -107,6 +107,7 @@ def _assert_container_is_running(container: Any | None):
 
 def _assert_image_available(client):
     """Last ned docker image hvis det mangler"""
+    from docker.errors import DockerException, ImageNotFound
     try:
         LOGGER.debug("Kontrollerer at Docker-bildet %s finnes lokalt.", CONTAINER_IMAGE)
         client.images.get(CONTAINER_IMAGE)
@@ -124,6 +125,7 @@ def _assert_image_available(client):
 
 def teardown() -> None:
     """Stopper og fjerner bare den administrerte testcontaineren."""
+    from docker.errors import APIError
     client = _docker_client()
     container = _get_named_container(client)
     if container is None:
@@ -161,6 +163,8 @@ def run_pytest(arguments: Sequence[str]) -> int:
 
 def _docker_client():
     """Oppretter en Docker-klient og kontrollerer at daemonen svarer."""
+    import docker
+    from docker.errors import DockerException
     try:
         client = docker.from_env()
         client.ping()
@@ -174,6 +178,7 @@ def _docker_client():
 
 def _get_named_container(client):
     """Henter den faste testcontaineren hvis den finnes."""
+    from docker.errors import DockerException, NotFound
     try:
         return client.containers.get(CONTAINER_NAME)
     except NotFound:
