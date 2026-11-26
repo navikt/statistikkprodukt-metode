@@ -94,10 +94,10 @@ def test_metadata_mapping():
         ("CS", "DATA", None): "antall#1#unit_antall",
         ("CR", "STAT_VAR", "NO"): "statistikkvariabel",
         ("CR", "STAT_VAR", "EN"): "statistical variable",
-        ("CR", "periode", "NO"): "Periodisering",
-        ("CR", "periode", "EN"): "Periodization",
-        ("CR", "region", "NO"): "Region",
-        ("CR", "region", "EN"): "Region",
+        ("CR", "periode", "NO"): "periodisering",
+        ("CR", "periode", "EN"): "periodization",
+        ("CR", "region", "NO"): "region",
+        ("CR", "region", "EN"): "region",
         ("CR", "antall", "NO"): "Antall",
         ("CR", "antall", "EN"): "Count",
         ("CR", "unit_antall", "NO"): "personer",
@@ -109,6 +109,34 @@ def test_metadata_mapping():
     assert [row["value"] for row in rows if row["keyword"] == "CONTACT"] == [
         "Datateam##1234#a@example.org", "Analyseteam###b@example.org",
     ]
+
+
+def test_cr_names_are_normalized_by_variable_type():
+    aggregate = aggregate_with_metadata()
+    metadata = resolved_metadata(aggregate)
+    metadata.columns["periode"].navn = "PERIODISERING"
+    metadata.columns["periode"].navn_en = "PERIODIZATION"
+    metadata.columns["region"].navn = "REGION"
+    metadata.columns["region"].navn_en = "AREA"
+    metadata.columns["antall"].navn = "ANTALL"
+    metadata.columns["antall"].navn_en = "COUNT"
+
+    rows = metadata_rows(aggregate, metadata, None)
+    cr_names = {
+        (row["keyword"], row["language"]): row["value"]
+        for row in rows if row["type"] == "CR" and row["keyword"] != "STAT_VAR"
+    }
+
+    assert cr_names == {
+        ("periode", "NO"): "periodisering",
+        ("periode", "EN"): "periodization",
+        ("region", "NO"): "region",
+        ("region", "EN"): "area",
+        ("antall", "NO"): "Antall",
+        ("antall", "EN"): "Count",
+        ("unit_antall", "NO"): "personer",
+        ("unit_antall", "EN"): "persons",
+    }
 
 
 @pytest.mark.parametrize("field", ["discontinued", "official-statistics"])

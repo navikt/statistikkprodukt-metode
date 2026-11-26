@@ -182,9 +182,12 @@ def _cr_rows(rows: _Rows, aggregate: Aggregate, metadata: TableMetadata) -> None
     rows.add("CR", "STAT_VAR", "statistikkvariabel", "NO")
     rows.add("CR", "STAT_VAR", "statistical variable", "EN")
 
+    measure_names = {tellepunkt.kolonne: tellepunkt for tellepunkt in aggregate.tellepunkter}
     for variable in (
             aggregate.periodisering, *aggregate.variabler, *aggregate.tellepunkter
     ):
+        is_measure = variable.kolonne in measure_names
+
         # Ikke støtt flere språkvarianter av samme kolonne via lang suffiks i CR enda - trenger mer definisjonsarbeid.
         # _column_name fjerner __no-/__en-suffiks
         column_raw_lower = variable.kolonne.lower()
@@ -194,9 +197,17 @@ def _cr_rows(rows: _Rows, aggregate: Aggregate, metadata: TableMetadata) -> None
 
         column = _column_name(variable.kolonne)
         variable_metadata = metadata.columns.get(column)
-        rows.add("CR", column, variable_metadata.navn, "NO")
-        if value := getattr(variable_metadata, "navn_en", None):
-            rows.add("CR", column, value, "EN")
+        assert variable_metadata is not None
+        name = variable_metadata.navn
+        name_en = getattr(variable_metadata, "navn_en", None)
+        if name is not None:
+            name = name.lower().capitalize() if is_measure else name.lower()
+        if name_en is not None:
+            name_en = name_en.lower().capitalize() if is_measure else name_en.lower()
+
+        rows.add("CR", column, name, "NO")
+        if name_en:
+            rows.add("CR", column, name_en, "EN")
 
     for tellepunkt in aggregate.tellepunkter:
         column = _column_name(tellepunkt.kolonne)
