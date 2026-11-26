@@ -432,23 +432,26 @@ class Aggregate(StrictModel):
 
     @model_validator(mode="after")
     def validate_aggregate_name_parts(self) -> Aggregate:
-        """Kontrollerer at aggregatnavnet samsvarer med statistikkbank og periode."""
+        """Kontrollerer at aggregatnavnet samsvarer med statistikkbank og periodetype."""
         subject_code = self.statistikkbank.subject_code.lower()
         subject_kort = self.statistikkbank.subject_kort.lower()
-        period = self.periodisering.kolonne
-        prefix = f"ost_{subject_code}_{subject_kort}_{period}_"
-        # 'else ""' for å feile i følgende regex check
-        user_configurable_suffix = self.tabell[len(prefix):] if self.tabell.startswith(prefix) else ""
+        prefix = f"ost_{subject_code}_{subject_kort}_"
+        name_parts = (
+            self.tabell[len(prefix):] if self.tabell.startswith(prefix) else ""
+        )
+        period, separator, user_configurable_suffix = name_parts.partition("_")
         distribution_parts = user_configurable_suffix.split("_")
         if (
-            not re.fullmatch(r"[a-z]+(?:_[a-z]+)*", user_configurable_suffix)
+            period not in {"aar", "mnd", "kvartal", "uke", "dag"}
+            or not separator
+            or not re.fullmatch(r"[a-z]+(?:_[a-z]+)*", user_configurable_suffix)
             or distribution_parts != sorted(distribution_parts)
         ):
             raise ConfigError(
                 "Aggregatnavnet må følge formatet "
                 "ost_<subject-code>_<subject-kort>_<periode>_<fordeling>, "
-                "der subject-code, subject-kort og periode samsvarer med "
-                "statistikkbank og periodisering, og fordeling består av "
+                "der subject-code og subject-kort samsvarer med statistikkbank, "
+                "periode er én av aar, mnd, kvartal, uke eller dag, og fordeling består av "
                 "identifikatorer adskilt med _ i alfabetisk sortering. "
                 f"Mottatt: {self.tabell!r}."
             )

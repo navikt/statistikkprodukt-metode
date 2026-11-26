@@ -15,7 +15,7 @@ from statistikkprodukt.config import (
 )
 from statistikkprodukt.config.loader import _find_aggregate_configurations
 
-AGGREGATE_NAME = "ost_am_befolkning_periode_region"
+AGGREGATE_NAME = "ost_am_befolkning_mnd_region"
 
 
 def configuration():
@@ -151,7 +151,7 @@ def test_statistikkbank_accepts_subject_code_and_area_mapping(subject_code, subj
         "subject-area": subject_area,
     }
     config["aggregater"][0]["tabell"] = (
-        f"ost_{subject_code.lower()}_befolkning_periode_region"
+        f"ost_{subject_code.lower()}_befolkning_mnd_region"
     )
 
     parsed = Configuration.model_validate(config)
@@ -254,7 +254,7 @@ def test_aggregate_formula_uses_configured_column_names():
     aggregate["periodisering"]["kolonne"] = "maaned"
     aggregate["variabler"] = [{"kolonne": "alder"}, {"kolonne": "kjonn"}]
     aggregate["formula"] = "~ maaned * (alder + kjonn)"
-    aggregate["tabell"] = "ost_am_befolkning_maaned_alder_kjonn"
+    aggregate["tabell"] = "ost_am_befolkning_mnd_alder_kjonn"
 
     Configuration.model_validate(config)
 
@@ -323,7 +323,7 @@ def test_configuration_rejects_duplicate_ids_including_test_series(agg_id):
     aggregate = config["aggregater"][0]
     aggregate["id"] = agg_id
     config["aggregater"].append(
-        {**aggregate, "tabell": "ost_am_befolkning_periode_annen"}
+        {**aggregate, "tabell": "ost_am_befolkning_mnd_annen"}
     )
 
     with pytest.raises(ValidationError, match="id må være unike"):
@@ -334,7 +334,7 @@ def test_configuration_accepts_distinct_test_and_registered_ids():
     config = configuration().model_dump(by_alias=True)
     aggregate = config["aggregater"][0]
     config["aggregater"] = [
-        {**aggregate, "id": aggregat_id, "tabell": f"ost_am_befolkning_periode_{name}"}
+        {**aggregate, "id": aggregat_id, "tabell": f"ost_am_befolkning_mnd_{name}"}
         for name, aggregat_id in zip(
             ("forste", "andre", "tredje", "fjerde"),
             ["00000", "00001", "09999", "21000"],
@@ -366,7 +366,7 @@ def test_column_metadata_is_optional():
 
 def test_aggregate_rejects_names_too_long_for_derived_tables():
     config = configuration().model_dump(by_alias=True)
-    config["aggregater"][0]["tabell"] = "ost_am_befolkning_periode_" + "a" * 120
+    config["aggregater"][0]["tabell"] = "ost_am_befolkning_mnd_" + "a" * 120
 
     with pytest.raises(ValidationError, match="Oracle-navn"):
         Configuration.model_validate(config)
@@ -384,13 +384,13 @@ def test_statistikkbank_requires_subject_name_parts(field):
 @pytest.mark.parametrize(
     "name",
     [
-        "ost_sf_befolkning_periode_region",
-        "ost_am_arbeidsmarked_periode_region",
-        "ost_am_befolkning_aar_region",
-        "ost_am_befolkning_periode_region1",
-        "ost_am_befolkning_periode_region__alder",
-        "ost_am_befolkning_periode_any_user_defined",
-        "OST_am_befolkning_periode_region",
+        "ost_sf_befolkning_mnd_region",
+        "ost_am_arbeidsmarked_mnd_region",
+        "ost_am_befolkning_mnd_region1",
+        "ost_am_befolkning_mnd_region__alder",
+        "ost_am_befolkning_mnd_any_user_defined",
+        "ost_am_befolkning_periode_region",
+        "OST_am_befolkning_mnd_region",
         "ost_am_befolkning_z_x_y_feil_sortering"
     ],
 )
@@ -402,10 +402,20 @@ def test_aggregate_name_must_match_required_parts_and_lowercase_distribution(nam
         Configuration.model_validate(config)
 
 
+@pytest.mark.parametrize("period", ["aar", "mnd", "kvartal", "uke", "dag"])
+def test_aggregate_name_accepts_supported_period_types(period):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = f"ost_am_befolkning_{period}_region"
+
+    assert Configuration.model_validate(config).aggregater[0].tabell.endswith(
+        f"_{period}_region"
+    )
+
+
 def test_aggregate_name_accepts_user_defined_distribution_identifiers():
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["tabell"] = (
-        "ost_am_befolkning_periode_any_defined_distribution_user"
+        "ost_am_befolkning_mnd_any_defined_distribution_user"
     )
 
     parsed = Configuration.model_validate(config)
@@ -428,11 +438,11 @@ connection:
 mapper:
   - aggregater/**
 aggregater:
-  - ost_am_befolkning_periode_region
+  - ost_am_befolkning_mnd_region
 """,
         encoding="utf-8",
     )
-    for table in (AGGREGATE_NAME, "ost_am_befolkning_periode_annen"):
+    for table in (AGGREGATE_NAME, "ost_am_befolkning_mnd_annen"):
         (aggregate_directory / f"{table}.sql").write_text("select 1 from dual")
         (aggregate_directory / f"{table}.yml").write_text(
             f"""
@@ -502,7 +512,7 @@ connection:
 mapper:
   - aggregater/**
 aggregater:
-  - ost_am_befolkning_periode_region
+  - ost_am_befolkning_mnd_region
 """,
         encoding="utf-8",
     )
@@ -570,7 +580,7 @@ aggregater:
 def test_aggregate_filename_must_be_lowercase(tmp_path):
     aggregate_directory = tmp_path / "aggregater"
     aggregate_directory.mkdir()
-    (aggregate_directory / "OST_AM_BEFOLKNING_PERIODE_REGION.yml").write_text("")
+    (aggregate_directory / "OST_AM_BEFOLKNING_MND_REGION.yml").write_text("")
 
     with pytest.raises(ConfigError, match="må være skrevet med små bokstaver"):
         _find_aggregate_configurations(
@@ -589,8 +599,8 @@ def test_loads_separate_directories_with_overlapping_patterns_and_preserves_orde
     sql_directory.mkdir(parents=True)
     config = configuration()
     for table, agg_id in (
-        ("ost_am_befolkning_periode_first", "21000"),
-        ("ost_am_befolkning_periode_second", "21001"),
+        ("ost_am_befolkning_mnd_first", "21000"),
+        ("ost_am_befolkning_mnd_second", "21001"),
     ):
         aggregate = config.aggregater[0].model_dump(mode="json", by_alias=True)
         aggregate.pop("tabell")
@@ -609,15 +619,15 @@ def test_loads_separate_directories_with_overlapping_patterns_and_preserves_orde
             "connection": config.connection.model_dump(mode="json", by_alias=True)
             | {"password": "env://TEST_PASSWORD"},
             "mapper": [
-                f"{prefix}yaml/ost_am_befolkning_periode_first{yaml_suffix}",
+                f"{prefix}yaml/ost_am_befolkning_mnd_first{yaml_suffix}",
                 f"{prefix}yaml/**",
                 f"{prefix}sql/**",
                 f"{prefix}yaml/*{yaml_suffix}",
                 f"{prefix}sql/*.sql",
             ],
             "aggregater": [
-                "ost_am_befolkning_periode_second",
-                "ost_am_befolkning_periode_first",
+                "ost_am_befolkning_mnd_second",
+                "ost_am_befolkning_mnd_first",
             ],
         }),
         encoding="utf-8",
@@ -628,11 +638,11 @@ def test_loads_separate_directories_with_overlapping_patterns_and_preserves_orde
 
     assert loaded_directory == config_directory
     assert [aggregate.tabell for aggregate in loaded.aggregater] == [
-        "ost_am_befolkning_periode_second",
-        "ost_am_befolkning_periode_first",
+        "ost_am_befolkning_mnd_second",
+        "ost_am_befolkning_mnd_first",
     ]
     assert [aggregate.sporring_sql for aggregate in loaded.aggregater] == [
-        f"{prefix}sql/ost_am_befolkning_periode_{table}.sql"
+        f"{prefix}sql/ost_am_befolkning_mnd_{table}.sql"
         for table in ("second", "first")
     ]
 

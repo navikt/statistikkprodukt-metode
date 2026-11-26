@@ -111,7 +111,7 @@ Det betyr man kan:
 
 Som standard skrives alle små aggregater. Enkelte kan utvelges med navn:
 ```shell
-statistikkprodukt last ost_ga_befolkning_periode_alder ost_ga_befolkning_periode_kjonn
+statistikkprodukt last ost_ga_befolkning_mnd_alder ost_ga_befolkning_mnd_kjonn
 ```
 
 > [!WARNING]
@@ -171,7 +171,7 @@ statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
 
 Sjekk resultatene i Oracle:
 ```sql
-select * from ost_ga_befolkning_periode_alder_kontroll;
+select * from ost_ga_befolkning_mnd_alder_kontroll;
 -- ... og andre ost tabeller
 ```
 
@@ -312,8 +312,8 @@ mapper:
 
 # Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `mapper`.
 aggregater:
-  - ost_ga_befolkning_periode_alder
-  - ost_ga_befolkning_periode_kjonn
+  - ost_ga_befolkning_mnd_alder
+  - ost_ga_befolkning_mnd_kjonn
 ```
 
 Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfilen. `*` treffer alle filer i mappen, `*.sql` kun SQL-filer, `**` treffer alle undermapper rekursivt.
@@ -322,10 +322,10 @@ Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfil
 produkt/
 ├── konfigurasjon.yml
 └── aggregater/
-    ├── ost_ga_befolkning_periode_alder.yml
-    ├── ost_ga_befolkning_periode_alder.sql
-    ├── ost_ga_befolkning_periode_kjonn.yml
-    └── ost_ga_befolkning_periode_kjonn.sql
+    ├── ost_ga_befolkning_mnd_alder.yml
+    ├── ost_ga_befolkning_mnd_alder.sql
+    ├── ost_ga_befolkning_mnd_kjonn.yml
+    └── ost_ga_befolkning_mnd_kjonn.sql
 ```
 
 For denne strukturen brukes:
@@ -334,8 +334,8 @@ For denne strukturen brukes:
 mapper:
   - aggregater/**
 aggregater:
-  - ost_ga_befolkning_periode_alder
-  - ost_ga_befolkning_periode_kjonn
+  - ost_ga_befolkning_mnd_alder
+  - ost_ga_befolkning_mnd_kjonn
 ```
 
 Hver aggregat trenger én `<aggregat>.sql` fil og én `<aggregat>.yml` fil funnet av et mønster i `mapper` konfigurasjon.
@@ -348,10 +348,11 @@ Per småaggregat må det lages:
 - `{aggregatnavn}.yml` eller `{aggregatnavn}.yaml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
-For et eksempel for en SQL fil, se `eksempel/aggregater/ost_ga_befolkning_periode_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
+For et eksempel for en SQL fil, se `eksempel/aggregater/ost_ga_befolkning_mnd_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
 
 Aggregatets YAML-filnavn må være småskrevet og følge formatet
-`ost_<subject-code>_<subject-kort>_<periode>_<fordeling>`. `<fordeling>` er brukerdefinert og består av én
+`ost_<subject-code>_<subject-kort>_<periode>_<fordeling>`. `<periode>` må være `aar`, `mnd`, `kvartal`, `uke` eller `dag`.
+`<fordeling>` er brukerdefinert og består av én
 eller flere identifikatorer adskilt med `_` i alfabetisk rekkefølge.
 
 Fullstendig eksempel på aggregatkonfigurasjon:

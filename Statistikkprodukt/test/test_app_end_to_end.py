@@ -227,7 +227,7 @@ definisjon:
 def e2e(oracle_connection, monkeypatch, tmp_path):
     """Gir et E2E-miljø mot testdatabasen og rydder opp tabellene etterpå."""
     suffix = uuid4().hex[:12].translate(str.maketrans("0123456789", "abcdefghij"))
-    aggregate_table = f"ost_ga_befolkning_periode_endtoend{suffix}agg"
+    aggregate_table = f"ost_ga_befolkning_mnd_endtoend{suffix}agg"
 
     monkeypatch.setenv("STATISTIKKPRODUKT_E2E_PASSWORD", ORACLE_PASSWORD)
     monkeypatch.setitem(

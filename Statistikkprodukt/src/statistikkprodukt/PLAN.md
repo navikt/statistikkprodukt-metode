@@ -86,8 +86,8 @@ connection:
 mapper:
   - aggregater/**
 aggregater:
-  - ost_ga_befolkning_periode_alder
-  - ost_ga_befolkning_periode_kjonn
+  - ost_ga_befolkning_mnd_alder
+  - ost_ga_befolkning_mnd_kjonn
 ```
 
 Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `aggregater` must be globally unique:

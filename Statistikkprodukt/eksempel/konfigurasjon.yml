@@ -11,5 +11,5 @@ mapper:
   - aggregater/**
 
 aggregater:
-  - ost_ga_befolkning_periode_alder
-  - ost_ga_befolkning_periode_kjonn
+  - ost_ga_befolkning_mnd_alder
+  - ost_ga_befolkning_mnd_kjonn

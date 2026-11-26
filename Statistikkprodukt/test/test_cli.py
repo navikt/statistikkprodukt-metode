@@ -6,7 +6,7 @@ import yaml
 from statistikkprodukt import app, cli
 from test.test_config import configuration
 
-AGGREGATE_NAME = "ost_am_befolkning_periode_tabell"
+AGGREGATE_NAME = "ost_am_befolkning_mnd_tabell"
 
 
 def _configure(tmp_path, monkeypatch, agg_id):
@@ -144,7 +144,7 @@ def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
 @pytest.mark.parametrize("second_id", ["00000", "00001"])
 def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, second_id):
     path = _configure(tmp_path, monkeypatch, "00000")
-    second_name = "ost_am_befolkning_periode_annen"
+    second_name = "ost_am_befolkning_mnd_annen"
     second = yaml.safe_load(
         (tmp_path / "aggregater" / f"{AGGREGATE_NAME}.yml").read_text(encoding="utf-8")
     )
