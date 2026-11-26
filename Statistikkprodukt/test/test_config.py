@@ -40,8 +40,10 @@ def configuration():
                     "referanse-tabell": "OBT_TABELL",
                     "sporring_sql": "select.sql",
                     "statistikkbank": {
+                        "subject": "Befolkning",
                         "subject-code": "AM",
                         "subject-kort": "BEFOLKNING",
+                        "subject-area": "Arbeidsmarked",
                     },
                     "periodisering": {
                         "navn": "Periodisering",
@@ -182,6 +184,7 @@ def test_source_and_aggregate_configuration_reject_unsupported_versions():
 def test_statistikkbank_accepts_subject_code_and_area_mapping(subject_code, subject_area):
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["statistikkbank"] = {
+        "subject": "Befolkning",
         "subject-code": subject_code,
         "subject-kort": "BEFOLKNING",
         "subject-area": subject_area,
@@ -198,6 +201,7 @@ def test_statistikkbank_accepts_subject_code_and_area_mapping(subject_code, subj
 def test_statistikkbank_subject_mapping_error_includes_mapping():
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["statistikkbank"] = {
+        "subject": "Befolkning",
         "subject-code": "AM",
         "subject-kort": "BEFOLKNING",
         "subject-area": "Familie",
@@ -382,11 +386,23 @@ def test_configuration_accepts_distinct_test_and_registered_ids():
 
 
 def test_aggregate_metadata_is_required():
-    for field in ("navn", "navn-en", "innhold", "innhold-en"):
+    for field in ("navn", "innhold"):
         incomplete = configuration().model_dump(by_alias=True)
         incomplete["aggregater"][0].pop(field)
         with pytest.raises(ValidationError):
             Configuration.model_validate(incomplete)
+
+
+def test_aggregate_english_metadata_is_optional():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    aggregate.pop("navn-en")
+    aggregate.pop("innhold-en")
+
+    parsed = Configuration.model_validate(config)
+
+    assert parsed.aggregater[0].navn_en is None
+    assert parsed.aggregater[0].innhold_en is None
 
 
 def test_column_metadata_is_optional():
@@ -408,10 +424,20 @@ def test_aggregate_rejects_names_too_long_for_derived_tables():
         Configuration.model_validate(config)
 
 
-@pytest.mark.parametrize("field", ["subject-code", "subject-kort"])
+@pytest.mark.parametrize(
+    "field", ["subject", "subject-area", "subject-code", "subject-kort"]
+)
 def test_statistikkbank_requires_subject_name_parts(field):
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["statistikkbank"].pop(field)
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_statistikkbank_subject_must_not_be_empty():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"]["subject"] = ""
 
     with pytest.raises(ValidationError):
         Configuration.model_validate(config)
@@ -503,8 +529,10 @@ definisjon:
   id: 21000
   referanse-tabell: OBT_TABELL
   statistikkbank:
+    subject: Befolkning
     subject-code: AM
     subject-kort: BEFOLKNING
+    subject-area: Arbeidsmarked
   periodisering:
     navn: Periode
     navn-en: Period
@@ -576,8 +604,10 @@ definisjon:
   id: "21000"
   referanse-tabell: OBT_TABELL
   statistikkbank:
+    subject: Befolkning
     subject-code: AM
     subject-kort: BEFOLKNING
+    subject-area: Arbeidsmarked
   periodisering:
     kolonne: periode
   inkrementell-strategi: legg_til_nye_perioder

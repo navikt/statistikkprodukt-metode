@@ -186,6 +186,7 @@ definisjon:
   id: "21000"
   referanse-tabell: {source_table}
   statistikkbank:
+    subject: Befolkning
     subject-code: GA
     subject-kort: BEFOLKNING
     subject-area: Flere statistikkområder

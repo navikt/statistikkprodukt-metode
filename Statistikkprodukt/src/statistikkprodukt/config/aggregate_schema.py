@@ -209,21 +209,21 @@ _SUBJECT_CODE_TO_SUBJECT_AREA_MAPPING = {
 
 
 class TableStatistikkbank(StrictModel):
-    subject: str | None = Field(
-        default=None, description="Norsk tema på nivå 2 i menyhierarkiet."
+    subject: NonEmptyString = Field(
+        description="Norsk tema på nivå 2 i menyhierarkiet."
     )
     subject_en: str | None = Field(
         default=None, alias="subject-en", description="Engelsk tema."
     )
-    subject_kort: str = Field(
-        min_length=1, alias="subject-kort", description="Statistikkbankens temakode."
+    subject_kort: NonEmptyString = Field(
+        alias="subject-kort", description="Statistikkbankens temakode."
     )
-    subject_area: str | None = Field(
-        default=None, alias="subject-area",
+    subject_area: str = Field(
+        alias="subject-area",
         description="Norsk fagområde på nivå 1 i menyhierarkiet.",
     )
-    subject_code: str = Field(
-        min_length=1, alias="subject-code",
+    subject_code: NonEmptyString = Field(
+        alias="subject-code",
         description="Fagområdets kode fra Statistikkbankens kodeverk.",
     )
     note: str | None = Field(
@@ -311,7 +311,7 @@ class Aggregate(StrictModel):
     )
     id: AggregateId = Field(description="Aggregatets ID.")
     navn: str = Field(description="Navn på aggregatet.")
-    navn_en: str = Field(alias="navn-en", description="Engelsk navn på aggregatet.")
+    navn_en: str|None = Field(alias="navn-en", description="Engelsk navn på aggregatet.", default=None)
     tabell: AggregateName = Field(
         description="Navn på småagregat, definerer <tabell>_PREPUB, <tabell>_META og <tabell>_KONTROLL."
     )
@@ -320,9 +320,10 @@ class Aggregate(StrictModel):
         description="Kildetabellen som brukes til å hente metadata.",
     )
     innhold: str = Field(description="Beskrivelse av innholdet i aggregatet.")
-    innhold_en: str = Field(
+    innhold_en: str|None = Field(
         alias="innhold-en",
         description="Engelsk beskrivelse av innholdet i aggregatet.",
+        default=None
     )
     periodisering: Variable = Field(
         description="Kolonne med perioden dataene gjelder for."
