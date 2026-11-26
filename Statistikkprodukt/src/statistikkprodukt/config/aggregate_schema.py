@@ -435,25 +435,58 @@ class Aggregate(StrictModel):
         """Kontrollerer at aggregatnavnet samsvarer med statistikkbank og periodetype."""
         subject_code = self.statistikkbank.subject_code.lower()
         subject_kort = self.statistikkbank.subject_kort.lower()
-        prefix = f"ost_{subject_code}_{subject_kort}_"
-        name_parts = (
-            self.tabell[len(prefix):] if self.tabell.startswith(prefix) else ""
-        )
-        period, separator, user_configurable_suffix = name_parts.partition("_")
-        distribution_parts = user_configurable_suffix.split("_")
-        if (
-            period not in {"aar", "mnd", "kvartal", "uke", "dag"}
-            or not separator
-            or not re.fullmatch(r"[a-z]+(?:_[a-z]+)*", user_configurable_suffix)
-            or distribution_parts != sorted(distribution_parts)
-        ):
+        aggregate_name = self.tabell
+        name_parts = self.tabell.split("_")
+        msg_prefix = f"Aggregatnavn/filnavn '{aggregate_name}' må følge formatet 'ost_<subject-code>_<subject-kort>_<periode>_<fordeling>'."
+        if name_parts[0] != "ost":
             raise ConfigError(
-                "Aggregatnavnet må følge formatet "
-                "ost_<subject-code>_<subject-kort>_<periode>_<fordeling>, "
-                "der subject-code og subject-kort samsvarer med statistikkbank, "
-                "periode er én av aar, mnd, kvartal, uke eller dag, og fordeling består av "
-                "identifikatorer adskilt med _ i alfabetisk sortering. "
-                f"Mottatt: {self.tabell!r}."
+                f"{msg_prefix} Her startet det ikke med 'ost_'."
+            )
+        if len(name_parts) < 2 or name_parts[1] != subject_code:
+            received = name_parts[1] if len(name_parts) > 1 else ""
+            raise ConfigError(
+                f"{msg_prefix}N subject-code er {received!r}, men "
+                f"konfigurasjonsfilen angir {subject_code!r}."
+            )
+        if len(name_parts) < 3 or name_parts[2] != subject_kort:
+            received = name_parts[2] if len(name_parts) > 2 else ""
+            raise ConfigError(
+                f"{msg_prefix} subject-kort er {received!r}, men "
+                f"konfigurasjonsfilen angir {subject_kort!r}."
+            )
+        if len(name_parts) < 4:
+            raise ConfigError(
+                f"{msg_prefix} Aggregatnavnet mangler periodedel. Den må være én av "
+                "aar, mnd, kvartal, uke eller dag."
+            )
+
+        period = name_parts[3]
+        allowed_periods = {"aar", "mnd", "kvartal", "uke", "dag"}
+        if period not in allowed_periods:
+            raise ConfigError(
+                f"{msg_prefix} Aggregatnavnets periodedel er {period!r}. Den må være én av "
+                "aar, mnd, kvartal, uke eller dag."
+            )
+
+        distribution_parts = name_parts[4:]
+        if not distribution_parts:
+            raise ConfigError(
+                f"{msg_prefix} Aggregatnavnet mangler fordelingsdel etter periodedelen {period!r}."
+            )
+        invalid_parts = [
+            part for part in distribution_parts if not re.fullmatch(r"[a-z]+", part)
+        ]
+        if invalid_parts:
+            raise ConfigError(
+                f"{msg_prefix} Fordelingsdelen inneholder ugyldige identifikatorer "
+                f"{invalid_parts!r}. Hver identifikator må bare inneholde "
+                "små bokstaver a–z."
+            )
+        if distribution_parts != sorted(distribution_parts):
+            raise ConfigError(
+                f"{msg_prefix} Identifikatorene i fordelingsdelen må stå i alfabetisk rekkefølge. "
+                f"Mottatt: {'_'.join(distribution_parts)!r}; forventet: "
+                f"{'_'.join(sorted(distribution_parts))!r}."
             )
         return self
 

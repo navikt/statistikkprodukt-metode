@@ -382,23 +382,35 @@ def test_statistikkbank_requires_subject_name_parts(field):
 
 
 @pytest.mark.parametrize(
-    "name",
+    ("name", "message"),
     [
-        "ost_sf_befolkning_mnd_region",
-        "ost_am_arbeidsmarked_mnd_region",
-        "ost_am_befolkning_mnd_region1",
-        "ost_am_befolkning_mnd_region__alder",
-        "ost_am_befolkning_mnd_any_user_defined",
-        "ost_am_befolkning_periode_region",
-        "OST_am_befolkning_mnd_region",
-        "ost_am_befolkning_z_x_y_feil_sortering"
+        ("ost_sf_befolkning_mnd_region", "subject-code er 'sf'"),
+        ("ost_am_arbeidsmarked_mnd_region", "subject-kort er 'arbeidsmarked'"),
+        ("ost_am_befolkning", "mangler periodedel"),
+        ("ost_am_befolkning_periode_region", "periodedel er 'periode'"),
+        ("ost_am_befolkning_mnd", "mangler fordelingsdel"),
+        ("ost_am_befolkning_mnd_region1", "['region1']"),
+        ("ost_am_befolkning_mnd_region__alder", "['']"),
+        (
+            "ost_am_befolkning_mnd_any_user_defined",
+            "forventet: 'any_defined_user'",
+        ),
     ],
 )
-def test_aggregate_name_must_match_required_parts_and_lowercase_distribution(name):
+def test_aggregate_name_errors_explain_invalid_parts(name, message):
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["tabell"] = name
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+    assert message in str(error.value)
+
+
+def test_aggregate_name_must_be_lowercase():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = "OST_am_befolkning_mnd_region"
+
+    with pytest.raises(ValidationError, match="må være skrevet med små bokstaver"):
         Configuration.model_validate(config)
 
 
