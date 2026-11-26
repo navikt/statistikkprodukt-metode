@@ -1,6 +1,6 @@
 [project]
 name = "statistikkprodukt"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI for prikking av statistikkproduktaggregater"
 readme = "Statistikkprodukt/README.md"
 authors = []
@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [tool.statistikkprodukt]
-minimum_version = "0.1.0"
+minimum_version = "0.2.0"
 # Oppdater sammen med kompatibiliteten i NavDataprodukt/DESCRIPTION.
 r_package_requirement = ">=0.1.1,<0.2"
 
