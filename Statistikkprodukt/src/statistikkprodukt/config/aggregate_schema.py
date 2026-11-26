@@ -177,6 +177,18 @@ class Kontakt(StrictModel):
     )
 
 
+_SUBJECT_CODE_TO_SUBJECT_AREA_MAPPING = {
+    "AM": "Arbeidsmarked",
+    "SF": "Sykefravær",
+    "AU": "Arbeidsavklaringspenger og uføretrygd",
+    "FA": "Familie",
+    "OT": "Oppfølging og tiltak",
+    "PE": "Pensjon",
+    "SB": "Saksbehandling",
+    "GA": "Flere statistikkområder",
+}
+
+
 class TableStatistikkbank(StrictModel):
     subject: str | None = Field(
         default=None, description="Norsk tema på nivå 2 i menyhierarkiet."
@@ -229,6 +241,21 @@ class TableStatistikkbank(StrictModel):
         default_factory=list,
         description="Ekstra kontaktpunkter i tillegg til statistikkseksjonen.",
     )
+
+    @model_validator(mode="after")
+    def validate_subject_area_mapping(self) -> TableStatistikkbank:
+        """Kontrollerer at fagområdekode og fagområde samsvarer."""
+        if self.subject_code is None or self.subject_area is None:
+            return self
+        if _SUBJECT_CODE_TO_SUBJECT_AREA_MAPPING.get(self.subject_code) != self.subject_area:
+            mapping = "\n".join(
+                f"{code}: {area}" for code, area in _SUBJECT_CODE_TO_SUBJECT_AREA_MAPPING.items()
+            )
+            raise ConfigError(
+                "subject-code og subject-area må følge mappingen:\n"
+                f"{mapping}\nMottatt: {self.subject_code}: {self.subject_area}"
+            )
+        return self
 
 
 class Variable(KolonneMetadata):

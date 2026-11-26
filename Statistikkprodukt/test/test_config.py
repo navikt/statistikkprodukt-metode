@@ -115,6 +115,49 @@ def test_source_and_aggregate_configuration_reject_unsupported_versions():
 
 
 @pytest.mark.parametrize(
+    ("subject_code", "subject_area"),
+    [
+        ("AM", "Arbeidsmarked"),
+        ("SF", "Sykefravær"),
+        ("AU", "Arbeidsavklaringspenger og uføretrygd"),
+        ("FA", "Familie"),
+        ("OT", "Oppfølging og tiltak"),
+        ("PE", "Pensjon"),
+        ("SB", "Saksbehandling"),
+        ("GA", "Flere statistikkområder"),
+    ],
+)
+def test_statistikkbank_accepts_subject_code_and_area_mapping(subject_code, subject_area):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"] = {
+        "subject-code": subject_code,
+        "subject-area": subject_area,
+    }
+
+    parsed = Configuration.model_validate(config)
+
+    assert parsed.aggregater[0].statistikkbank.subject_code == subject_code
+
+
+def test_statistikkbank_subject_mapping_error_includes_mapping():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"] = {
+        "subject-code": "AM",
+        "subject-area": "Familie",
+    }
+
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+
+    assert (
+        "AM: Arbeidsmarked\nSF: Sykefravær\n"
+        "AU: Arbeidsavklaringspenger og uføretrygd\nFA: Familie\n"
+        "OT: Oppfølging og tiltak\nPE: Pensjon\nSB: Saksbehandling\n"
+        "GA: Flere statistikkområder"
+    ) in str(error.value)
+
+
+@pytest.mark.parametrize(
     "formula",
     [
         "~ region",
