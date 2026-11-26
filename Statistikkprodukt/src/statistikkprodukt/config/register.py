@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterable
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from .aggregate_schema import Aggregate, ConfigError, is_aggregate_id, is_test_id, validate_identifier
@@ -16,15 +18,19 @@ _COLUMN_TEAM = "Team"
 _COLUMN_TABLE = "Statistikkprodukt"
 
 
-def find_register_file() -> Path:
-    """Finner statistikkproduktregisteret via miljøvariabel eller repository-roten."""
+def find_register_file() -> Path | Traversable:
+    """Finner registeret via miljøvariabel, repository-roten eller pakken."""
     if configured := os.environ.get(STATISTIKKREGISTER_FIL):
         return Path(configured).expanduser().resolve()
     # config/register.py -> config -> statistikkprodukt -> src -> Statistikkprodukt -> repo
-    return Path(__file__).resolve().parents[4] / STATISTIKKREGISTER_FIL_DEFAULT
+    module_path = Path(__file__).resolve()
+    repository_file = module_path.parents[4] / STATISTIKKREGISTER_FIL_DEFAULT
+    if repository_file.is_file():
+        return repository_file
+    return files("statistikkprodukt").joinpath(STATISTIKKREGISTER_FIL_DEFAULT)
 
 
-def read_register_file(path: Path) -> dict[str, str]:
+def read_register_file(path: Path | Traversable) -> dict[str, str]:
     """Leser statistikkproduktregisterets pipe-tabell uten NAV-prefiks."""
     try:
         text = path.read_text(encoding="utf-8-sig")

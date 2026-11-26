@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY pyproject.toml uv.lock README.md statistikkprodukt_register.txt ./
+COPY pyproject.toml setup.py MANIFEST.in uv.lock README.md statistikkprodukt_register.md ./
 COPY Statistikkprodukt ./Statistikkprodukt
 COPY NavDataprodukt ./NavDataprodukt
 RUN uv sync --no-dev --no-install-project

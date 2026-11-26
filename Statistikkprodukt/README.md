@@ -492,6 +492,10 @@ NB: Både periode og variabler må være streng.
 
 Før publisering må du opprette en ny rad i `statistikkprodukt_register.md` og velge en unik `id` mellom 20000 og 22999, uten `NAV`-prefiks.
 
+Fra en utsjekket kopi brukes registeret i repository-roten. Ved installasjon følger
+registeret med i pakken. Sett `STATISTIKKPRODUKT_REGISTER_FIL` til en filsti for å
+bruke et annet register i stedet.
+
 Til utvikling kan du bruke `'00000'` til `'09999'` med `--ingen-id-validering`. Oppgi test-ID-er som strenger i YAML for å bevare innledende nuller.
 
 Alle aggregater i samme konfigurasjon må ha unik `id`, også ved bruk av test-ID-er.
