@@ -290,6 +290,7 @@ ALTER TABLE ost_logg MODIFY (inkrementell VARCHAR2(128 CHAR));
 Konfigurasjonen er delt i én felles fil og én YAML-fil per småaggregat. Den felles filen inneholder databasetilkobling, søkemønstre for aggregatfilene og navnene på aggregatene som skal kjøres. Lag ulike filer for ulike miljøer
 
 ```yaml
+version: 1
 connection:
   # Velg enten en profil ...
   database: DWHP
@@ -303,7 +304,7 @@ connection:
   password: gsm://projects/my_project/secrets/my_secret/versions/latest/password
   timeout: 30
 
-# Hvor i repositoriet aggregatkonfigurasjonen finnes
+# Søkemønstre for YAML- og SQL-filer, relativt til hovedkonfigurasjonen
 mapper:
   - aggregater/**
 
@@ -313,12 +314,53 @@ aggregater:
   - ost_befolkning_kjonn
 ```
 
+Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfilen,
+uavhengig av hvilken mappe kommandoen kjøres fra. YAML- og SQL-filene må ligge i
+undermapper til denne mappen, enten sammen, som i eksemplet over, eller i separate
+undermapper. Undermappene kan ha flere nivåer:
+
+```text
+produkt/
+├── konfigurasjon.yml
+├── yaml/
+│   ├── ost_befolkning_alder.yml
+│   └── ost_befolkning_kjonn.yml
+└── sql/
+    ├── ost_befolkning_alder.sql
+    └── ost_befolkning_kjonn.sql
+```
+
+For denne strukturen brukes følgende søkemønstre i `konfigurasjon.yml`:
+
+```yaml
+mapper:
+  - yaml/**
+  - sql/**
+aggregater:
+  - ost_befolkning_alder
+  - ost_befolkning_kjonn
+```
+
+Filene kobles sammen etter filnavnet uten filendelse; store og små bokstaver
+behandles likt. Hvert valgt aggregat må ha én `.yml`- eller `.yaml`-fil og én
+`.sql`-fil, også ved bruk av CSV. Søkemønstrene må dekke begge filtypene:
+`yaml/*.yml` finner for eksempel ikke SQL-filer, så legg også til `sql/*.sql`.
+Flere treff på samme fil er tillatt, men ulike YAML-filer eller ulike SQL-filer
+med samme aggregatnavn gir en konfigurasjonsfeil.
+
+SQL-stien utledes automatisk og lagres relativt til hovedkonfigurasjonsfilen.
+I eksemplet blir den `sql/ost_befolkning_alder.sql`, ikke en sti relativt til
+aggregatets YAML-fil. Filer direkte ved siden av hovedkonfigurasjonen eller
+utenfor dens mappe er ikke tillatt. Dette gjelder også symbolske lenker som peker
+til slike filer.
+Ikke oppgi `sporring_sql` manuelt i aggregatfilen.
+
 Mer om lasting av hemmeligheter følger.
 
 ## Konfigurasjon per småaggregat
 
 Per småaggregat må det lages:
-- `{aggregatnavn}.yml` som konfigurasjon
+- `{aggregatnavn}.yml` eller `{aggregatnavn}.yaml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
 For et eksempel for en SQL fil, se `eksempel/ost_befolkning_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.

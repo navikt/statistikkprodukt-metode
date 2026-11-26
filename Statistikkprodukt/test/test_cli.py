@@ -14,14 +14,17 @@ def _configure(tmp_path, monkeypatch, agg_id):
     aggregate["id"] = agg_id
     aggregate.pop("tabell")
     aggregate.pop("sporring_sql")
-    (tmp_path / "tabell.yml").write_text(
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    (aggregate_directory / "tabell.yml").write_text(
         yaml.safe_dump({"version": 1, "definisjon": aggregate}), encoding="utf-8"
     )
+    (aggregate_directory / "tabell.sql").write_text("select 1 from dual")
     (tmp_path / "konfigurasjon.yml").write_text(
         yaml.safe_dump({
             "version": config["version"],
             "connection": config["connection"],
-            "mapper": ["*.yml"],
+            "mapper": ["aggregater/*.yml", "aggregater/*.sql"],
             "aggregater": ["tabell"],
         }),
         encoding="utf-8",
@@ -139,9 +142,14 @@ def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
 @pytest.mark.parametrize("second_id", ["00000", "00001"])
 def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, second_id):
     path = _configure(tmp_path, monkeypatch, "00000")
-    second = yaml.safe_load((tmp_path / "tabell.yml").read_text(encoding="utf-8"))
+    second = yaml.safe_load(
+        (tmp_path / "aggregater" / "tabell.yml").read_text(encoding="utf-8")
+    )
     second["definisjon"]["id"] = second_id
-    (tmp_path / "annen.yml").write_text(yaml.safe_dump(second), encoding="utf-8")
+    (tmp_path / "aggregater" / "annen.yml").write_text(
+        yaml.safe_dump(second), encoding="utf-8"
+    )
+    (tmp_path / "aggregater" / "annen.sql").write_text("select 1 from dual")
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     config["aggregater"].append("annen")
     path.write_text(yaml.safe_dump(config), encoding="utf-8")
@@ -214,7 +222,7 @@ def test_cli_config_check_warns_about_formula(
     tmp_path, monkeypatch, caplog, capsys, formula, warn_start, missing
 ):
     path = _configure(tmp_path, monkeypatch, "21000")
-    aggregate_path = tmp_path / "tabell.yml"
+    aggregate_path = tmp_path / "aggregater" / "tabell.yml"
     aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
     aggregate["definisjon"]["formula"] = formula
     aggregate["definisjon"]["variabler"] = [
@@ -246,7 +254,7 @@ def test_cli_formula_warnings_are_only_emitted_by_config_check(
     tmp_path, monkeypatch, caplog, command
 ):
     path = _configure(tmp_path, monkeypatch, "21000")
-    aggregate_path = tmp_path / "tabell.yml"
+    aggregate_path = tmp_path / "aggregater" / "tabell.yml"
     aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
     aggregate["definisjon"]["formula"] = "~ region"
     aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
@@ -273,12 +281,12 @@ def test_cli_config_check_reports_configuration_errors(tmp_path, monkeypatch, ca
         if error == "invalid_yaml":
             path.write_text("connection: [", encoding="utf-8")
         elif error == "unknown_field":
-            aggregate_path = tmp_path / "tabell.yml"
+            aggregate_path = tmp_path / "aggregater" / "tabell.yml"
             aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
             aggregate["definisjon"]["ukjent"] = True
             aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
         elif error == "missing_aggregate":
-            (tmp_path / "tabell.yml").unlink()
+            (tmp_path / "aggregater" / "tabell.yml").unlink()
     monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "konfig", "sjekk", *flags])
 
     with pytest.raises(SystemExit) as exc:

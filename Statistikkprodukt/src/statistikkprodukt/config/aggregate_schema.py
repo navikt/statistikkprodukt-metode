@@ -280,8 +280,8 @@ class Tellepunkt(KolonneMetadata):
 
 
 class YamlSqlPathPair(StrictModel):
-    yaml: Path | None = Field(description="YAML filbane. Internt", default=None)
-    sql: Path | None = Field(description="SQL filbane. Internet", default=None)
+    yaml: Path = Field(description="YAML filbane. Internt")
+    sql: Path = Field(description="SQL filbane. Internet")
 
 
 class Aggregate(StrictModel):
@@ -331,7 +331,10 @@ class Aggregate(StrictModel):
     )
 
     sporring_sql: NonEmptyString = Field(
-        description="Sti til SQL-filen som henter data, relativt til konfigurasjonen. Internt."
+        description=(
+            "Sti til SQL-filen som henter data, relativt til mappen med "
+            "hovedkonfigurasjonen. Internt."
+        )
     )
 
     @field_validator("tabell")

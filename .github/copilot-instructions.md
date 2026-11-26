@@ -17,3 +17,8 @@ uv run --frozen statistikkprodukt testenv pytest -- -q
 Oracle-testcontaineren må startes og stoppes utenfor sandkassen med `statistikkprodukt testenv setup` og `statistikkprodukt testenv teardown`. Ikke start Docker-containere direkte fra sandkassen.
 
 SQL-filer leses relativt til YAML-konfigurasjonen. Ikke legg hemmeligheter i konfigurasjonsfiler, og ikke la standardkjøring endre databaseskjemaet.
+
+Om du vil kjøre python, bruk:
+```sh
+uv run --frozen python
+```

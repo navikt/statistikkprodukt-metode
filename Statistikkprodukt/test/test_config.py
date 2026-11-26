@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from statistikkprodukt.config import (
@@ -12,6 +13,7 @@ from statistikkprodukt.config import (
     load_configuration,
     resolve_config,
 )
+from statistikkprodukt.config.loader import _find_aggregate_configurations
 
 
 def configuration():
@@ -365,6 +367,7 @@ aggregater:
         encoding="utf-8",
     )
     for table in ("tabell", "annen"):
+        (aggregate_directory / f"{table}.sql").write_text("select 1 from dual")
         (aggregate_directory / f"{table}.yml").write_text(
             f"""
 version: 1
@@ -434,6 +437,7 @@ aggregater:
 """,
         encoding="utf-8",
     )
+    (aggregate_directory / "annet_navn.sql").write_text("select 1 from dual")
     (aggregate_directory / "annet_navn.yml").write_text(
         """
 version: 1
@@ -487,8 +491,165 @@ aggregater:
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigError, match="finnes i flere konfigurasjonsfiler"):
+    with pytest.raises(ConfigError, match="har flere YAML-filer"):
         load_configuration(tmp_path / "konfigurasjon.yml")
+
+
+@pytest.mark.parametrize("yaml_suffix", [".yml", ".yaml"])
+@pytest.mark.parametrize("prefix", ["", "nested/"])
+def test_loads_separate_directories_with_overlapping_patterns_and_preserves_order(
+    tmp_path, monkeypatch, yaml_suffix, prefix
+):
+    yaml_directory = tmp_path / prefix / "yaml"
+    sql_directory = tmp_path / prefix / "sql"
+    yaml_directory.mkdir(parents=True)
+    sql_directory.mkdir(parents=True)
+    config = configuration()
+    for table, agg_id in (("first", "21000"), ("second", "21001")):
+        aggregate = config.aggregater[0].model_dump(mode="json", by_alias=True)
+        aggregate.pop("tabell")
+        aggregate.pop("sporring_sql")
+        aggregate["id"] = agg_id
+        (yaml_directory / f"{table.upper()}{yaml_suffix}").write_text(
+            yaml.safe_dump({"version": 1, "definisjon": aggregate}),
+            encoding="utf-8",
+        )
+        (sql_directory / f"{table.upper()}.SQL").write_text("select 1 from dual")
+    config_directory = tmp_path
+    config_path = config_directory / "konfigurasjon.yml"
+    config_path.write_text(
+        yaml.safe_dump({
+            "version": 1,
+            "connection": config.connection.model_dump(mode="json", by_alias=True)
+            | {"password": "env://TEST_PASSWORD"},
+            "mapper": [
+                f"{prefix}yaml/FIRST{yaml_suffix}", f"{prefix}yaml/**",
+                f"{prefix}sql/**", f"{prefix}yaml/*{yaml_suffix}", f"{prefix}sql/*.SQL",
+            ],
+            "aggregater": ["SECOND", "FIRST"],
+        }),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(yaml_directory)
+    loaded, loaded_directory = load_configuration(config_path)
+
+    assert loaded_directory == config_directory
+    assert [aggregate.tabell for aggregate in loaded.aggregater] == ["second", "first"]
+    assert [aggregate.sporring_sql for aggregate in loaded.aggregater] == [
+        f"{prefix}sql/{table}.SQL" for table in ("SECOND", "FIRST")
+    ]
+
+
+@pytest.mark.parametrize("suffixes", [(".yml", ".yaml"), (".sql", ".SQL")])
+def test_duplicate_files_report_both_paths_and_patterns(tmp_path, suffixes):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    paths = [aggregate_directory / f"tabell{suffix}" for suffix in suffixes]
+    for path in paths:
+        path.write_text("")
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations(["aggregater/*"], ["tabell"], tmp_path)
+
+    message = str(error.value)
+    assert "har flere" in message
+    assert "søkemønstrene 'aggregater/*'" in message
+    assert all(str(path) in message for path in paths)
+    assert "Ugyldig mønster" not in message
+
+
+@pytest.mark.parametrize(
+    ("suffixes", "missing"),
+    [([".yml"], "SQL"), ([".sql"], "YAML"), ([], "YAML og SQL")],
+)
+def test_missing_files_report_type_and_search_patterns(tmp_path, suffixes, missing):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    for suffix in suffixes:
+        (aggregate_directory / f"tabell{suffix}").write_text("")
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations(
+            ["aggregater/*.yml", "aggregater/*.sql"], ["tabell"], tmp_path
+        )
+
+    message = str(error.value)
+    assert f"tabell (mangler {missing}-fil)" in message
+    assert "'aggregater/*.yml', 'aggregater/*.sql'" in message
+    assert str(tmp_path) in message
+
+
+def test_yaml_only_pattern_does_not_discover_sibling_sql(tmp_path):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    (aggregate_directory / "tabell.yml").write_text("")
+    (aggregate_directory / "tabell.sql").write_text("")
+
+    with pytest.raises(ConfigError, match="tabell \\(mangler SQL-fil\\)"):
+        _find_aggregate_configurations(["aggregater/*.yml"], ["tabell"], tmp_path)
+
+
+def test_invalid_search_pattern_reports_pattern(tmp_path):
+    pattern = str(tmp_path / "aggregater" / "*")
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations([pattern], ["tabell"], tmp_path)
+
+    assert f"Ugyldig mønster for aggregatkonfigurasjoner: {pattern}" == str(error.value)
+
+
+def test_aggregate_validation_error_reports_yaml_path(tmp_path):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    aggregate_path = aggregate_directory / "tabell.yml"
+    aggregate_path.write_text("version: 1\ndefinisjon: {}\n", encoding="utf-8")
+    (aggregate_directory / "tabell.sql").write_text("")
+    config_path = tmp_path / "konfigurasjon.yml"
+    config_path.write_text(
+        yaml.safe_dump({
+            "version": 1,
+            "connection": configuration().connection.model_dump(
+                mode="json", by_alias=True
+            ) | {"password": "env://TEST_PASSWORD"},
+            "mapper": ["aggregater/*.yml", "aggregater/*.sql"],
+            "aggregater": ["tabell"],
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError) as error:
+        load_configuration(config_path)
+
+    assert f"Konfigurasjonen i {aggregate_path} er ugyldig:" in str(error.value)
+
+
+@pytest.mark.parametrize("suffix", [".yml", ".sql"])
+@pytest.mark.parametrize("location", ["beside", "outside"])
+@pytest.mark.parametrize("symlink", [False, True])
+def test_aggregate_files_must_resolve_to_subdirectories(
+    tmp_path, suffix, location, symlink
+):
+    config_directory = tmp_path / "config"
+    config_directory.mkdir()
+    target_directory = config_directory if location == "beside" else tmp_path
+    target = target_directory / f"tabell{suffix}"
+    target.write_text("")
+    if symlink:
+        aggregate_directory = config_directory / "aggregater"
+        aggregate_directory.mkdir()
+        (aggregate_directory / target.name).symlink_to(target)
+        pattern = "aggregater/*"
+    else:
+        pattern = "*" if location == "beside" else "../*"
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations([pattern], ["tabell"], config_directory)
+
+    message = str(error.value)
+    assert "må ligge i en undermappe til hovedkonfigurasjonen" in message
+    assert str(config_directory) in message
+    assert str(target) in message
+    assert "Ugyldig mønster" not in message
 
 
 def test_resolve_env_reference(monkeypatch):
