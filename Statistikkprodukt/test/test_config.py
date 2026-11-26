@@ -78,6 +78,42 @@ def test_statistikkbank_section_is_required():
         Configuration.model_validate(config)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("discontinued", True),
+        ("discontinued", False),
+        ("official-statistics", True),
+        ("official-statistics", False),
+    ],
+)
+def test_statistikkbank_yes_no_rejects_unquoted_yaml_boolean(field, value):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"][field] = value
+
+    with pytest.raises(ValidationError, match="Sett verdien i anførselstegn"):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("discontinued", "yes", "YES"),
+        ("official-statistics", "no", "NO"),
+    ],
+)
+def test_statistikkbank_yes_no_accepts_quoted_values(field, value, expected):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"][field] = value
+
+    parsed = Configuration.model_validate(config)
+
+    assert (
+        getattr(parsed.aggregater[0].statistikkbank, field.replace("-", "_"))
+        == expected
+    )
+
+
 def test_configuration_version_is_required():
     config = configuration().model_dump(by_alias=True)
     config.pop("version")

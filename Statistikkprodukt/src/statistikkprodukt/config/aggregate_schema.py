@@ -96,6 +96,11 @@ def normalize_aggregate_id(value: Any) -> Any:
 
 def normalize_yes_no(value: Any) -> Any:
     """Normaliserer tekstverdiene YES og NO til store bokstaver."""
+    if isinstance(value, bool):
+        raise ValueError(
+            "YAML kan tolke YES/NO uten anførselstegn som boolsk verdi. "
+            "Sett verdien i anførselstegn, for eksempel 'YES' eller 'NO'."
+        )
     return value.upper() if isinstance(value, str) else value
 
 
