@@ -272,7 +272,10 @@ class Aggregate(StrictModel):
         description="Måltallskolonnene som inneholder tellingen. Hver prikkes for seg.",
     )
     formula: NonEmptyString = Field(
-        description="R-formelen som brukes til prikking."
+        description=(
+            "R-formelen som brukes til prikking. Må starte med ~ og bare inneholde "
+            "kolonner fra variabler og periodisering, samt * + / : og parenteser."
+        )
     )
     prikking: bool = Field(description="Angir om dataene skal prikkes.")
     saerskilt: bool = Field(
@@ -363,6 +366,42 @@ class Aggregate(StrictModel):
             [self.periodisering.kolonne, *columns, *tellepunkt_columns]
         ):
             raise ConfigError("tellepunkt og verdi er reserverte kolonnenavn")
+        return self
+
+    @model_validator(mode="after")
+    def validate_formula(self) -> Aggregate:
+        """Kontrollerer formelsyntaks og at bare dimensjonskolonner brukes."""
+        if not self.formula.startswith("~"):
+            raise ConfigError("formula må starte med ~")
+
+        columns = {self.periodisering.kolonne, *(v.kolonne for v in self.variabler)}
+        error = (
+            "formula må inneholde et gyldig uttrykk med bare kolonner fra variabler "
+            "og periodisering, operatorene * + / : og balanserte parenteser; "
+            "tellepunkter er ikke tillatt"
+        )
+        expression = self.formula[1:]
+        if not re.fullmatch(r"[A-Za-z0-9_*+/:()\s]+", expression):
+            raise ConfigError(error)
+        tokens = re.findall(r"[A-Za-z0-9_]+|[*+/:()]", expression)
+        expect_column = True
+        parentheses = 0
+        for token in tokens:
+            if expect_column:
+                if token == "(":
+                    parentheses += 1
+                elif token in columns:
+                    expect_column = False
+                else:
+                    raise ConfigError(error)
+            elif token == ")" and parentheses:
+                parentheses -= 1
+            elif token in {"*", "+", "/", ":"}:
+                expect_column = True
+            else:
+                raise ConfigError(error)
+        if expect_column or parentheses:
+            raise ConfigError(error)
         return self
 
 

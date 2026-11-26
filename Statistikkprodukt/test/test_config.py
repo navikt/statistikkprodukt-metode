@@ -59,6 +59,90 @@ def test_configuration_rejects_unknown_keys():
         Configuration.model_validate(config)
 
 
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "~ region",
+        "~ periode",
+        "~periode*region",
+        "~ periode + region",
+        "~ periode / region",
+        "~ periode : region",
+        "~ (periode + region) / (region * periode)",
+        "~ ((region))",
+        "~\tperiode\n+ region ",
+    ],
+)
+def test_aggregate_accepts_formula_with_dimensions_and_supported_operators(formula):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    assert Configuration.model_validate(config).aggregater[0].formula == formula
+
+
+@pytest.mark.parametrize("formula", ["periode * region", "antall ~ region", " ~ region"])
+def test_aggregate_formula_must_start_with_tilde(formula):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    with pytest.raises(ValidationError, match="formula må starte med ~"):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "~",
+        "~ ()",
+        "~ (region",
+        "~ region)",
+        "~ region +",
+        "~ * region",
+        "~ region periode",
+        "~ region (periode)",
+        "~ region ** periode",
+        "~ region - periode",
+        "~ region ^ periode",
+        "~ region + 1",
+        "~ region ~ periode",
+        "~ ukjent",
+        "~ antall",
+        "~ region + antall",
+        "~ tellepunkt",
+        "~ verdi",
+        "~ log(region)",
+        "~ region; periode",
+        "~ region$",
+        "~ region#",
+        "~ region @ + periode",
+        "~ region + 1periode",
+        "~ region + _periode",
+        "~ region # kommentar",
+        "~ `region`",
+    ],
+)
+def test_aggregate_rejects_invalid_formula(formula):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    with pytest.raises(ValidationError, match="formula må inneholde et gyldig uttrykk"):
+        Configuration.model_validate(config)
+
+
+def test_aggregate_formula_uses_configured_column_names():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    aggregate["periodisering"]["kolonne"] = "maaned"
+    aggregate["variabler"] = [{"kolonne": "alder"}, {"kolonne": "kjonn"}]
+    aggregate["formula"] = "~ maaned * (alder + kjonn)"
+
+    Configuration.model_validate(config)
+
+    aggregate["formula"] = "~ periode * region"
+    with pytest.raises(ValidationError, match="formula må inneholde et gyldig uttrykk"):
+        Configuration.model_validate(config)
+
+
 @pytest.mark.parametrize("mode", ["overskriv_siste_periode", "overskriv_ikke", "overskriv_alt"])
 def test_configuration_rejects_removed_incremental_mode(mode):
     config = configuration().model_dump(by_alias=True)

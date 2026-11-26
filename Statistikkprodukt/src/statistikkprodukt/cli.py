@@ -7,7 +7,7 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
-from statistikkprodukt.app import installer_r_pakker, last, skjema
+from statistikkprodukt.app import installer_r_pakker, konfig, last, skjema
 from statistikkprodukt.config import (
     ConfigError,
     StorageOption,
@@ -257,13 +257,9 @@ def main() -> None:
             _run_testenv(args, parser)
 
         elif args.command == "konfig":
-            configuration, _ = load_configuration(
+            konfig.sjekk(
                 args.config, ingen_id_validering=args.ingen_id_validering
             )
-            StatistikkproduktRegister().valider(
-                configuration.aggregater, ingen_id_validering=args.ingen_id_validering
-            )
-            print(f"Konfigurasjonen er gyldig. Antall aggregater: {len(configuration.aggregater)}.")
 
         elif args.command == "last":
             config_path = args.config

@@ -183,6 +183,68 @@ def test_cli_config_check_only_validates(tmp_path, monkeypatch, capsys, use_envi
 
 
 @pytest.mark.parametrize(
+    ("formula", "warn_start", "missing"),
+    [
+        ("~ periode * (region + regionkode + periode_aar)", False, []),
+        ("~periode/region:regionkode+periode_aar", False, []),
+        ("~\tperiode\n+ region + regionkode + periode_aar", False, []),
+        ("~ region * periode * regionkode * periode_aar", True, []),
+        ("~ (periode + region + regionkode + periode_aar)", True, []),
+        ("~ periode", False, ["region", "regionkode", "periode_aar"]),
+        ("~ region", True, ["periode", "regionkode", "periode_aar"]),
+        ("~ periode_aar + regionkode", True, ["periode", "region"]),
+    ],
+)
+def test_cli_config_check_warns_about_formula(
+    tmp_path, monkeypatch, caplog, capsys, formula, warn_start, missing
+):
+    path = _configure(tmp_path, monkeypatch, "21000")
+    aggregate_path = tmp_path / "tabell.yml"
+    aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
+    aggregate["definisjon"]["formula"] = formula
+    aggregate["definisjon"]["variabler"] = [
+        {"kolonne": column} for column in ("region", "regionkode", "periode_aar")
+    ]
+    aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
+    monkeypatch.setattr(
+        sys, "argv",
+        ["statistikkprodukt", "konfig", "sjekk", "--config", str(path)],
+    )
+
+    cli.main()
+
+    warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    expected = []
+    if warn_start:
+        expected.append("Aggregat tabell: formula starter ikke med ~ periode.")
+    if missing:
+        expected.append(
+            "Aggregat tabell: formula bruker ikke følgende kolonner fra variabler "
+            f"og periodisering: {', '.join(missing)}."
+        )
+    assert warnings == expected
+    assert "Konfigurasjonen er gyldig" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", [["last"], ["skjema", "opprett"]])
+def test_cli_formula_warnings_are_only_emitted_by_config_check(
+    tmp_path, monkeypatch, caplog, command
+):
+    path = _configure(tmp_path, monkeypatch, "21000")
+    aggregate_path = tmp_path / "tabell.yml"
+    aggregate = yaml.safe_load(aggregate_path.read_text(encoding="utf-8"))
+    aggregate["definisjon"]["formula"] = "~ region"
+    aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
+    monkeypatch.setattr(app.last, "last", Mock())
+    monkeypatch.setattr(app.skjema, "create_tables", Mock())
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path)])
+
+    cli.main()
+
+    assert "formula" not in caplog.text
+
+
+@pytest.mark.parametrize(
     "error",
     ["missing_config", "invalid_yaml", "unknown_field", "missing_aggregate", "unregistered_id"],
 )

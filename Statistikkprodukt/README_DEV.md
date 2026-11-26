@@ -19,6 +19,7 @@ Statistikkprodukt/
       app/
         __init__.py            # Tom pakkefil
         models.py              # Metadata, overføring, lasteresultat og kjørelogg
+        konfig.py              # Kontrollerer konfigurasjon
         last.py                # Leser, prikker og lagrer aggregater
         skjema.py              # Viser DDL eller oppretter aggregattabeller
         installer_r_pakker.py  # Installerer nødvendige R-pakker
