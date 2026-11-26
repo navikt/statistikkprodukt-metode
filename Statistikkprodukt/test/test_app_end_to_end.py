@@ -297,7 +297,7 @@ def test_e2e_run(e2e):
     assert e2e.les_kontroll_tabell() == sorted(expected_kontroll)
 
     meta = e2e.les_meta_tabell()
-    assert meta["PX", "MATRIX", None] == "21000"
+    assert meta["PX", "MATRIX", "NO"] == "21000"
     assert meta["PX", "TITLE", "NO"] == "Aggregerte verdier"
     assert meta["CS", "TIMEVAL", None] == "periode"
     assert e2e.les_logg_tabell() == [("OK", "21000", e2e.aggregate_table, "Aggregerte verdier", 6, 4)]
@@ -335,7 +335,7 @@ def test_e2e_tom_kilde_fra_starten(e2e, strategi):
 
     e2e.assert_innhold([])
     meta = e2e.les_meta_tabell()
-    assert meta["PX", "MATRIX", None] == "21000"
+    assert meta["PX", "MATRIX", "NO"] == "21000"
     assert meta["PX", "TITLE", "NO"] == "Aggregerte verdier"
     assert meta["CS", "TIMEVAL", None] == "periode"
     assert e2e.les_logg_tabell() == [

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     AfterValidator,
@@ -71,12 +71,18 @@ def normalize_aggregate_id(value: Any) -> Any:
     return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
 
 
+def normalize_yes_no(value: Any) -> Any:
+    """Normaliserer tekstverdiene YES og NO til store bokstaver."""
+    return value.upper() if isinstance(value, str) else value
+
+
 NonEmptyString = Annotated[str, AfterValidator(is_not_empty)]
 OracleIdentifier = Annotated[str, AfterValidator(validate_identifier)]
 OracleTableIdentifier = Annotated[str, AfterValidator(validate_table_identifier)]
 AggregateId = Annotated[
     str, BeforeValidator(normalize_aggregate_id), AfterValidator(is_aggregate_id)
 ]
+YesNo = Annotated[Literal["YES", "NO"], BeforeValidator(normalize_yes_no)]
 
 
 class StrictModel(BaseModel):
@@ -128,9 +134,8 @@ class KolonneMetadata(StrictModel):
 
 
 class DimensionStatistikkbank(StrictModel):
-    startvisning_antall_verdier: int | None = Field(
+    sq: int | None = Field(
         default=None,
-        alias="startvisning-antall-verdier",
         description=(
             "Antall dimensjonsverdier i startvisningen. Positivt velger første N, "
             "negativt siste N i alfabetisk rekkefølge, og 0 skjuler variabelen."
@@ -139,18 +144,21 @@ class DimensionStatistikkbank(StrictModel):
 
 
 class MeasureStatistikkbank(StrictModel):
-    desimaler_visning: int | None = Field(
-        default=None, alias="desimaler-visning", ge=0,
+    precision: int | None = Field(
+        default=None, ge=0,
         description="Antall desimaler som vises for måltallet, uten å endre lagrede data.",
     )
-    desimaler_lagring: int | None = Field(
-        default=None, alias="desimaler-lagring", ge=0,
+    decimals: int | None = Field(
+        default=None, ge=0,
         description="Antall desimaler som bevares i PX-eksporten, ikke ved generell lasting.",
     )
 
 
 class Kontakt(StrictModel):
-    seksjon: NonEmptyString = Field(description="Seksjonen som svarer på spørsmål om statistikken.")
+    navn: NonEmptyString = Field(description="Kontaktpunktets navn, for eksempel ansvarlig team.")
+    beskrivelse: str | None = Field(
+        default=None, description="Kort beskrivelse av kontaktpunktet."
+    )
     epost: NonEmptyString = Field(description="Kontaktpunktets e-postadresse.")
     telefonnummer: str | None = Field(
         default=None, description="Kontaktpunktets telefonnummer som tekst."
@@ -158,54 +166,56 @@ class Kontakt(StrictModel):
 
 
 class TableStatistikkbank(StrictModel):
-    tema: str | None = Field(
-        default=None, description="Norsk tema på nivå 2 i menyhierarkiet; PX SUBJECT."
+    subject: str | None = Field(
+        default=None, description="Norsk tema på nivå 2 i menyhierarkiet."
     )
-    tema_en: str | None = Field(
-        default=None, alias="tema-en", description="Engelsk tema; PX SUBJECT."
+    subject_en: str | None = Field(
+        default=None, alias="subject-en", description="Engelsk tema."
     )
-    tema_kode: str | None = Field(
-        default=None, alias="tema-kode", description="Statistikkbankens temakode; PX SUBJECT_KORT."
+    subject_kort: str | None = Field(
+        default=None, alias="subject-kort", description="Statistikkbankens temakode."
     )
-    fagomraade: str | None = Field(
-        default=None, description="Norsk fagområde på nivå 1 i menyhierarkiet; PX SUBJECT-AREA."
+    subject_area: str | None = Field(
+        default=None, alias="subject-area",
+        description="Norsk fagområde på nivå 1 i menyhierarkiet.",
     )
-    fagomraade_kode: str | None = Field(
-        default=None, alias="fagomraade-kode",
-        description="Fagområdets kode fra Statistikkbankens kodeverk; PX SUBJECT-CODE.",
+    subject_code: str | None = Field(
+        default=None, alias="subject-code",
+        description="Fagområdets kode fra Statistikkbankens kodeverk.",
     )
-    merknad: str | None = Field(
-        default=None, description="Norsk merknad, gjerne med lenke til Om statistikken; PX NOTE."
+    note: str | None = Field(
+        default=None, description="Norsk merknad, gjerne med lenke til Om statistikken."
     )
-    merknad_en: str | None = Field(
-        default=None, alias="merknad-en", description="Engelsk merknad; PX NOTE."
+    note_en: str | None = Field(
+        default=None, alias="note-en", description="Engelsk merknad."
     )
-    fremhevet_merknad: str | None = Field(
-        default=None, alias="fremhevet-merknad",
-        description="Norsk merknad som fremheves over den vanlige merknaden; PX NOTEX.",
-    )
-    fremhevet_merknad_en: str | None = Field(
-        default=None, alias="fremhevet-merknad-en",
-        description="Engelsk fremhevet merknad; PX NOTEX.",
-    )
-    avsluttet: bool | None = Field(
+    notex: str | None = Field(
         default=None,
-        description="Om statistikken ikke lenger skal oppdateres; PX DISCONTINUED.",
+        description="Norsk merknad som fremheves over den vanlige merknaden.",
     )
-    offisiell_statistikk: bool | None = Field(
-        default=None, alias="offisiell-statistikk",
-        description="Om tabellen publiseres som offisiell statistikk; PX OFFICIAL-STATISTICS.",
+    notex_en: str | None = Field(
+        default=None, alias="notex-en",
+        description="Engelsk fremhevet merknad.",
     )
-    startvisning_antall_tellepunkter: int = Field(
-        default=1, alias="startvisning-antall-tellepunkter",
+    discontinued: YesNo | None = Field(
+        default=None,
+        description="Om statistikken ikke lenger skal oppdateres: YES eller NO.",
+    )
+    official_statistics: YesNo | None = Field(
+        default=None, alias="official-statistics",
+        description="Om tabellen publiseres som offisiell statistikk: YES eller NO.",
+    )
+    sq: int = Field(
+        default=1,
         description=(
-            "Antall måltall i startvisningen (SQ STAT_VAR). Positivt velger første N, "
+            "Antall måltall i startvisningen. Positivt velger første N, "
             "negativt siste N, og 0 ingen."
         ),
     )
-    kontakter: list[Kontakt] = Field(
+    ekstra_kontakter: list[Kontakt] = Field(
+        alias="ekstra-kontakter",
         default_factory=list,
-        description="Kontaktpunkter for spørsmål om statistikken; én PX CONTACT-rad per kontakt.",
+        description="Ekstra kontaktpunkter i tillegg til statistikkseksjonen.",
     )
 
 

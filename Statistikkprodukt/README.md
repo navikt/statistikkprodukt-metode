@@ -345,64 +345,50 @@ definisjon:
   # Beskriver aggregatets innhold på engelsk.
   # PX: CONTENTS på engelsk.
   innhold-en: Population
-  # Angir teamet som har ansvar for aggregatet.
+  # Angir teamet som har ansvar for aggregatet. Publiseres ikke på statistikkbanken.
   ansvarlig-team: Datateam
 
   # Samler metadata og visningsinnstillinger som gjelder Statistikkbanken.
   statistikkbank:
     # Angir statistikkens norske tema på nivå 2 i menyhierarkiet.
-    # PX: SUBJECT på norsk.
-    tema: Befolkning
+    subject: Befolkning
     # Angir statistikkens engelske tema.
-    # PX: SUBJECT på engelsk.
-    tema-en: Population
-    # Angir et kode for temaet; bruksområde må avklares med Statistikkbanken.
-    # PX: SUBJECT_KORT; navnet må samsvare med Statistikkbankens mapping av tema-koden.
-    tema-kode: BEFOLKNING
-    # Angir fagområdets navn på nivå 1 i menyhierarkiet.
-    # PX: SUBJECT-AREA; navnet må samsvare med Statistikkbankens mapping av områdekoden.
-    fagomraade: Arbeidsmarked
+    subject-en: Population
+    # Angir en kode for temaet; navnet må samsvare med Statistikkbankens kodeverk.
+    subject-kort: BEFOLKNING
+    # Angir fagområdets navn på nivå 1 i menyhierarkiet; det må samsvare med kodeverket.
+    subject-area: Arbeidsmarked
     # Angir fagområdets kode fra Statistikkbankens kodeverk.
-    # PX: SUBJECT-CODE.
-    fagomraade-kode: AM
+    subject-code: AM
 
-    # Gir en utfyllende merknad, gjerne som Markdown.
-    # PX: NOTE på norsk.
-    merknad: |
+    # Gir en norsk merknad, gjerne som Markdown.
+    note: |
       Se [Om statistikken](https://www.nav.no/statistikk).
-    # Gir den engelske merknaden og lenken til Om statistikken.
-    # PX: NOTE på engelsk.
-    merknad-en: |
+    # Gir en engelsk merknad, gjerne som Markdown.
+    note-en: |
       See [About the statistics](https://www.nav.no/statistikk).
-    # Gir en norsk merknad som skal fremheves over den vanlige merknaden.
-    # PX: NOTEX på norsk, vist i en blå boks i Statistikkbanken.
-    fremhevet-merknad: Brudd i tidsserien fra januar 2025.
+    # Gir en norsk merknad som fremheves over den vanlige merknaden i en blå boks.
+    notex: Brudd i tidsserien fra januar 2025.
     # Gir den engelske varianten av den fremhevede merknaden.
-    # PX: NOTEX på engelsk.
-    fremhevet-merknad-en: Break in the time series from January 2025.
+    notex-en: Break in the time series from January 2025.
 
-    # Angir om statistikken ikke lenger skal oppdateres.
-    # PX: DISCONTINUED, med true som YES og false som NO.
-    avsluttet: false
-    # Angir om tabellen publiseres som offisiell statistikk.
-    # PX: OFFICIAL-STATISTICS, med true som YES og false som NO.
-    offisiell-statistikk: true
+    # Angir om statistikken ikke lenger skal oppdateres. Verdier: "YES" eller "NO".
+    discontinued: "NO"
+    # Angir om tabellen publiseres som offisiell statistikk. Verdier: "YES" eller "NO".
+    official-statistics: "YES"
 
     # Angir antall måltall i startvisningen; positivt velger første N, negativt siste N, 0 ingen.
-    # PX: Navs SQ STAT_VAR-rad, som eksportøren bruker til å lage startvisningen.
-    startvisning-antall-tellepunkter: 1
+    sq: 1
 
-    # Lister kontaktpunkter som kan svare på spørsmål om statistikken.
-    # PX: CONTACT; eksportøren formaterer kontaktfeltene med # som skilletegn.
-    kontakter:
-      # Angir seksjonen som kan gi informasjon om statistikken.
-      # PX: Seksjonsdelen av CONTACT.
-      - seksjon: Statistikkseksjonen
+    # Statistikkseksjonen vises automatisk; her kan du angi ekstra kontaktpunkter som eksporteres som PX CONTACT-felt.
+    ekstra-kontakter:
+      # Angir teamet som kan gi informasjon om statistikken.
+      - navn: Datateam
+        # Angir en valgfri kort beskrivelse av kontaktpunktet.
+        beskrivelse: Teamet som har ansvar for statistikken.
         # Angir kontaktpunktets e-postadresse.
-        # PX: E-postdelen av CONTACT.
         epost: nav.statistikk@nav.no
         # Angir et valgfritt telefonnummer som tekst.
-        # PX: Telefondelen av CONTACT.
         telefonnummer: "1234"
 
   # Beskriver tidsdimensjonen som brukes til periodevalg og inkrementell lasting.
@@ -422,9 +408,8 @@ definisjon:
     innhold-en: Month in YYYYMM format.
     # Samler Statistikkbankens visningsinnstillinger for tidsdimensjonen.
     statistikkbank:
-      # Velger siste 24 perioder; positivt velger første N, negativt siste N, 0 skjuler variabelen.
-      # PX: Navs SQ-rad for periodekolonnen; alfabetisk sortering må tilsvare kronologisk orden.
-      startvisning-antall-verdier: -24
+      # Velger antall perioder i startvisning; positivt velger første N, negativt siste N, 0 skjuler variabelen. Alfabetisk sortering må følge kronologien.
+      sq: -24
 
   # Lister dimensjonene som dataene fordeles etter.
   # PX: Dimensjonskolonnene er grunnlag for Navs CS STUB og CS HEADING.
@@ -444,9 +429,8 @@ definisjon:
       innhold-en: Age in single-year groups.
       # Samler Statistikkbankens visningsinnstillinger for dimensjonen.
       statistikkbank:
-        # Velger første 12 verdier; positivt velger første N, negativt siste N, 0 skjuler variabelen.
-        # PX: Navs SQ-rad for alder, med verdier valgt etter alfabetisk sortering.
-        startvisning-antall-verdier: 12
+        # Velger første 12 verdier; positivt velger første N, negativt siste N, 0 skjuler variabelen etter alfabetisk sortering.
+        sq: 12
 
   # Lister måltallskolonnene som behandles og prikkes hver for seg.
   # PX: Navs CS DATA og måltallsdimensjonen STAT_VAR hos eksportøren.
@@ -472,12 +456,10 @@ definisjon:
       enhet-en: persons
       # Samler Statistikkbankens innstillinger for måltallets eksport og visning.
       statistikkbank:
-        # Angir antall desimaler som skal vises, uten å endre lagrede data.
-        # PX: PRECISION per måltall; støtte hos Nav må avklares.
-        desimaler-visning: 0
-        # Angir antall desimaler som skal bevares i PX-eksporten, ikke avrunding ved generell lasting.
-        # PX: Grunnlag for global DECIMALS via Navs CS DATA; eksportøren samordner alle måltall.
-        desimaler-lagring: 0
+        # Angir antall desimaler som skal vises, uten å endre lagrede data. Nav-støtte må avklares.
+        precision: 0
+        # Angir antall desimaler som skal bevares i eksporten, ikke ved generell lasting; eksporten samordner måltallene.
+        decimals: 0
 
   # Bestemmer hvordan innkommende perioder erstatter eller supplerer eksisterende data.
   # Valgmuligheter:

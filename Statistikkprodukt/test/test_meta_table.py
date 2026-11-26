@@ -16,33 +16,33 @@ from test.test_config import configuration
 def aggregate_with_metadata():
     data = configuration().aggregater[0].model_dump(by_alias=True)
     data["statistikkbank"] = {
-        "tema": "Befolkning",
-        "tema-en": "Population",
-        "tema-kode": "BEF",
-        "fagomraade": "Arbeidsmarked",
-        "fagomraade-kode": "AM",
-        "merknad": "Norsk merknad",
-        "merknad-en": "English note",
-        "fremhevet-merknad": "Brudd",
-        "fremhevet-merknad-en": "Break",
-        "avsluttet": False,
-        "offisiell-statistikk": True,
-        "startvisning-antall-tellepunkter": 0,
-        "kontakter": [
-            {"seksjon": "Statistikk", "telefonnummer": "1234", "epost": "a@example.org"},
-            {"seksjon": "Analyse", "epost": "b@example.org"},
+        "subject": "Befolkning",
+        "subject-en": "Population",
+        "subject-kort": "BEF",
+        "subject-area": "Arbeidsmarked",
+        "subject-code": "AM",
+        "note": "Norsk merknad",
+        "note-en": "English note",
+        "notex": "Brudd",
+        "notex-en": "Break",
+        "discontinued": "no",
+        "official-statistics": "yEs",
+        "sq": 0,
+        "ekstra-kontakter": [
+            {"navn": "Datateam", "telefonnummer": "1234", "epost": "a@example.org"},
+            {"navn": "Analyseteam", "epost": "b@example.org"},
         ],
     }
-    data["periodisering"]["statistikkbank"] = {"startvisning-antall-verdier": -24}
+    data["periodisering"]["statistikkbank"] = {"sq": -24}
     data["variabler"][0].update({
         "navn": "Region", "navn-en": "Region",
-        "statistikkbank": {"startvisning-antall-verdier": 0},
+        "statistikkbank": {"sq": 0},
     })
     data["tellepunkter"][0].update({
         "navn": "Antall", "navn-en": "Count",
         "innhold": "Dette er ikke enheten",
         "enhet": "personer", "enhet-en": "persons",
-        "statistikkbank": {"desimaler-visning": 1, "desimaler-lagring": 0},
+        "statistikkbank": {"precision": 1, "decimals": 0},
     })
     return Aggregate.model_validate(data)
 
@@ -70,26 +70,26 @@ def test_metadata_mapping():
     values = {(row["type"], row["keyword"], row["language"]): row["value"]
               for row in rows if row["keyword"] != "CONTACT"}
     assert values == {
-        ("PX", "MATRIX", None): "21000",
+        ("PX", "MATRIX", "NO"): "21000",
         ("PX", "TITLE", "NO"): "Løst navn",
         ("PX", "TITLE", "EN"): "Resolved name",
         ("PX", "CONTENTS", "NO"): "Innhold",
         ("PX", "CONTENTS", "EN"): "Content",
         ("PX", "SUBJECT", "NO"): "Befolkning",
         ("PX", "SUBJECT", "EN"): "Population",
-        ("PX", "SUBJECT_KORT", None): "BEF",
         ("PX", "SUBJECT-AREA", "NO"): "Arbeidsmarked",
-        ("PX", "SUBJECT-CODE", None): "AM",
+        ("PX", "SUBJECT-CODE", "NO"): "AM",
         ("PX", "NOTE", "NO"): "Norsk merknad",
         ("PX", "NOTE", "EN"): "English note",
         ("PX", "NOTEX", "NO"): "Brudd",
         ("PX", "NOTEX", "EN"): "Break",
         ("PX", "DISCONTINUED", None): "NO",
         ("PX", "OFFICIAL-STATISTICS", None): "YES",
-        ("CS", "STUB", None): "region",
-        ("CS", "HEADING", None): "periode",
+        ("CS", "STUB", None): "region,periode",
         ("CS", "TIMEVAL", None): "periode",
-        ("CS", "DATA", None): "antall#0#unit_antall",
+        ("CS", "DATA", None): "antall#1#unit_antall",
+        ("CR", "STAT_VAR", "NO"): "statistikkvariabel",
+        ("CR", "STAT_VAR", "EN"): "statistical variable",
         ("CR", "periode", "NO"): "Periodisering",
         ("CR", "periode", "EN"): "Periodization",
         ("CR", "region", "NO"): "Region",
@@ -98,31 +98,38 @@ def test_metadata_mapping():
         ("CR", "antall", "EN"): "Count",
         ("CR", "unit_antall", "NO"): "personer",
         ("CR", "unit_antall", "EN"): "persons",
-        ("CR", "precision_antall", None): "1",
         ("SQ", "STAT_VAR", None): "0",
         ("SQ", "periode", None): "-24",
         ("SQ", "region", None): "0",
     }
     assert [row["value"] for row in rows if row["keyword"] == "CONTACT"] == [
-        "Statistikk##1234#a@example.org", "Analyse###b@example.org",
+        "Datateam##1234#a@example.org", "Analyseteam###b@example.org",
     ]
 
 
+@pytest.mark.parametrize("field", ["discontinued", "official-statistics"])
+@pytest.mark.parametrize("value", [True, False])
+def test_yes_no_metadata_rejects_booleans(field, value):
+    data = aggregate_with_metadata().model_dump(by_alias=True)
+    data["statistikkbank"][field] = value
+    with pytest.raises(ValidationError):
+        Aggregate.model_validate(data)
+
+
 @pytest.mark.parametrize(("precision", "unit", "expected"), [
-    (None, None, "antall"),
-    (0, None, "antall#0"),
-    (None, "personer", "antall#unit_antall"),
+    (None, None, "antall##"),
+    (0, None, "antall#0#"),
+    (None, "personer", "antall##unit_antall"),
     (2, "personer", "antall#2#unit_antall"),
 ])
 def test_optional_data_settings(precision, unit, expected):
     data = configuration().aggregater[0].model_dump(by_alias=True)
     data["tellepunkter"][0].update({
-        "enhet": unit, "statistikkbank": {"desimaler-lagring": precision},
+        "enhet": unit, "statistikkbank": {"precision": precision},
     })
     aggregate = Aggregate.model_validate(data)
     rows = metadata_rows(aggregate, resolved_metadata(aggregate))
     assert next(row["value"] for row in rows if row["keyword"] == "DATA") == expected
-    assert next(row["value"] for row in rows if row["keyword"] == "STAT_VAR") == "1"
     assert not any(row["value"] == "None" for row in rows)
 
 
@@ -144,20 +151,12 @@ def test_language_columns_are_rejected_before_database_write(field, suffix):
     connection.commit.assert_not_called()
 
 
-@pytest.mark.parametrize("field", ["desimaler-visning", "desimaler-lagring"])
+@pytest.mark.parametrize("field", ["precision", "decimals"])
 def test_negative_precision_rejected(field):
     data = aggregate_with_metadata().model_dump(by_alias=True)
     data["tellepunkter"][0]["statistikkbank"][field] = -1
     with pytest.raises(ValidationError):
         Aggregate.model_validate(data)
-
-
-def test_zero_display_precision_is_written():
-    data = aggregate_with_metadata().model_dump(by_alias=True)
-    data["tellepunkter"][0]["statistikkbank"]["desimaler-visning"] = 0
-    aggregate = Aggregate.model_validate(data)
-    rows = metadata_rows(aggregate, resolved_metadata(aggregate))
-    assert next(row["value"] for row in rows if row["keyword"] == "precision_antall") == "0"
 
 
 def test_write_replaces_metadata_transactionally():

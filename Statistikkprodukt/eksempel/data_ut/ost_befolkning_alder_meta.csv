@@ -1,25 +1,25 @@
 type,keyword,scope,language,value,dvh_lastet_tid
-PX,MATRIX,,,00000,2026-11-21 08:00:00
+PX,MATRIX,,NO,00000,2026-11-21 08:00:00
 PX,TITLE,,NO,Befolkning etter alder,2026-11-21 08:00:00
 PX,TITLE,,EN,Population by age,2026-11-21 08:00:00
 PX,CONTENTS,,NO,Befolkning fordelt etter periode og alder.,2026-11-21 08:00:00
 PX,CONTENTS,,EN,Population by period and age.,2026-11-21 08:00:00
-PX,SUBJECT-AREA,,NO,Befolkning,2026-11-21 08:00:00
 PX,SUBJECT,,NO,Befolkning,2026-11-21 08:00:00
 PX,SUBJECT,,EN,Population,2026-11-21 08:00:00
 PX,NOTE,,NO,Eksempeldata for lokal utprøving av befolkning etter alder.,2026-11-21 08:00:00
 PX,NOTE,,EN,Example data for local testing of population by age.,2026-11-21 08:00:00
 PX,NOTEX,,NO,"Kun til testing, ikke til publisering.",2026-11-21 08:00:00
 PX,NOTEX,,EN,"For testing only, not for publication.",2026-11-21 08:00:00
-PX,SUBJECT_KORT,,,BEFOLKNING,2026-11-21 08:00:00
-PX,SUBJECT-CODE,,,BEF,2026-11-21 08:00:00
+PX,SUBJECT-AREA,,NO,Befolkning,2026-11-21 08:00:00
+PX,SUBJECT-CODE,,NO,BEF,2026-11-21 08:00:00
 PX,DISCONTINUED,,,NO,2026-11-21 08:00:00
 PX,OFFICIAL-STATISTICS,,,NO,2026-11-21 08:00:00
-PX,CONTACT,,,Statistikkseksjonen##0000#statistikk@example.org,2026-11-21 08:00:00
-CS,STUB,,,alder,2026-11-21 08:00:00
-CS,HEADING,,,periode,2026-11-21 08:00:00
+PX,CONTACT,,NO,Datateam#Teamet som har ansvar for statistikken.#0000#statistikk@example.org,2026-11-21 08:00:00
+CS,STUB,,,"alder,periode",2026-11-21 08:00:00
 CS,TIMEVAL,,,periode,2026-11-21 08:00:00
 CS,DATA,,,antall#0#unit_antall,2026-11-21 08:00:00
+CR,STAT_VAR,,NO,statistikkvariabel,2026-11-21 08:00:00
+CR,STAT_VAR,,EN,statistical variable,2026-11-21 08:00:00
 CR,periode,,NO,Periode,2026-11-21 08:00:00
 CR,periode,,EN,Period,2026-11-21 08:00:00
 CR,alder,,NO,Alder,2026-11-21 08:00:00
@@ -28,7 +28,6 @@ CR,antall,,NO,Antall personer,2026-11-21 08:00:00
 CR,antall,,EN,Number of people,2026-11-21 08:00:00
 CR,unit_antall,,NO,personer,2026-11-21 08:00:00
 CR,unit_antall,,EN,persons,2026-11-21 08:00:00
-CR,precision_antall,,,0,2026-11-21 08:00:00
 SQ,STAT_VAR,,,1,2026-11-21 08:00:00
 SQ,periode,,,-24,2026-11-21 08:00:00
 SQ,alder,,,12,2026-11-21 08:00:00
