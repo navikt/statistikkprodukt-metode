@@ -64,9 +64,6 @@ Test om installasjonen er vellykket:
 statistikkprodukt --help
 ```
 
-Om det kommer `statistikkprodukt: command not found` må du kjøre `uv tool update-shell` (teknisk: legger til `~/.local/bin` til `PATH` i `rc` filen til din shell, f.eks. `~/.bashrc`). Deretter må du omstarte KNAST. Det må du kun gjøre én gang.
-
-
 For å gå gjennom eksempelet, klon repoet. Men det er ikke nødvendig for å bruke verktøyet.
 ```sh
 git clone https://github.com/navikt/statistikkprodukt-metode.git
