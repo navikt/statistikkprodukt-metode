@@ -5,7 +5,7 @@ definisjon:
   # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.md.
   # Produksjons id-er er (20000–22999); test-ID-er '00000'–'09999' (det krever flagget --ingen-id-validering).
   # PX: MATRIX
-  id: '01234'
+  id: '04321'
   # Angir kildetabellen (OBT-tabell). Brukes for å hente kolonnekommentarer. De kan overstyres i denne filen.
   referanse-tabell: obt_fa_kontantstotte_kvartal
 
