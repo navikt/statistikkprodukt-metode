@@ -118,7 +118,9 @@ def _read_yaml(path: Path, yaml: Any) -> Any:
     )
 
     try:
-        return yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueSafeLoader)
+        contents = path.read_text(encoding="utf-8")
+        LOGGER.debug("Leser YAML fra %s:\n%s", path, contents)
+        return yaml.load(contents, Loader=UniqueSafeLoader)
     except UnicodeDecodeError as exc:
         raise ConfigError(f"Konfigurasjonsfilen må være kodet som UTF-8: {path}") from exc
     except OSError as exc:
