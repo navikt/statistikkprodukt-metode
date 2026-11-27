@@ -51,7 +51,7 @@ pypi-auth
 Installer `statistikkprodukt` med uv:
 ```sh
 # legg til @branch eller @tag for å velge versjon
-uv tool install git+https://github.com/navikt/statistikkprodukt-metode@meta-felter
+uv tool install git+https://github.com/navikt/statistikkprodukt-metode
 ```
 
 Har du allerede installert, oppdater til nyeste versjon med:

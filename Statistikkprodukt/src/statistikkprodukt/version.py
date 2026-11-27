@@ -16,7 +16,7 @@ from urllib.request import urlopen
 from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion, Version
 
-GITHUB_BRANCH = "meta-felter"
+GITHUB_BRANCH = "main"
 VERSION_URL = (
     "https://raw.githubusercontent.com/navikt/"
     f"statistikkprodukt-metode/{GITHUB_BRANCH}/pyproject.toml"
