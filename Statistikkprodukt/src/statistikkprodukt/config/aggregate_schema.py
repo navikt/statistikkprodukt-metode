@@ -499,18 +499,20 @@ class Aggregate(StrictModel):
     @model_validator(mode="after")
     def validate_formula(self) -> Aggregate:
         """Kontrollerer formelsyntaks og at bare dimensjonskolonner brukes."""
-        if not self.formula.startswith("~"):
-            raise ConfigError("formula må starte med ~")
+        formula = self.formula.strip()
+        if not formula.startswith("~"):
+            raise ConfigError(f"formula '{formula}' må starte med ~")
 
         columns = {self.periodisering.kolonne, *(v.kolonne for v in self.variabler)}
-        error = (
-            "formula må inneholde et gyldig uttrykk med bare kolonner fra variabler "
-            "og periodisering, operatorene * + / : og balanserte parenteser; "
-            "tellepunkter er ikke tillatt"
-        )
-        expression = self.formula[1:]
+        columns = {col.lower() for col in columns}
+        expression = formula[1:]
+        if not expression:
+            raise ConfigError(f"formula '{formula}' må inneholde et uttrykk etter ~")
+        if "~" in expression:
+            raise ConfigError(f"formula '{formula}' kan ikke inneholde flere ~")
         if not re.fullmatch(r"[A-Za-z0-9_*+/:()\s]+", expression):
-            raise ConfigError(error)
+            raise ConfigError(f"formula '{formula}' inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.")
+        
         tokens = re.findall(r"[A-Za-z0-9_]+|[*+/:()]", expression)
         expect_column = True
         parentheses = 0
@@ -518,18 +520,20 @@ class Aggregate(StrictModel):
             if expect_column:
                 if token == "(":
                     parentheses += 1
-                elif token in columns:
+                elif token.lower() in columns:
                     expect_column = False
                 else:
-                    raise ConfigError(error)
+                    raise ConfigError(f"formula '{formula}' er ugyldig. Forventet kolonnenavn eller '(', men fikk: {token!r}.")
             elif token == ")" and parentheses:
                 parentheses -= 1
             elif token in {"*", "+", "/", ":"}:
                 expect_column = True
             else:
-                raise ConfigError(error)
-        if expect_column or parentheses:
-            raise ConfigError(error)
+                raise ConfigError(f"formula '{formula}' er ugyldig. Forventet en av '*+/:)', men fikk: {token!r}.")
+        if parentheses:
+            raise ConfigError(f"formula '{formula}' er ugyldig. Ubalanserte parenteser i uttrykket: {expression!r}.")
+        if expect_column:
+            raise ConfigError(f"formula '{formula}' er ugyldig. Uttrykket kan ikke slutte med en '*+/:': {expression!r}.")
         return self
 
 

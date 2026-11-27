@@ -289,14 +289,13 @@ def main() -> None:
 
         elif args.command == "konfig":
             konfig.sjekk(
-                args.config, ingen_id_validering=args.ingen_id_validering
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
             )
 
         elif args.command == "last":
-            config_path = args.config
-            LOGGER.debug("Kjører 'last' med konfigurasjon %s.", config_path)
+            LOGGER.debug("Kjører 'last' med konfigurasjon %s.", args.konfig_fil)
             configuration, config_directory = load_configuration(
-                config_path, ingen_id_validering=args.ingen_id_validering
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
             )
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering
@@ -314,9 +313,9 @@ def main() -> None:
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":
-            LOGGER.debug("Kjører 'skjema opprett' med konfigurasjon %s (db=%s).", args.config, args.db)
+            LOGGER.debug("Kjører 'skjema opprett' med konfigurasjon %s (db=%s).", args.konfig_fil, args.db)
             configuration, config_directory = load_configuration(
-                args.config, ingen_id_validering=args.ingen_id_validering
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
             )
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering

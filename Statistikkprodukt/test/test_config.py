@@ -229,7 +229,9 @@ def test_statistikkbank_subject_mapping_error_includes_mapping():
         "~ periode : region",
         "~ (periode + region) / (region * periode)",
         "~ ((region))",
+        "~ PERIODE * Region",
         "~\tperiode\n+ region ",
+        " ~ region",
     ],
 )
 def test_aggregate_accepts_formula_with_dimensions_and_supported_operators(formula):
@@ -239,53 +241,82 @@ def test_aggregate_accepts_formula_with_dimensions_and_supported_operators(formu
     assert Configuration.model_validate(config).aggregater[0].formula == formula
 
 
-@pytest.mark.parametrize("formula", ["periode * region", "antall ~ region", " ~ region"])
+@pytest.mark.parametrize("formula", ["periode * region", "antall ~ region"])
 def test_aggregate_formula_must_start_with_tilde(formula):
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["formula"] = formula
 
-    with pytest.raises(ValidationError, match="formula må starte med ~"):
+    with pytest.raises(ValidationError) as error:
         Configuration.model_validate(config)
+
+    assert f"formula '{formula.strip()}' må starte med ~" in str(error.value)
 
 
 @pytest.mark.parametrize(
-    "formula",
+    ("formula", "message"),
     [
-        "~",
-        "~ ()",
-        "~ (region",
-        "~ region)",
-        "~ region +",
-        "~ * region",
-        "~ region periode",
-        "~ region (periode)",
-        "~ region ** periode",
-        "~ region - periode",
-        "~ region ^ periode",
-        "~ region + 1",
-        "~ region ~ periode",
-        "~ ukjent",
-        "~ antall",
-        "~ region + antall",
-        "~ tellepunkt",
-        "~ verdi",
-        "~ log(region)",
-        "~ region; periode",
-        "~ region$",
-        "~ region#",
-        "~ region @ + periode",
-        "~ region + 1periode",
-        "~ region + _periode",
-        "~ region # kommentar",
-        "~ `region`",
+        ("", "Strengen kan ikke være tom"),
+        ("~", "må inneholde et uttrykk etter ~"),
+        ("~ ()", "Forventet kolonnenavn eller '(', men fikk: ')'"),
+        ("~ (region", "Ubalanserte parenteser i uttrykket: ' (region'."),
+        ("~ region)", "Forventet en av '*+/:)', men fikk: ')'"),
+        ("~ region +", "Uttrykket kan ikke slutte med en '*+/:': ' region +'."),
+        ("~ * region", "Forventet kolonnenavn eller '(', men fikk: '*'"),
+        ("~ region periode", "Forventet en av '*+/:)', men fikk: 'periode'"),
+        ("~ region (periode)", "Forventet en av '*+/:)', men fikk: '('"),
+        ("~ region ** periode", "Forventet kolonnenavn eller '(', men fikk: '*'"),
+        (
+            "~ region - periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region ^ periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        ("~ region + 1", "Forventet kolonnenavn eller '(', men fikk: '1'"),
+        ("~ region ~ periode", "kan ikke inneholde flere ~"),
+        ("~ ukjent", "Forventet kolonnenavn eller '(', men fikk: 'ukjent'"),
+        ("~ antall", "Forventet kolonnenavn eller '(', men fikk: 'antall'"),
+        ("~ region + antall", "Forventet kolonnenavn eller '(', men fikk: 'antall'"),
+        ("~ tellepunkt", "Forventet kolonnenavn eller '(', men fikk: 'tellepunkt'"),
+        ("~ verdi", "Forventet kolonnenavn eller '(', men fikk: 'verdi'"),
+        ("~ log(region)", "Forventet kolonnenavn eller '(', men fikk: 'log'"),
+        (
+            "~ region; periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region$",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region#",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region @ + periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        ("~ region + 1periode", "Forventet kolonnenavn eller '(', men fikk: '1periode'"),
+        ("~ region + _periode", "Forventet kolonnenavn eller '(', men fikk: '_periode'"),
+        (
+            "~ region # kommentar",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ `region`",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
     ],
 )
-def test_aggregate_rejects_invalid_formula(formula):
+def test_aggregate_rejects_invalid_formula(formula, message):
     config = configuration().model_dump(by_alias=True)
     config["aggregater"][0]["formula"] = formula
 
-    with pytest.raises(ValidationError, match="formula må inneholde et gyldig uttrykk"):
+    with pytest.raises(ValidationError) as error:
         Configuration.model_validate(config)
+
+    assert message in str(error.value)
 
 
 def test_aggregate_formula_uses_configured_column_names():
@@ -299,8 +330,9 @@ def test_aggregate_formula_uses_configured_column_names():
     Configuration.model_validate(config)
 
     aggregate["formula"] = "~ periode * region"
-    with pytest.raises(ValidationError, match="formula må inneholde et gyldig uttrykk"):
+    with pytest.raises(ValidationError) as error:
         Configuration.model_validate(config)
+    assert "Forventet kolonnenavn eller '(', men fikk: 'periode'" in str(error.value)
 
 
 @pytest.mark.parametrize("mode", ["overskriv_siste_periode", "overskriv_ikke", "overskriv_alt"])
