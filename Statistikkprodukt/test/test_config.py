@@ -138,7 +138,7 @@ def test_source_and_aggregate_configuration_versions_are_required():
         ConfigurationSource.model_validate(
             {
                 "connection": config.connection.model_dump(by_alias=True),
-                "mapper": ["aggregater/**"],
+                "filsok": ["aggregater/**"],
                 "aggregater": ["tabell"],
             }
         )
@@ -155,7 +155,7 @@ def test_source_and_aggregate_configuration_reject_unsupported_versions():
             {
                 "version": 2,
                 "connection": config.connection.model_dump(by_alias=True),
-                "mapper": ["aggregater/**"],
+                "filsok": ["aggregater/**"],
                 "aggregater": ["tabell"],
             }
         )
@@ -541,7 +541,7 @@ connection:
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - aggregater/**
 aggregater:
   - ost_am_befolkning_mnd_region
@@ -617,7 +617,7 @@ connection:
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - aggregater/**
 aggregater:
   - ost_am_befolkning_mnd_region
@@ -674,7 +674,7 @@ connection:
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - første/**
   - andre/**
 aggregater:
@@ -728,7 +728,7 @@ def test_loads_separate_directories_with_overlapping_patterns_and_preserves_orde
             "version": 1,
             "connection": config.connection.model_dump(mode="json", by_alias=True)
             | {"password": "env://TEST_PASSWORD"},
-            "mapper": [
+            "filsok": [
                 f"{prefix}yaml/ost_am_befolkning_mnd_first{yaml_suffix}",
                 f"{prefix}yaml/**",
                 f"{prefix}sql/**",
@@ -827,7 +827,7 @@ def test_aggregate_validation_error_reports_yaml_path(tmp_path):
             "connection": configuration().connection.model_dump(
                 mode="json", by_alias=True
             ) | {"password": "env://TEST_PASSWORD"},
-            "mapper": ["aggregater/*.yml", "aggregater/*.sql"],
+            "filsok": ["aggregater/*.yml", "aggregater/*.sql"],
             "aggregater": ["tabell"],
         }),
         encoding="utf-8",

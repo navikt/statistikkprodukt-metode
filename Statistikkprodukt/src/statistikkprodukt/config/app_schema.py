@@ -111,19 +111,19 @@ class ConfigurationSource(StrictModel):
     connection: DatabaseConnection = Field(
         description="Tilkoblingsinnstillinger for databasen."
     )
-    mapper: list[NonEmptyString] = Field(
-        description="Mønster for å finne mapper med aggregatsdefinisjoner."
+    filsok: list[NonEmptyString] = Field(
+        description="Mønster for å finne sql og yml filer med aggregatsdefinisjoner."
     )
     aggregater: list[OracleIdentifier] = Field(
         description="Navn på aggregatene som skal lastes."
     )
 
-    @field_validator("mapper")
+    @field_validator("filsok")
     @classmethod
     def validate_mappers(cls, value: list[str]) -> list[str]:
         """Krever minst ett mønster for aggregatkonfigurasjoner."""
         if not value:
-            raise ConfigError("mapper må inneholde minst ett mønster")
+            raise ConfigError("filsok må inneholde minst ett mønster")
         return value
 
     @field_validator("aggregater")

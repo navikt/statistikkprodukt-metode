@@ -249,7 +249,7 @@ connection:
   schema: {SCHEMA}
   user: {ORACLE_USER}
   password: env://STATISTIKKPRODUKT_E2E_PASSWORD
-mapper:
+filsok:
   - aggregater/**
 aggregater:
   - {aggregate_table}

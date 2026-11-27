@@ -26,7 +26,7 @@ def _configure(tmp_path, monkeypatch, agg_id):
         yaml.safe_dump({
             "version": config["version"],
             "connection": config["connection"],
-            "mapper": ["aggregater/*.yml", "aggregater/*.sql"],
+            "filsok": ["aggregater/*.yml", "aggregater/*.sql"],
             "aggregater": [AGGREGATE_NAME],
         }),
         encoding="utf-8",

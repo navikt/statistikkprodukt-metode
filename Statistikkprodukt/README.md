@@ -310,16 +310,16 @@ connection:
   timeout: 30
 
 # Søkemønstre for YAML- og SQL-filer, relativt til hovedkonfigurasjonen
-mapper:
+filsok:
   - aggregater/**
 
-# Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `mapper`.
+# Hvilke aggregater som skal kjøres. Navnene må samsvare med YAML-filene i `filsok`.
 aggregater:
   - ost_ga_befolkning_mnd_alder
   - ost_ga_befolkning_mnd_kjonn
 ```
 
-Søkemønstrene i `mapper` tolkes relativt til mappen med hovedkonfigurasjonsfilen. `*` treffer alle filer i mappen, `*.sql` kun SQL-filer, `**` treffer alle undermapper rekursivt.
+Søkemønstrene i `filsok` tolkes relativt til mappen med hovedkonfigurasjonsfilen. `*` treffer alle filer i mappen, `*.sql` kun SQL-filer, `**` treffer alle undermapper rekursivt.
 
 ```text
 produkt/
@@ -334,14 +334,14 @@ produkt/
 For denne strukturen brukes:
 
 ```yaml
-mapper:
+filsok:
   - aggregater/**
 aggregater:
   - ost_ga_befolkning_mnd_alder
   - ost_ga_befolkning_mnd_kjonn
 ```
 
-Hver aggregat trenger én `<aggregat>.sql` fil og én `<aggregat>.yml` fil funnet av et mønster i `mapper` konfigurasjon.
+Hver aggregat trenger én `<aggregat>.sql` fil og én `<aggregat>.yml` fil funnet av et mønster i `filsok` konfigurasjon.
 
 Mer om lasting av hemmeligheter følger.
 

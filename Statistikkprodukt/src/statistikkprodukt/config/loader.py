@@ -51,7 +51,7 @@ def load_configuration(
         ) from exc
 
     aggregate_paths = _find_aggregate_configurations(
-        source.mapper, source.aggregater, path.parent
+        source.filsok, source.aggregater, path.parent
     )
     aggregates: list[Aggregate] = []
     for name, yml_sql_path_pair in aggregate_paths.items():

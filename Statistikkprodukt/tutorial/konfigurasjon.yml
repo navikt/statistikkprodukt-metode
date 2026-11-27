@@ -8,7 +8,7 @@ connection:
   password: terminal://
   timeout: 30
 
-mapper:
+filsok:
   - aggregater/**
 
 aggregater:
