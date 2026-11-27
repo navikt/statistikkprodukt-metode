@@ -126,6 +126,12 @@ def _read_yaml(path: Path, yaml: Any) -> Any:
     except OSError as exc:
         raise ConfigError(f"Konfigurasjonsfilen kan ikke leses: {path}") from exc
     except yaml.YAMLError as exc:
+        if problem_mark := getattr(exc, "problem_mark", None):
+            raise ConfigError(
+                f"Konfigurasjonsfilen inneholder ugyldig YAML på linje {problem_mark.line + 1}, "
+                f"kolonne {problem_mark.column + 1} i {path}. {exc.problem}"
+            ) from exc
+
         raise ConfigError(f"Konfigurasjonsfilen inneholder ugyldig YAML: {path}") from exc
 
 
