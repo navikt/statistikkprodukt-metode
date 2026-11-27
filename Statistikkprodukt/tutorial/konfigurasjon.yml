@@ -1,0 +1,15 @@
+version: 1
+connection:
+  host: 127.0.0.1
+  port: 1521
+  service: oracle_service
+  schema: datateam_schema
+  user: MIN_IDENT
+  password: terminal://
+  timeout: 30
+
+mapper:
+  - aggregater/**
+
+aggregater:
+  - ost_fa_kontantstotte_kvartal_alder_kjonn_x

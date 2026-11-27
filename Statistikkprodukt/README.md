@@ -83,10 +83,10 @@ statistikkprodukt installer-r-pakker
 ```
 På spørsmålet "Would you like to create a personal library" skal du svare "Yes", og "Y" på "Do you want to continue". Om dette feiler, sjekk brannmuråpningene, ellers ta kontakt med teamet. Om alt har godt bra, skal de siste få linjene inneholde `R-pakker installert og funksjonstest fullført.`.
 
-Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `eksempel/data_inn` og skriver resultatene til `eksempel/data_ut`:
+Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kjør-mot-databasen)). Eksempelet leser to CSV-filer fra `tutorial` og skriver resultatene til `tutorial`:
 
 ```sh
-cd Statistikkprodukt/eksempel
+cd Statistikkprodukt/tutorial
 statistikkprodukt last \
   --konfig-fil konfigurasjon.yml \
   --ingen-id-validering \
@@ -138,9 +138,9 @@ Gyldig konfigurasjon gir avslutningskode `0`; konfigurasjonsfeil gir `2`.
 
 ### Kjør mot databasen
 
-Kjør `eksempel/data_inn/obt_befolkning.sql` i Oracle for å opprette en test obt tabell.
+Kjør `tutorial` i Oracle for å opprette en test obt tabell.
 
-Modifiser `eksempel/konfigurasjon.yml` med riktig databaseprofil:
+Modifiser `tutorial` med riktig databaseprofil:
 ```yaml
 version: 1
 connection:
@@ -154,7 +154,7 @@ connection:
 Opprett logg, resultat- og metadatatabellene (se [Databaseskjema](#databaseskjema) for detaljer):
 
 ```shell
-cd Statistikkprodukt/eksempel
+cd Statistikkprodukt/tutorial
 statistikkprodukt skjema opprett --konfig-fil konfigurasjon.yml --ingen-id-validering --db
 ```
 
@@ -351,7 +351,7 @@ Per småaggregat må det lages:
 - `{aggregatnavn}.yml` eller `{aggregatnavn}.yaml` som konfigurasjon
 - `{aggregatnavn}.sql` som SQL-spørring for å hente data fra OBT-tabellen.
 
-For et eksempel for en SQL fil, se `eksempel/aggregater/ost_ga_befolkning_mnd_alder.sql`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
+For et eksempel for en SQL fil, se `tutorial`. Spørringen må kunne brukes i en subquery, ikke bruk `WITH`.
 
 Aggregatets YAML-filnavn må være småskrevet og følge formatet
 `ost_<subject-code>_<subject-kort>_<periode>_<fordeling>`. `<periode>` må være `aar`, `mnd`, `kvartal`, `uke` eller `dag`.
@@ -362,153 +362,164 @@ Fullstendig eksempel på aggregatkonfigurasjon:
 
 ```yaml
 version: 1
+
 # Samler innstillinger og metadata for ett aggregat.
 definisjon:
   # Identifiserer aggregatet med en unik id. Den må registreres i /statistikkprodukt_register.md.
-  # Produksjons id-er er (20000–22999); test-ID-er 00000–09999 (det krever --ingen-id-validering flagg).
-  # PX: Grunnlag for MATRIX; eksportøren legger på NAV-prefiks ved Nav-publisering.
-  id: 21000
-  # Angir kildetabellen som leverer manglende metadata gjennom databasekommentarer. OBT tabell.
-  referanse-tabell: obt_ab_befolkning_periode
-  # Angir aggregatets norske navn.
-  # PX: TITLE på norsk, brukt som tabellens tittel i menyen.
-  navn: Befolkning etter periode og alder
-  # Angir aggregatets engelske navn.
-  # PX: TITLE på engelsk.
-  navn-en: Population by period and age
-  # Beskriver aggregatets innhold på norsk.
-  # PX: CONTENTS på norsk, første del av overskriften når tabellen åpnes.
-  innhold: Befolkning
-  # Beskriver aggregatets innhold på engelsk.
-  # PX: CONTENTS på engelsk.
-  innhold-en: Population
-  # Angir teamet som har ansvar for aggregatet. Publiseres ikke på statistikkbanken.
-  ansvarlig-team: Datateam
+  # Produksjons id-er er (20000–22999); test-ID-er '00000'–'09999' (det krever flagget --ingen-id-validering).
+  # PX: MATRIX
+  id: '01234'
+  # Angir kildetabellen (OBT-tabell). Brukes for å hente kolonnekommentarer. De kan overstyres i denne filen.
+  referanse-tabell: obt_fa_kontantstotte_kvartal
 
-  # Samler metadata og visningsinnstillinger som gjelder Statistikkbanken.
+  # Aggregatnavn (norsk)
+  # PX: TITLE (norsk), brukt som tabellens tittel i menyen.
+  navn: Eksempel Mottakere av kontantstøtte per kvartal fordelt etter alder og kjønn.
+  # Valgfritt: engelsk.
+  navn-en: Example Receivers of Cash-for-Care Benefit per quarter and divided by age and sex.
+  # Aggregatets innhold (norsk).
+  # PX: CONTENTS (norsk), første del av overskriften når tabellen åpnes.
+  innhold: Mottakere av kontantstøtte.
+  # Valgfritt: engelsk.
+  innhold-en: Receivers of Cash-for-Care Benefit,
+  # Valgfritt: Teamet med ansvar for datakilden. Publiseres ikke på statistikkbanken.
+  ansvarlig-team: Team Familie
+
+  # Samler metadata og visningsinnstillinger som gjelder Statistikkbanken (PX).
   statistikkbank:
-    # Angir statistikkens norske tema på nivå 2 i menyhierarkiet.
-    subject: Befolkning
-    # Angir statistikkens engelske tema.
-    subject-en: Population
-    # Angir en kode for temaet; navnet må samsvare med Statistikkbankens kodeverk.
-    subject-kort: BEFOLKNING
-    # Angir fagområdets navn på nivå 1 i menyhierarkiet; det må samsvare med kodeverket.
-    subject-area: Arbeidsmarked
-    # Angir fagområdets kode fra Statistikkbankens kodeverk.
-    subject-code: AM
+    # Statistikkens tema (norsk) på nivå 2 i menyhierarkiet.
+    subject: Kontantstøtte
+    # Valgfritt: engelsk.
+    subject-en: Cash-for-Care Benefit
+    # Angir en kode for temaet; må samsvare med kodeverk.
+    subject-kort: Kontantstotte
+    # Angir fagområdets navn på nivå 1 i menyhierarkiet; må samsvare med kodeverket.
+    subject-area: Familie
+    # Angir fagområdets kode fra kodeverket.
+    subject-code: FA
 
-    # Gir en norsk merknad, gjerne som Markdown.
+    # Valgfritt: Norsk merknad, gjerne som markdown.
     note: |
+      Denne statistikken inneholder antall mottakere av kontantstøtte per siste måned hvert kvartal, fordelt på alder og kjønn. 
+      
       Se [Om statistikken](https://www.nav.no/statistikk).
-    # Gir en engelsk merknad, gjerne som Markdown.
+    # Valgfritt: engelsk.
     note-en: |
-      See [About the statistics](https://www.nav.no/statistikk).
-    # Gir en norsk merknad som fremheves over den vanlige merknaden i en blå boks.
-    notex: Brudd i tidsserien fra januar 2025.
-    # Gir den engelske varianten av den fremhevede merknaden.
-    notex-en: Break in the time series from January 2025.
+      These statistics contain the number of recipients of the cash-for-care benefit as of the last month of each quarter, broken down by age and sex. 
+      
+      See [About the statististics](https://www.nav.no/statistikk).
+    # Valgfritt: Fremheved viktig informasjon over den vanlige merknaden i en blå boks.
+    notex: Brudd i statistikken før 2018.
+    # Valgfritt: engelsk.
+    notex-en: Break in continuity for the statistics before 2018.
 
-    # Angir om statistikken ikke lenger skal oppdateres. Verdier: "YES" eller "NO".
+    # Valgfritt: Angir om statistikken ikke lenger skal oppdateres. "YES" eller "NO". Trenger anførselstegn.
     discontinued: "NO"
-    # Angir om tabellen publiseres som offisiell statistikk. Verdier: "YES" eller "NO".
-    official-statistics: "YES"
+    # Valgfritt: Angir om tabellen publiseres som offisiell statistikk. "YES" eller "NO". Trenger anførselstegn.
+    official-statistics: "NO"
 
-    # Angir antall måltall i startvisningen; positivt velger første N, negativt siste N, 0 ingen.
+    # Valgfritt: Angir antall tellepunkter i startvisningen; positivt velger første N, negativt siste N, 0 ingen.
+    # SQ: STAT_VAR
     sq: 1
 
-    # Statistikkseksjonen vises automatisk; her kan du angi ekstra kontaktpunkter som eksporteres som PX CONTACT-felt.
+    # Valgfritt: Statistikkseksjonen vises automatisk; her kan du angi ekstra kontaktpunkter som eksporteres som
+    # PX: CONTACT
     ekstra-kontakter:
       # Angir teamet som kan gi informasjon om statistikken.
-      - navn: Datateam
-        # Angir en valgfri kort beskrivelse av kontaktpunktet.
-        beskrivelse: Teamet som har ansvar for statistikken.
+      - navn: Team Familie
         # Angir kontaktpunktets e-postadresse.
-        epost: nav.statistikk@nav.no
-        # Angir et valgfritt telefonnummer som tekst.
-        telefonnummer: "1234"
+        epost: eksempel@nav.no
+        # Valgfritt: Beskrivelse av kontaktpunktet.
+        beskrivelse: Team Familie kan svare på spørsmål om statistikken.
+        # Valgfritt: Angir et telefonnummer som tekst (med anførselstegn).
+        telefonnummer: "+47 12345678"
 
-  # Beskriver tidsdimensjonen som brukes til periodevalg og inkrementell lasting.
+  # Beskriver tidsdimensjonen.
   periodisering:
-    # Angir datakolonnen som inneholder perioden.
-    # PX: Navs CS TIMEVAL-kolonnereferanse; dimensjonen inngår også i STUB eller HEADING.
-    kolonne: periode
-    # Angir tidsdimensjonens norske visningsnavn.
-    # PX: Norsk visningsnavn via Navs CR-metadata for periodekolonnen.
-    navn: Periode
-    # Angir tidsdimensjonens engelske visningsnavn.
-    # PX: Engelsk visningsnavn via Navs CR-metadata for periodekolonnen.
-    navn-en: Period
-    # Beskriver periodenes betydning og format på norsk.
-    innhold: Månedsperiode på formatet YYYYM01–YYYYM12.
-    # Beskriver periodenes betydning og format på engelsk.
-    innhold-en: Month in YYYYM01–YYYYM12 format.
-    # Samler Statistikkbankens visningsinnstillinger for tidsdimensjonen.
+    # Angir datakolonnen i kildespørringen som inneholder perioden.
+    # CS: TIMEVAL, STUB
+    kolonne: aar_kvartal_besk_kort
+
+    # Norsk visningsnavn. Valgfritt: Overstyrer #NAVN fra referansetabellen.
+    # CR
+    navn: Kvartal
+    # Valgfritt: engelsk. Overstyrer #NAVN_EN fra referansetabellen.
+    navn-en: Quarter
+    # Norsk beskrivelse. Valgfritt: Overstyrer #INNHOLD fra referansetabellen.
+    innhold: Kvartalsperiode på formatet 2026K1.
+    # Valgfritt: engelsk. Overstyrer #INNHOLD_EN fra referansetabellen.
+    innhold-en: Quarter periode on the format 2026K1. (K for quarter in Norwegian)
+
+    # Valgfritt.
     statistikkbank:
-      # Velger antall perioder i startvisning; positivt velger første N, negativt siste N, 0 skjuler variabelen. Alfabetisk sortering må følge kronologien.
+      # Valgfritt: Velger antall perioder i startvisning; positivt velger første N, negativt siste N, 0 skjuler variabelen.
+      # SQ: periode
       sq: -24
 
-  # Lister dimensjonene som dataene fordeles etter.
-  # PX: Dimensjonskolonnene er grunnlag for Navs CS STUB og CS HEADING.
-  variabler:
-    # Angir datakolonnen for dimensjonen.
-    # PX: Kolonnereferanse i Navs CS STUB eller CS HEADING og tilhørende CR-metadata.
-    - kolonne: alder
-      # Angir dimensjonens norske visningsnavn.
-      # PX: Norsk visningsnavn via Navs CR-metadata for alder.
-      navn: Alder
-      # Angir dimensjonens engelske visningsnavn.
-      # PX: Engelsk visningsnavn via Navs CR-metadata for alder.
-      navn-en: Age
-      # Beskriver dimensjonens innhold på norsk.
-      innhold: Alder i ettårige grupper.
-      # Beskriver dimensjonens innhold på engelsk.
-      innhold-en: Age in single-year groups.
-      # Samler Statistikkbankens visningsinnstillinger for dimensjonen.
-      statistikkbank:
-        # Velger første 12 verdier; positivt velger første N, negativt siste N, 0 skjuler variabelen etter alfabetisk sortering.
-        sq: 12
-
-  # Lister måltallskolonnene som behandles og prikkes hver for seg.
-  # PX: Navs CS DATA og måltallsdimensjonen STAT_VAR hos eksportøren.
+  # Lister tellepunktskolonnene som behandles og prikkes hver for seg.
   tellepunkter:
-    # Angir datakolonnen som inneholder måltallet.
-    # PX: Kolonnereferanse i Navs CS DATA og tilhørende CR-metadata.
-    - kolonne: antall
-      # Angir måltallets norske visningsnavn.
-      # PX: Norsk etikett for måltallet via Navs CR-metadata.
-      navn: Antall personer
-      # Angir måltallets engelske visningsnavn.
-      # PX: Engelsk etikett for måltallet via Navs CR-metadata.
-      navn-en: Number of people
-      # Beskriver måltallet på norsk; dette er ikke måleenheten.
-      innhold: Antall personer i gruppen.
-      # Beskriver måltallet på engelsk; dette er ikke måleenheten.
-      innhold-en: Number of people in the group.
-      # Angir måleenheten på norsk.
-      # PX: UNITS via Navs enhetsmetadata, med enhetsreferanse i CS DATA i versjon 1.
+    # Angir datakolonnen i kildespørringen som inneholder tellepunktet.
+    # CS DATA
+    - kolonne: kontantstotte_antall_mottakere
+
+      # Norsk visningsnavn.
+      # CR
+      navn: Antall mottakere
+      # Valgfritt: engelsk.
+      navn-en: Number of receivers
+      # Norsk beskrivelse
+      innhold: Antall personer som mottar kontantstøtte
+      # Valgfritt: engelsk.
+      innhold-en: Number of receivers of Cash-for-Care Benefit.
+
+      # Måleenheten på norsk.
+      # CR: enhet for tellepunktet
       enhet: personer
-      # Angir måleenheten på engelsk.
-      # PX: Engelsk UNITS via Navs enhetsmetadata.
+      # Valgfritt: engelsk.
       enhet-en: persons
-      # Samler Statistikkbankens innstillinger for måltallets eksport og visning.
+
+      # Valgfritt.
       statistikkbank:
-        # Angir antall desimaler som skal vises, uten å endre lagrede data. Nav-støtte må avklares.
+        # Valgfritt: Antall desimaler som vises. Del av DATA.
         precision: 0
-        # Angir antall desimaler som skal bevares i eksporten, ikke ved generell lasting; eksporten samordner måltallene.
-        decimals: 0
+
+  # Lister variabler som dataene fordeles etter.
+  variabler:
+    # Angir datakolonnen for variablen i kildespørringen.
+    # CS STUB
+    - kolonne: ti_aar_gruppe_besk
+
+      # Norsk visningsnavn. Valgfritt: Overstyrer #NAVN fra referansetabellen.
+      # CR
+      navn: Aldersgruppe
+      # Valgfritt: engelsk. Overstyrer #NAVN_EN fra referansetabellen.
+      navn-en: Age group
+      # Norsk beskrivelse. Valgfritt: Overstyrer #INNHOLD fra referansetabellen.
+      # Valgfritt: Overstyrer #INNHOLD fra referansetabellen.
+      innhold: Alder i 10-års grupper.
+      # Valgfritt: engelsk. Overstyrer #INNHOLD_EN fra referansetabellen.
+      innhold-en: Age in 10-year groups.
+
+      # Valgfritt. Visningsinnstillinger for variablen.
+      statistikkbank:
+        # Velger første 3 verdier; positivt velger første N, negativt siste N, 0 skjuler variabelen etter alfabetisk sortering.
+        sq: 3
+
+    # Variable der all metadata hentes fra referansetabellen og sq default brukes.
+    - kolonne: kjonn_flertall_besk
 
   # Bestemmer hvordan innkommende perioder erstatter eller supplerer eksisterende data.
   # Valgmuligheter:
     # - overskriv_eksisterende_perioder: erstatter alle eksisterende data for perioden.
     # - legg_til_nye_perioder: beholder eksisterende data for perioden, og legger til nye.
   inkrementell-strategi: overskriv_eksisterende_perioder
+
   # Angir R-formelen som beskriver sammenhenger brukt ved prikking.
-  formula: "~ periode : alder"
+  formula: "~ aar_kvartal_besk_kort : (ti_aar_gruppe_besk * kjonn_flertall_besk)"
   # Angir om dataene skal prikkes.
   prikking: true
-  # Angir om særskilt behandling skal brukes.
-  saerskilt: false
+  # Angir om dataene er særskilt (påvirker småtallsgrense).
+  saerskilt: true
 ```
 
 `referanse-tabell` er OBT-tabellen som er datagrunnlaget og leverer metadata i form av kolonne kommentarer.
