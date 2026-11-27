@@ -328,10 +328,8 @@ def main() -> None:
                 create_in_database=args.db,
             )
         elif args.command == "installer-r-pakker":
-            LOGGER.debug("Kjører 'installer-r-pakker'.")
             installer_r_pakker.installer_r_pakker(args.dev_lokal_r_pakke)
         elif args.command == "oppdater":
-            LOGGER.debug("Kjører 'oppdater'.")
             update_packages(update_r_packages=not args.ikke_oppdater_r_pakker)
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)

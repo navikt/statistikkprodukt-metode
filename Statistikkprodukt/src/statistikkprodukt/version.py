@@ -206,6 +206,9 @@ def should_skip_version_check() -> bool:
 
 
 def get_r_package_info() -> RPackageInfo | None:
+    if logging.root.level > logging.DEBUG:
+        logging.getLogger("rpy2").setLevel(logging.ERROR)
+
     from rpy2.robjects import packages, r
 
     try:
