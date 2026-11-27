@@ -9,8 +9,9 @@ import pytest
 import statistikkprodukt.app.last as app
 import statistikkprodukt.app.skjema as table_app
 from statistikkprodukt import oracle
-from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption
+from statistikkprodukt.config import IncrementalMode, Metadata, StorageOption, Tellepunkt
 from statistikkprodukt.oracle import aggregate_table, meta_table
+from statistikkprodukt.oracle import log_table
 from statistikkprodukt.oracle import (
     write_result,
     parse_metadata,
@@ -59,7 +60,7 @@ def test_read_metadata_uses_obt_table(monkeypatch):
     monkeypatch.setattr(aggregate_table, "_fetch_column_metadata", fetch_column)
 
     aggregate = configuration().aggregater[0]
-    aggregate.obt_tabell = "obt.obt_kilde"
+    aggregate.referanse_tabell = "obt.obt_kilde"
     result = aggregate_table.read_metadata(Connection(), "TEST", aggregate)
 
     assert calls == [
@@ -122,7 +123,7 @@ def test_development_id_warns_only_when_writing_to_database(monkeypatch, tmp_pat
 def test_write_log_only_inserts_and_binds_all_lobs():
     connection = MagicMock()
     aggregate = configuration().aggregater[0]
-    logg = Kjorelogg({}, "db", "db", [aggregate])
+    logg = Kjorelogg({}, "db", "db", [aggregate], "testuser")
     logg.fullfor_suksess()
     oracle.write_log(connection, "TEST", logg)
 
@@ -142,7 +143,7 @@ def test_write_log_rolls_back_its_own_failed_insert():
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.executemany.side_effect = ValueError("Innsetting feilet")
-    logg = Kjorelogg({}, "db", "db", configuration().aggregater)
+    logg = Kjorelogg({}, "db", "db", configuration().aggregater, "testuser")
     logg.fullfor_suksess()
 
     with pytest.raises(ValueError, match="Innsetting feilet"):
@@ -165,21 +166,69 @@ def test_auxiliary_schema_creation_checks_dictionary_and_reuses_cursor():
     )
 
 
+def test_auxiliary_schema_creation_applies_log_column_comments():
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchall.return_value = []
+    aggregate = configuration().aggregater[0]
+
+    table_app._create_log_and_meta_tables(
+        connection, "TEST", [aggregate], create_in_database=True
+    )
+
+    statements = [call.args[0] for call in cursor.execute.call_args_list]
+    log_comments = [
+        statement for statement in statements
+        if statement.startswith("COMMENT ON COLUMN test.ost_logg.")
+    ]
+    assert len(log_comments) == len(log_table.LOG_COLUMNS)
+    assert (
+        "COMMENT ON COLUMN test.ost_logg.kjoring_id IS "
+        "'#NAVN Kjøre ID #NAVN_EN Run ID #INNHOLD Unik kjøre ID "
+        "#INNHOLD_EN Unique run ID'"
+    ) in log_comments
+    meta_comments = [
+        statement for statement in statements
+        if statement.startswith(f"COMMENT ON COLUMN test.{aggregate.meta_tabell}.")
+    ]
+    assert len(meta_comments) == len(oracle.meta_table.META_COLUMN_COMMENTS)
+    assert (
+        f"COMMENT ON COLUMN test.{aggregate.meta_tabell}.type IS "
+        "'#NAVN PX type #NAVN_EN PX type #INNHOLD Type relatert til PX-fil "
+        "genererering #INNHOLD_EN Type related to generating PX-files'"
+    ) in meta_comments
+
+
+def test_kontroll_comments_cover_suppression_flags_and_load_timestamp():
+    aggregate = configuration().aggregater[0]
+    metadata = TableMetadata.from_aggregate(aggregate)
+    table_name = "target_kontroll"
+
+    statements = aggregate_table.kontroll_comment_statements(
+        "TEST", table_name, aggregate, metadata
+    )
+
+    assert any(f"test.{table_name}.primary IS" in statement for statement in statements)
+    assert any(f"test.{table_name}.suppressed IS" in statement for statement in statements)
+    assert any(f"test.{table_name}.dvh_lastet_tid IS" in statement for statement in statements)
+
+
 def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
     aggregate = configuration().aggregater[0].model_copy(update={
         "tabell": f"ost_test_{uuid4().hex[:12]}",
+        "inkrementell_strategi": IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER,
     })
     long_text = "Æøå" * 5000
     table_metadata = TableMetadata(
-        Metadata(navn="OBT navn", navn_en="Name", innhold=long_text, innhold_en="Content"),
-        {},
+        Metadata(navn="OBT navn", navn_en="Name", innhold="Æøå" * 600, innhold_en="Content"),
+        TableMetadata.from_aggregate(aggregate).columns,
     )
-    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [aggregate])
+    logg = Kjorelogg({"beskrivelse": long_text}, "db", "db", [aggregate], "testuser")
     logg.resultater = [
         LasteResultat(aggregate.id, aggregate.tabell, ["2025,01", "2025-02"], 8, 1, 2, table_metadata)
     ]
     logg.fullfor_feil(ValueError(long_text))
-    success = Kjorelogg({}, "db", "db", [aggregate])
+    success = Kjorelogg({}, "db", "db", [aggregate], "testuser")
     success.fullfor_suksess()
     if oracle.table_exists(oracle_connection, "SYSTEM", oracle.LOG_TABLE):
         with oracle_connection.cursor() as cursor:
@@ -195,22 +244,38 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
         oracle.write_log(oracle_connection, "SYSTEM", success)
 
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"SELECT felt, verdi FROM SYSTEM.{aggregate.meta_tabell}")
-            meta = {name: value.read() for name, value in cursor.fetchall()}
-            assert meta["navn"] == "Oppdatert"
-            assert meta["innhold"] == long_text
-            assert len(meta) == len(meta_table.META_FIELDS)
+            cursor.execute(
+                f"SELECT type, keyword, scope, language, value "
+                f"FROM SYSTEM.{aggregate.meta_tabell}"
+            )
+            meta = [dict(zip(meta_table.META_COLUMNS, row)) for row in cursor.fetchall()]
+            expected = meta_table.metadata_rows(aggregate, table_metadata, None)
+            for row in expected:
+                if row["keyword"] == "LAST-UPDATED":
+                    row["value"] = None
+            assert sorted(meta, key=repr) == sorted(expected, key=repr)
+            assert next(row["value"] for row in meta
+                        if row["keyword"] == "TITLE" and row["language"] == "NO") == "Oppdatert"
+            cursor.execute(
+                f"SELECT COUNT(*) FROM SYSTEM.{aggregate.meta_tabell} "
+                "WHERE dvh_lastet_tid IS NULL"
+            )
+            assert cursor.fetchone() == (0,)
 
             cursor.execute(
-                "SELECT status, db_bruker, commit_hash, konfigurasjon, perioder, feilmelding, "
+                "SELECT status, db_bruker, commit_hash, python_pakke_versjon, "
+                "r_pakke_versjon, konfigurasjon, perioder, feilmelding, "
                 "navn, starttid, sluttid, antall_rader, "
                 "JSON_VALUE(konfigurasjon, '$.beskrivelse' RETURNING CLOB) "
                 "FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
                 id=logg.kjoring_id,
             )
-            status, user, commit_hash, config, periods, error, name, start, end, rows, json_text = cursor.fetchone()
+            (
+                status, user, commit_hash, python_version, r_version, config, periods,
+                error, name, start, end, rows, json_text,
+            ) = cursor.fetchone()
             assert status == "FEILET"
-            assert user == "SYSTEM"
+            assert user == "testuser"
             assert commit_hash == logg.commit_hash
             assert config == {"beskrivelse": long_text}
             assert periods == ["2025,01", "2025-02"]
@@ -222,10 +287,27 @@ def test_metadata_and_log_roundtrip_preserves_lobs_and_json(oracle_connection):
             assert json_text.read() == long_text
 
             cursor.execute(
-                "SELECT status, antall_rader FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
+                "SELECT status, antall_rader, inkrementell FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
                 id=success.kjoring_id,
             )
-            assert cursor.fetchone() == ("OK", None)
+            assert cursor.fetchone() == ("OK", None, "overskriv_eksisterende_perioder")
+            for table_name in (aggregate.meta_tabell, oracle.LOG_TABLE):
+                cursor.execute(
+                    "SELECT data_type, data_default, nullable FROM all_tab_columns "
+                    "WHERE owner = 'SYSTEM' AND table_name = :table_name "
+                    "AND column_name = 'DVH_LASTET_TID'",
+                    table_name=table_name.upper(),
+                )
+                data_type, default, nullable = cursor.fetchone()
+                assert data_type == "DATE"
+                assert default.strip().upper() == "SYSDATE"
+                assert nullable == "N"
+            cursor.execute(
+                "SELECT dvh_lastet_tid FROM SYSTEM.ost_logg WHERE kjoring_id = :id",
+                id=success.kjoring_id,
+            )
+            loaded_at = cursor.fetchone()[0]
+            assert loaded_at is not None and loaded_at.microsecond == 0
     finally:
         with oracle_connection.cursor() as cursor:
             if oracle.table_exists(oracle_connection, "SYSTEM", oracle.LOG_TABLE):
@@ -264,7 +346,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
     aggregate.tabell = f"sb_test_{uuid4().hex[:12]}"
     aggregate.sporring_sql = "create_test.sql"
     (tmp_path / aggregate.sporring_sql).write_text(
-        "select cast(202501 as varchar2(6)) as periode, 'Oslo' as region, 10 as antall from dual",
+        "select cast('2025M01' as varchar2(7)) as periode, 'Oslo' as region, 10 as antall from dual",
         encoding="utf-8",
     )
 
@@ -319,6 +401,22 @@ def test_create_tables_writes_column_comments_to_all_comments(
         for table_name in tables:
             with oracle_connection.cursor() as cursor:
                 cursor.execute(
+                    f"INSERT INTO SYSTEM.{table_name} (periode, region) "
+                    "VALUES ('2025M01', 'Oslo')"
+                )
+                cursor.execute(f"SELECT dvh_lastet_tid FROM SYSTEM.{table_name}")
+                assert cursor.fetchone()[0] is not None
+                cursor.execute(
+                    "SELECT data_type, data_default, nullable FROM all_tab_columns "
+                    "WHERE owner = 'SYSTEM' AND table_name = :table_name "
+                    "AND column_name = 'DVH_LASTET_TID'",
+                    table_name=table_name.upper(),
+                )
+                data_type, default, nullable = cursor.fetchone()
+                assert data_type == "DATE"
+                assert default.strip().upper() == "SYSDATE"
+                assert nullable == "N"
+                cursor.execute(
                     "SELECT column_name, comments FROM sys.all_col_comments "
                     "WHERE owner = :owner AND table_name = :table_name "
                     "AND comments IS NOT NULL",
@@ -335,7 +433,7 @@ def test_create_tables_writes_column_comments_to_all_comments(
                 table_comment = cursor.fetchone()[0]
 
             assert table_comment == expected_table_comment
-            assert comments == {
+            expected_comments = {
                 "PERIODE": (
                     "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
                 ),
@@ -343,11 +441,40 @@ def test_create_tables_writes_column_comments_to_all_comments(
                     "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
                     "#INNHOLD_EN Geographical area"
                 ),
-                "ANTALL": (
+            }
+            if table_name == aggregate.kontroll_tabell:
+                assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                expected_comments.update({
+                    "PRIMARY": (
+                        "#NAVN Primær prikket flagg #NAVN_EN Primary suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble primærprikket "
+                        "eller ikke #INNHOLD_EN Binary value that tells what values "
+                        "were primary suppressed"
+                    ),
+                    "SUPPRESSED": (
+                        "#NAVN Prikket flagg #NAVN_EN Suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble prikket eller "
+                        "ikke #INNHOLD_EN Binary value that tells what values were "
+                        "suppressed"
+                    ),
+                    "DVH_LASTET_TID": (
+                        "#NAVN DVH lastet tidspunkt #NAVN_EN DWH loaded timestamp "
+                        "#INNHOLD Lastetidspunkt for når raden ble skrevet til "
+                        "databasen #INNHOLD_EN Timestamp for when the row was written "
+                        "to the database"
+                    ),
+                })
+                comments = {
+                    column: comment
+                    for column, comment in comments.items()
+                    if column not in {"TELLEPUNKT", "VERDI"}
+                }
+            else:
+                expected_comments["ANTALL"] = (
                     "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
                     "#INNHOLD_EN Number of people"
-                ),
-            }
+                )
+            assert comments == expected_comments
     finally:
         with oracle_connection.cursor() as cursor:
             for table_name in [*tables, aggregate.meta_tabell]:
@@ -383,11 +510,11 @@ def test_validate_string_columns_rejects_non_text_columns(oracle_connection):
     ("sql", "column_name"),
     [
         (
-            "select 202501 as periode, 'Oslo' as region, 10 as antall from dual",
+            "select 2025 as periode, 'Oslo' as region, 10 as antall from dual",
             "periode",
         ),
         (
-            "select '202501' as periode, 10 as region, 10 as antall from dual",
+            "select '2025M01' as periode, 10 as region, 10 as antall from dual",
             "region",
         ),
     ],
@@ -401,7 +528,7 @@ def test_read_query_rejects_non_text_period_and_variables(
 
 def test_read_periods_rejects_non_text_period(oracle_connection):
     with pytest.raises(ValueError, match="Kolonnen periode.*tekstkolonne"):
-        read_periods(oracle_connection, "select 202501 as periode from dual", "periode")
+        read_periods(oracle_connection, "select 2025 as periode from dual", "periode")
 
 
 def test_write_database_writes_column_comments_to_all_comments(
@@ -444,30 +571,39 @@ def test_write_database_writes_column_comments_to_all_comments(
 
     try:
         with oracle_connection.cursor() as cursor:
-            for table_name in tables:
-                cursor.execute(
-                    f"CREATE TABLE SYSTEM.{table_name} ("
-                    "periode NUMBER, region VARCHAR2(100 CHAR), "
-                    "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
-                )
+            cursor.execute(
+                f"CREATE TABLE SYSTEM.{aggregate.prepub_tabell} ("
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
+            )
+            cursor.execute(
+                f"CREATE TABLE SYSTEM.{aggregate.kontroll_tabell} ("
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), "
+                "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
+                "primary NUMBER(1), suppressed NUMBER(1), "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
+            )
             cursor.execute(
                 oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell)
             )
 
         frame = pd.DataFrame(
             {
-                "periode": [202501],
+                "periode": ['2025M01'],
                 "region": ["Oslo"],
                 "antall": [10],
                 "primary": [True],
                 "suppressed": [True],
             }
         )
+        kontroll_frame = frame.drop(columns="antall").assign(
+            tellepunkt="antall", verdi=10
+        )[["periode", "region", "tellepunkt", "verdi", "primary", "suppressed"]]
         app._write_database(
             config,
             aggregate,
-            frame,
-            frame,
+            frame[["periode", "region", "antall"]],
+            kontroll_frame,
             app.Transfer(
                 oracle_connection,
                 StorageOption.DB,
@@ -500,7 +636,7 @@ def test_write_database_writes_column_comments_to_all_comments(
                 "#NAVN Tabell #NAVN_EN Table #INNHOLD Tabellinnhold "
                 "#INNHOLD_EN Table content"
             )
-            assert comments == {
+            expected_comments = {
                 "PERIODE": (
                     "#NAVN Periode #NAVN_EN Period #INNHOLD Måned #INNHOLD_EN Month"
                 ),
@@ -508,11 +644,40 @@ def test_write_database_writes_column_comments_to_all_comments(
                     "#NAVN Region #NAVN_EN Region #INNHOLD Geografisk område "
                     "#INNHOLD_EN Geographical area"
                 ),
-                "ANTALL": (
+            }
+            if table_name == aggregate.kontroll_tabell:
+                assert {"TELLEPUNKT", "VERDI"} <= comments.keys()
+                expected_comments.update({
+                    "PRIMARY": (
+                        "#NAVN Primær prikket flagg #NAVN_EN Primary suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble primærprikket "
+                        "eller ikke #INNHOLD_EN Binary value that tells what values "
+                        "were primary suppressed"
+                    ),
+                    "SUPPRESSED": (
+                        "#NAVN Prikket flagg #NAVN_EN Suppressed flag "
+                        "#INNHOLD Binær verdi som sier om en verdi ble prikket eller "
+                        "ikke #INNHOLD_EN Binary value that tells what values were "
+                        "suppressed"
+                    ),
+                    "DVH_LASTET_TID": (
+                        "#NAVN DVH lastet tidspunkt #NAVN_EN DWH loaded timestamp "
+                        "#INNHOLD Lastetidspunkt for når raden ble skrevet til "
+                        "databasen #INNHOLD_EN Timestamp for when the row was written "
+                        "to the database"
+                    ),
+                })
+                comments = {
+                    column: comment
+                    for column, comment in comments.items()
+                    if column not in {"TELLEPUNKT", "VERDI"}
+                }
+            else:
+                expected_comments["ANTALL"] = (
                     "#NAVN Antall #NAVN_EN Count #INNHOLD Antall personer "
                     "#INNHOLD_EN Number of people"
-                ),
-            }
+                )
+            assert comments == expected_comments
     finally:
         with oracle_connection.cursor() as cursor:
             for table_name in [*tables, aggregate.meta_tabell]:
@@ -544,6 +709,36 @@ def test_empty_database_result_does_not_inspect_or_mutate_connection():
     )
 
 
+@pytest.mark.parametrize("empty", [False, True])
+def test_full_relast_deletes_all_rows_before_insert(empty):
+    connection = MagicMock()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    aggregate = configuration().aggregater[0]
+    frame = pd.DataFrame(
+        {
+            "periode": [] if empty else ["2025M01"],
+            "region": [] if empty else ["Oslo"],
+            "antall": [] if empty else [10],
+        }
+    )
+
+    write_result(
+        connection,
+        "TEST",
+        aggregate,
+        "tabell_prepub",
+        frame,
+        full_relast=True,
+    )
+
+    cursor.execute.assert_called_once_with("DELETE FROM test.tabell_prepub")
+    if empty:
+        cursor.executemany.assert_not_called()
+    else:
+        cursor.executemany.assert_called_once()
+    connection.commit.assert_called_once()
+
+
 def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
     """Lar Oracle avvise kolonner som ikke finnes i måltabellen."""
     table = f"sb_test_{uuid4().hex[:12]}"
@@ -563,7 +758,7 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
                 aggregate,
                 table,
                 pd.DataFrame(
-                    {"periode": [202501], "region": ["Oslo"], "ukjent": [10]}
+                    {"periode": ['2025M01'], "region": ["Oslo"], "ukjent": [10]}
                 ),
             )
 
@@ -576,31 +771,31 @@ def test_insert_schema_errors_are_reported_by_oracle(oracle_connection):
         oracle_connection.commit()
 
 
-@pytest.mark.parametrize("periods", [None, [], ["202502"], ["202501", "202502"]])
+@pytest.mark.parametrize("periods", [None, [], ["2025M02"], ["2025M01", "2025M02"]])
 def test_read_query_filters_periods_in_oracle(oracle_connection, periods):
     sql = (
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
-        "union all select '202502', 'Oslo', 20 from dual;"
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual "
+        "union all select '2025M02', 'Oslo', 20 from dual;"
     )
     aggregate = configuration().aggregater[0]
-    assert read_periods(oracle_connection, sql, "periode") == {"202501", "202502"}
+    assert read_periods(oracle_connection, sql, "periode") == {"2025M01", "2025M02"}
 
     frame = read_query(
         oracle_connection, sql, aggregate, periods_to_load=periods
     )
-    assert sorted(frame["periode"].tolist()) == (["202501", "202502"] if periods is None else [str(value) for value in periods])
+    assert sorted(frame["periode"].tolist()) == (["2025M01", "2025M02"] if periods is None else [str(value) for value in periods])
 
 
-def test_read_query_binds_string_periods_in_oracle(oracle_connection):
+def test_read_query_rejects_invalid_period_after_binding_in_oracle(oracle_connection):
     period = "x') OR 1=1 --"
     sql = (
         "select 'x'') OR 1=1 --' as periode, 'Oslo' as region, 10 as antall from dual "
         "union all select '2025-02', 'Oslo', 20 from dual"
     )
-    frame = read_query(
-        oracle_connection, sql, configuration().aggregater[0], periods_to_load=[period]
-    )
-    assert frame["periode"].tolist() == [period]
+    with pytest.raises(ValueError, match="Ugyldig periode"):
+        read_query(
+            oracle_connection, sql, configuration().aggregater[0], periods_to_load=[period]
+        )
 
 
 def test_read_target_periods_uses_configured_schema(oracle_connection):
@@ -609,12 +804,12 @@ def test_read_target_periods_uses_configured_schema(oracle_connection):
     aggregate = configuration().aggregater[0].model_copy(update={"tabell": table})
     try:
         with oracle_connection.cursor() as cursor:
-            cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode VARCHAR2(6 CHAR))")
+            cursor.execute(f"CREATE TABLE SYSTEM.{prepub_table} (periode VARCHAR2(7 CHAR))")
             cursor.executemany(
                 f"INSERT INTO SYSTEM.{prepub_table} (periode) VALUES (:1)",
-                [("202501",), ("202502",), ("202502",)],
+                [("2025M01",), ("2025M02",), ("2025M02",)],
             )
-        assert read_target_periods(oracle_connection, "SYSTEM", aggregate) == {"202501", "202502"}
+        assert read_target_periods(oracle_connection, "SYSTEM", aggregate) == {"2025M01", "2025M02"}
     finally:
         with oracle_connection.cursor() as cursor:
             cursor.execute(f"DROP TABLE SYSTEM.{prepub_table} PURGE")
@@ -624,30 +819,27 @@ def test_read_target_periods_uses_configured_schema(oracle_connection):
 def test_read_query_handles_more_than_1000_periods_in_oracle(oracle_connection):
     frame = read_query(
         oracle_connection,
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual",
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual",
         configuration().aggregater[0],
-        periods_to_load=[str(period) for period in range(202000, 203001)],
+        periods_to_load=[
+            f"{year}M{month:02d}" for year in range(2000, 2100) for month in range(1, 13)
+        ],
     )
-    assert frame["periode"].tolist() == ["202501"]
+    assert frame["periode"].tolist() == ["2025M01"]
 
 
 @pytest.mark.parametrize(
     ("mode", "loaded", "expected"),
     [
         (
-                "overskriv_ikke",
-                ["202503"],
-                [("202500", 0), ("202501", 1), ("202502", 2), ("202503", 30)],
+                "legg_til_nye_perioder",
+                ["2025M03"],
+                [("2024M12", 0), ("2025M01", 1), ("2025M02", 2), ("2025M03", 30)],
         ),
         (
-                "overskriv_alt",
-                ["202501", "202502", "202503"],
-                [("202500", 0), ("202501", 10), ("202502", 20), ("202503", 30)],
-        ),
-        (
-                "overskriv_siste_periode",
-                ["202503"],
-                [("202500", 0), ("202501", 1), ("202502", 2), ("202503", 30)],
+                "overskriv_eksisterende_perioder",
+                ["2025M01", "2025M02", "2025M03"],
+                [("2024M12", 0), ("2025M01", 10), ("2025M02", 20), ("2025M03", 30)],
         ),
     ],
 )
@@ -661,9 +853,9 @@ def test_process_aggregate_only_masks_selected_periods(
     aggregate.tabell = table
     aggregate.inkrementell_strategi = IncrementalMode(mode)
     (tmp_path / aggregate.sporring_sql).write_text(
-        "select '202501' as periode, 'Oslo' as region, 10 as antall from dual "
-        "union all select '202502', 'Oslo', 20 from dual "
-        "union all select '202503', 'Oslo', 30 from dual;"
+        "select '2025M01' as periode, 'Oslo' as region, 10 as antall from dual "
+        "union all select '2025M02', 'Oslo', 20 from dual "
+        "union all select '2025M03', 'Oslo', 30 from dual;"
     )
     # == periods passed to prikking will be loaded in the database.
     # Store those here to use in an assert later on
@@ -681,32 +873,33 @@ def test_process_aggregate_only_masks_selected_periods(
     monkeypatch.setattr(
         oracle,
         "read_metadata",
-        lambda *args: TableMetadata(table=Metadata(), columns={}),
+        lambda *args: TableMetadata.from_aggregate(aggregate),
     )
     monkeypatch.setattr(oracle, "write_comments", lambda *args: None)
+    monkeypatch.setattr(oracle, "write_kontroll_comments", lambda *args: None)
     prepub_table = f"{table}_prepub"
     kontroll_table = f"{table}_kontroll"
     try:
         with oracle_connection.cursor() as cursor:
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{prepub_table} ("
-                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), antall NUMBER)"
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), antall NUMBER, "
+                "dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL)"
             )
             cursor.execute(
                 f"CREATE TABLE SYSTEM.{kontroll_table} ("
-                "periode VARCHAR2(6 CHAR), region VARCHAR2(100 CHAR), "
-                "antall NUMBER, primary NUMBER(1), suppressed NUMBER(1))"
+                "periode VARCHAR2(7 CHAR), region VARCHAR2(100 CHAR), "
+                "tellepunkt VARCHAR2(128 CHAR), verdi NUMBER, "
+                "primary NUMBER(1), suppressed NUMBER(1))"
             )
             cursor.execute(oracle.create_meta_table_statement("SYSTEM", aggregate.meta_tabell))
-            existing = [("202500", "Oslo", 0), ("202501", "Oslo", 1), ("202502", "Oslo", 2)]
-            if mode == "overskriv_siste_periode":
-                # Make 202503 the existing latest period so this mode must replace it.
-                existing.append(("202503", "Oslo", 3))
+            existing = [("2024M12", "Oslo", 0), ("2025M01", "Oslo", 1), ("2025M02", "Oslo", 2)]
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{prepub_table} VALUES (:1, :2, :3)", existing
+                f"INSERT INTO SYSTEM.{prepub_table} (periode, region, antall) VALUES (:1, :2, :3)",
+                existing,
             )
             cursor.executemany(
-                f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, :3, 1, 1)",
+                f"INSERT INTO SYSTEM.{kontroll_table} VALUES (:1, :2, 'antall', :3, 1, 1)",
                 existing,
             )
 
@@ -726,8 +919,8 @@ def test_process_aggregate_only_masks_selected_periods(
 
         assert sorted(masked_periods) == loaded
         with (oracle_connection.cursor() as cursor):
-            for name in (prepub_table, kontroll_table):
-                cursor.execute(f"SELECT periode, antall FROM SYSTEM.{name} ORDER BY periode")
+            for name, measure in ((prepub_table, "antall"), (kontroll_table, "verdi")):
+                cursor.execute(f"SELECT periode, {measure} FROM SYSTEM.{name} ORDER BY periode")
                 assert cursor.fetchall() == expected
     finally:
         with oracle_connection.cursor() as cursor:
@@ -760,3 +953,49 @@ def test_executemany_sql_logs_statement_without_rows(caplog):
     cursor.executemany.assert_called_once_with(statement, rows)
     assert statement in caplog.text
     assert "sensitiv verdi" not in caplog.text
+
+
+def test_process_aggregate_prikker_hvert_tellepunkt_og_navngir_kontroll(monkeypatch, tmp_path):
+    config = configuration()
+    aggregate = config.aggregater[0]
+    aggregate.tellepunkter = [Tellepunkt(kolonne="antall"), Tellepunkt(kolonne="kvinner")]
+    data = pd.DataFrame(
+        {"periode": ["2025M01", "2025M01"], "region": ["Oslo", "Bergen"],
+         "antall": [10, 20], "kvinner": [4, 8]}
+    )
+    prikket = []
+
+    def mask(frame, periode, formula, tall_kolonne, *args):
+        prikket.append(tall_kolonne)
+        kontroll = frame.copy()
+        kontroll["primary"] = False
+        kontroll["suppressed"] = tall_kolonne == "kvinner"
+        prepub = frame.copy()
+        prepub[tall_kolonne] = prepub[tall_kolonne] * 100
+        if tall_kolonne == "kvinner":
+            prepub[tall_kolonne] = float("nan")
+        return prepub, kontroll
+
+    written = {}
+    monkeypatch.setattr(app, "prikking", mask)
+    monkeypatch.setattr(app, "_get_periods_to_load", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_read_input", lambda *a, **k: data)
+    monkeypatch.setattr(
+        app, "_write_output",
+        lambda config, aggregate, prepub, kontroll, *a, **k: written.update(prepub=prepub, kontroll=kontroll),
+    )
+
+    resultat = app._process_aggregate(
+        config, aggregate, tmp_path,
+        app.Transfer(None, StorageOption.CSV, StorageOption.CSV, Path("dummy"), Path("dummy")),
+        dry_run=True,
+    )
+
+    assert prikket == ["antall", "kvinner"]
+    assert list(written["prepub"].columns) == ["periode", "region", "antall", "kvinner"]
+    assert written["prepub"]["kvinner"].tolist() == [None, None]
+    kontroll = written["kontroll"]
+    assert list(kontroll.columns) == ["periode", "region", "tellepunkt", "verdi", "primary", "suppressed"]
+    assert kontroll["tellepunkt"].tolist() == ["antall", "antall", "kvinner", "kvinner"]
+    assert kontroll["suppressed"].tolist() == [False, False, True, True]
+    assert resultat.antall_prikket == 2

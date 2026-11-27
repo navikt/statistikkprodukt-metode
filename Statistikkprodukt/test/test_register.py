@@ -1,5 +1,8 @@
+import zipfile
+
 import pytest
 from statistikkprodukt.config import ConfigError, StatistikkproduktRegister
+from statistikkprodukt.config import register
 from statistikkprodukt.config.register import read_register_file
 from test.test_config import configuration
 
@@ -10,21 +13,77 @@ HEADER = (
 
 
 def _write(tmp_path, text):
-    path = tmp_path / "statistikkprodukt_register.txt"
+    path = tmp_path / "statistikkprodukt_register.md"
     path.write_text(text, encoding="utf-8")
     return path
+
+
+@pytest.mark.parametrize("checkout", [False, True])
+def test_find_register_in_checkout_or_package(tmp_path, monkeypatch, checkout):
+    root = tmp_path / "project"
+    package = root / "Statistikkprodukt" / "src" / "statistikkprodukt"
+    package.mkdir(parents=True)
+    monkeypatch.setattr(register, "__file__", str(package / "config" / "register.py"))
+    monkeypatch.setattr(register, "files", lambda _package: package)
+    monkeypatch.delenv(register.STATISTIKKREGISTER_FIL, raising=False)
+    packaged_file = _write(package, HEADER + "| 21000 | Team A | pakket_tabell |\n")
+    expected = (
+        _write(root, HEADER + "| 21001 | Team A | repository_tabell |\n")
+        if checkout else packaged_file
+    )
+
+    resolved = StatistikkproduktRegister().path
+
+    assert resolved == expected
+    assert read_register_file(resolved) == read_register_file(expected)
+
+
+def test_find_register_environment_override(tmp_path, monkeypatch):
+    path = _write(tmp_path, HEADER + "| 21000 | Team A | valgt_tabell |\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(register.STATISTIKKREGISTER_FIL, path.name)
+
+    assert StatistikkproduktRegister().path == path
+
+
+def test_read_packaged_register_without_filesystem_path(tmp_path, monkeypatch):
+    archive_path = tmp_path / "package.zip"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(
+            register.STATISTIKKREGISTER_FIL_DEFAULT,
+            HEADER + "| 21000 | Team A | pakket_tabell |\n",
+        )
+    monkeypatch.delenv(register.STATISTIKKREGISTER_FIL, raising=False)
+    monkeypatch.setattr(
+        register, "__file__",
+        str(tmp_path / "lib" / "site-packages" / "statistikkprodukt" / "config" / "register.py"),
+    )
+    with zipfile.ZipFile(archive_path) as archive:
+        monkeypatch.setattr(register, "files", lambda _package: zipfile.Path(archive))
+
+        assert read_register_file(StatistikkproduktRegister().path) == {
+            "21000": "pakket_tabell",
+        }
+
+
+def test_find_register_missing_environment_override_does_not_fall_back(tmp_path, monkeypatch):
+    path = tmp_path / "finnes_ikke.md"
+    monkeypatch.setenv(register.STATISTIKKREGISTER_FIL, str(path))
+
+    with pytest.raises(ConfigError, match="STATISTIKKPRODUKT_REGISTER_FIL"):
+        read_register_file(StatistikkproduktRegister().path)
 
 
 def test_read_register(tmp_path):
     path = _write(
         tmp_path, HEADER
-        + "| 21000 | Team A | ost_befolkning_alder |\n"
-        + "| 21001 | Team B | ost_befolkning_kjonn |\n",
+        + "| 20000 | Team A | ost_befolkning_alder |\n"
+        + "| 21000 | Team B | ost_befolkning_kjonn |\n",
     )
 
     assert read_register_file(path) == {
-        "21000": "ost_befolkning_alder",
-        "21001": "ost_befolkning_kjonn",
+        "20000": "ost_befolkning_alder",
+        "21000": "ost_befolkning_kjonn",
     }
 
 
@@ -35,7 +94,7 @@ def test_read_register_rejects_other_delimiters(tmp_path, delimiter):
         read_register_file(path)
 
 
-@pytest.mark.parametrize("agg_id", ["NAV21000", "nav21000", "00000", "00001", "09999", "20000", "21 000", "23000"])
+@pytest.mark.parametrize("agg_id", ["NAV21000", "nav21000", "00000", "00001", "09999", "19999", "21 000", "23000"])
 def test_read_register_rejects_noncanonical_ids(tmp_path, agg_id):
     path = _write(tmp_path, HEADER + f"| {agg_id} | Team A | ost_befolkning_alder |\n")
     with pytest.raises(ConfigError, match="uten NAV-prefiks"):

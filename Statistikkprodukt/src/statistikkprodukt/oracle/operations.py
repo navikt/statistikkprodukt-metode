@@ -10,9 +10,10 @@ from statistikkprodukt.config import (
     DatabaseConnection,
     Aggregate,
     validate_identifier,
+    validate_period,
 )
 from statistikkprodukt.app.models import TableMetadata
-from statistikkprodukt.oracle.aggregate_table import comment_statements
+from statistikkprodukt.oracle.aggregate_table import comment_statements, kontroll_comment_statements
 from statistikkprodukt.oracle.utils import execute_sql, executemany_sql
 
 LOGGER = logging.getLogger(__name__)
@@ -87,6 +88,8 @@ def read_query(
         rows = cursor.fetchall()
 
     frame = pd.DataFrame(rows, columns=columns)
+    for period in frame[aggregate.periodisering.kolonne].unique():
+        validate_period(period)
     LOGGER.debug("Spørringen for %s ga %d rader med kolonnene %s.", aggregate.tabell, len(frame), columns)
     return frame
 
@@ -98,21 +101,20 @@ def read_periods(
         *,
         source_query: bool = True,
 ) -> set[str]:
-    """Henter bare unike, ikke-tomme perioder fra en kildespørring."""
+    """Henter og validerer unike perioder fra en kildespørring."""
     period = validate_identifier(period)
     sql = sql.strip().removesuffix(";").rstrip()
     with connection.cursor() as cursor:
         try:
             execute_sql(
                 cursor,
-                f"SELECT DISTINCT {period} FROM (\n{sql}\n) "
-                f"WHERE {period} IS NOT NULL",
+                f"SELECT DISTINCT {period} FROM (\n{sql}\n)",
             )
         except oracledb.DatabaseError as exc:
             _raise_friendly_sql_error(exc, source_query=source_query)
             raise
         _validate_string_type(cursor.description, period)
-        periods = {row[0] for row in cursor.fetchall()}
+        periods = {validate_period(row[0]) for row in cursor.fetchall()}
     LOGGER.debug("Fant %d perioder i %s.", len(periods), "kildespørringen" if source_query else "måltabellen")
     return periods
 
@@ -152,22 +154,6 @@ def _raise_friendly_sql_error(exc: oracledb.DatabaseError, source_query: bool) -
                 "Måltabellen finnes ikke, eller databasebrukeren mangler tilgang. "
                 "Du kan se hele spørringen som kjørte ved å bruke --log-level=DEBUG."
             ) from exc
-
-
-def table_exists(
-        connection: oracledb.Connection, schema: str, table_name: str
-) -> bool:
-    """Sjekker om en tabell finnes i det angitte Oracle-skjemaet."""
-    with connection.cursor() as cursor:
-        execute_sql(
-            cursor,
-            "SELECT 1 FROM all_tables WHERE owner = :owner AND table_name = :table_name",
-            owner=schema.upper(),
-            table_name=table_name.upper(),
-        )
-        exists = cursor.fetchone() is not None
-    LOGGER.debug("Tabellen %s.%s finnes: %s.", schema, table_name, exists)
-    return exists
 
 
 def validate_string_columns(
@@ -227,23 +213,43 @@ def _validate_string_type(description: Any, name: str) -> None:
         )
 
 
-def create_table_statement(
-        schema: str, table_name: str, sql: str, *, with_markers: bool = False
+def create_table_statement(schema: str, table_name: str, sql: str) -> str:
+    """Lager DDL for en tom tabell basert på SQL-spørringens kolonner."""
+    table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
+    source_sql = sql.strip().removesuffix(";").rstrip()
+    return (
+        f"CREATE TABLE {table} AS\n"
+        f"SELECT source_data.*\n"
+        f"FROM (\n{source_sql}\n) source_data\n"
+        "WHERE 1 = 0"
+    )
+
+
+def create_kontroll_table_statement(
+        schema: str, table_name: str, sql: str, aggregate: Aggregate
 ) -> str:
-    """Lager DDL for en tom tabell basert på SQL-spørringens kolonner.
+    """Lager DDL for kontrolldata med tellepunktene samlet i tellepunkt/verdi.
 
     Kontrolltabellen har i tillegg markørkolonnene primary og suppressed.
     """
     table = f"{validate_identifier(schema)}.{validate_identifier(table_name)}"
     source_sql = sql.strip().removesuffix(";").rstrip()
-    markers = (
-        ", CAST(NULL AS NUMBER(1)) AS primary, CAST(NULL AS NUMBER(1)) AS suppressed"
-        if with_markers
-        else ""
+    dimensions = [
+        aggregate.periodisering.kolonne,
+        *(variable.kolonne for variable in aggregate.variabler),
+    ]
+    selected_dimensions = ", ".join(
+        f"source_data.{validate_identifier(column)}" for column in dimensions
     )
+    # verdi får samme type som første tellepunkt
+    measure = validate_identifier(aggregate.tellepunkter[0].kolonne)
     return (
         f"CREATE TABLE {table} AS\n"
-        f"SELECT source_data.*{markers}\n"
+        f"SELECT {selected_dimensions}, "
+        "CAST(NULL AS VARCHAR2(128)) AS tellepunkt, "
+        f"source_data.{measure} AS verdi, "
+        "CAST(NULL AS NUMBER(1)) AS primary, "
+        "CAST(NULL AS NUMBER(1)) AS suppressed\n"
         f"FROM (\n{source_sql}\n) source_data\n"
         "WHERE 1 = 0"
     )
@@ -261,6 +267,21 @@ def write_comments(
             execute_sql(cursor, statement)
 
 
+def write_kontroll_comments(
+        connection: oracledb.Connection,
+        schema: str,
+        table_name: str,
+        aggregate: Aggregate,
+        metadata: TableMetadata,
+) -> None:
+    """Oppretter eller oppdaterer kommentarer for kontrolltabellen."""
+    with connection.cursor() as cursor:
+        for statement in kontroll_comment_statements(
+            schema, table_name, aggregate, metadata
+        ):
+            execute_sql(cursor, statement)
+
+
 def write_result(
         connection: oracledb.Connection,
         schema: str,
@@ -268,14 +289,23 @@ def write_result(
         table_name: str,
         frame: pd.DataFrame,
         *,
+        full_relast: bool = False,
         dry_run: bool = False,
 ) -> None:
     """Skriver aggregatresultatet til tabellen table_name transaksjonelt."""
-    if frame.empty:
+    if frame.empty and not full_relast:
         LOGGER.info("Ingen rader for %s; databasen endres ikke.", table_name)
         return
 
     if dry_run:
+        if full_relast:
+            LOGGER.info(
+                "Ville slettet alle rader fra %s.%s før innsetting av %d rader.",
+                schema,
+                table_name,
+                len(frame),
+            )
+            return
         LOGGER.info(
             "Ville skrevet %d rader til %s.%s.",
             len(frame),
@@ -297,9 +327,15 @@ def write_result(
 
     try:
         with connection.cursor() as cursor:
+            if full_relast:
+                LOGGER.debug("Sletter alle eksisterende rader i %s.", qualified_table_name)
+                execute_sql(cursor, f"DELETE FROM {qualified_table_name}")
+            else:
+                _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
+
             LOGGER.debug("Skriver %d rader til %s (periodekolonne=%s).", len(frame), qualified_table_name, period_column)
-            _delete_incremental_if_overwrite(cursor, qualified_table_name, frame, period_column)
             _insert_rows(cursor, qualified_table_name, frame)
+
         connection.commit()
         LOGGER.debug("Committet skriving til %s.", qualified_table_name)
     except Exception:

@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-from statistikkprodukt.config import Aggregate, IncrementalMode
+from statistikkprodukt.config import Aggregate, IncrementalMode, validate_period
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +12,11 @@ def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
     path = directory / f"{aggregate.tabell}.csv"
     LOGGER.debug("Leser CSV-fil %s.", path)
     try:
-        frame = pd.read_csv(path)
+        period_columns = {
+            column: "string" for column in pd.read_csv(path, nrows=0).columns
+            if column.lower() == aggregate.periodisering.kolonne
+        }
+        frame = pd.read_csv(path, dtype=period_columns)
     except OSError as exc:
         raise ValueError(f"Kan ikke lese CSV-filen {path}.") from exc
     except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as exc:
@@ -20,9 +24,8 @@ def read_csv(directory: Path, aggregate: Aggregate) -> pd.DataFrame:
 
     LOGGER.debug("Leste %d rader og %d kolonner fra %s.", len(frame), len(frame.columns), path)
     validate_columns(frame, aggregate)
-    frame[aggregate.periodisering.kolonne] = frame[
-        aggregate.periodisering.kolonne
-    ].astype("string")
+    for period in frame[aggregate.periodisering.kolonne].unique():
+        validate_period(period)
 
     return frame
 
@@ -65,15 +68,16 @@ def write_csv(
         aggregate: Aggregate,
         name: str,
         *,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> None:
     """Skriver aggregatresultatet til {name}.csv med konfigurert inkrementell oppførsel."""
     path = directory / f"{name}.csv"
-    if frame.empty:
+    if frame.empty and not full_relast:
         print(f"Ingen rader for {name}; CSV-filen endres ikke.")
         return
 
-    if aggregate.inkrementell_strategi != IncrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi != IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER:
         LOGGER.warning("CSV filer overskrives også når inkrementell modus er satt til %s.",
                        aggregate.inkrementell_strategi.value)
 

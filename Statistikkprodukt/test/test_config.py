@@ -1,19 +1,28 @@
+from unittest.mock import Mock
+
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from statistikkprodukt.config import (
+    AggregateConfiguration,
     ConfigError,
     Configuration,
+    ConfigurationSource,
     Tellepunkt,
     load_configuration,
-    resolve_secret,
+    resolve_config,
 )
+from statistikkprodukt.config.loader import _find_aggregate_configurations
+
+AGGREGATE_NAME = "ost_am_befolkning_mnd_region"
 
 
 def configuration():
     """Bygger en gyldig konfigurasjon for en liten aggregattabell."""
     return Configuration.model_validate(
         {
+            "version": 1,
             "connection": {
                 "database": "DWHP",
                 "schema": "TEST",
@@ -27,9 +36,15 @@ def configuration():
                     "navn-en": "Name",
                     "innhold": "Innhold",
                     "innhold-en": "Content",
-                    "tabell": "TABELL",
-                    "obt-tabell": "OBT_TABELL",
+                    "tabell": AGGREGATE_NAME,
+                    "referanse-tabell": "OBT_TABELL",
                     "sporring_sql": "select.sql",
+                    "statistikkbank": {
+                        "subject": "Befolkning",
+                        "subject-code": "AM",
+                        "subject-kort": "BEFOLKNING",
+                        "subject-area": "Arbeidsmarked",
+                    },
                     "periodisering": {
                         "navn": "Periodisering",
                         "navn-en": "Periodization",
@@ -37,7 +52,7 @@ def configuration():
                         "innhold": "Månedsperiode",
                         "innhold-en": "Month period",
                     },
-                    "inkrementell-strategi": "overskriv_ikke",
+                    "inkrementell-strategi": "legg_til_nye_perioder",
                     "tellepunkter": [{"kolonne": "antall"}],
                     "formula": "~ periode / region",
                     "prikking": True,
@@ -54,6 +69,281 @@ def test_configuration_rejects_unknown_keys():
     config = configuration().model_dump(by_alias=True)
     config["unknown"] = True
     with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_statistikkbank_section_is_required():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0].pop("statistikkbank")
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("discontinued", True),
+        ("discontinued", False),
+        ("official-statistics", True),
+        ("official-statistics", False),
+    ],
+)
+def test_statistikkbank_yes_no_rejects_unquoted_yaml_boolean(field, value):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"][field] = value
+
+    with pytest.raises(ValidationError, match="Sett verdien i anførselstegn"):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("discontinued", "yes", "YES"),
+        ("official-statistics", "no", "NO"),
+    ],
+)
+def test_statistikkbank_yes_no_accepts_quoted_values(field, value, expected):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"][field] = value
+
+    parsed = Configuration.model_validate(config)
+
+    assert (
+        getattr(parsed.aggregater[0].statistikkbank, field.replace("-", "_"))
+        == expected
+    )
+
+
+def test_configuration_version_is_required():
+    config = configuration().model_dump(by_alias=True)
+    config.pop("version")
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_configuration_rejects_unsupported_version():
+    config = configuration().model_dump(by_alias=True)
+    config["version"] = 2
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_source_and_aggregate_configuration_versions_are_required():
+    config = configuration()
+    with pytest.raises(ValidationError):
+        ConfigurationSource.model_validate(
+            {
+                "connection": config.connection.model_dump(by_alias=True),
+                "filsok": ["aggregater/**"],
+                "aggregater": ["tabell"],
+            }
+        )
+    with pytest.raises(ValidationError):
+        AggregateConfiguration.model_validate(
+            {"definisjon": config.aggregater[0].model_dump(by_alias=True)}
+        )
+
+
+def test_source_and_aggregate_configuration_reject_unsupported_versions():
+    config = configuration()
+    with pytest.raises(ValidationError):
+        ConfigurationSource.model_validate(
+            {
+                "version": 2,
+                "connection": config.connection.model_dump(by_alias=True),
+                "filsok": ["aggregater/**"],
+                "aggregater": ["tabell"],
+            }
+        )
+    with pytest.raises(ValidationError):
+        AggregateConfiguration.model_validate(
+            {
+                "version": 2,
+                "definisjon": config.aggregater[0].model_dump(by_alias=True),
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("subject_code", "subject_area"),
+    [
+        ("AM", "Arbeidsmarked"),
+        ("SF", "Sykefravær"),
+        ("AU", "Arbeidsavklaringspenger og uføretrygd"),
+        ("FA", "Familie"),
+        ("OT", "Oppfølging og tiltak"),
+        ("PE", "Pensjon"),
+        ("SB", "Saksbehandling"),
+        ("GA", "Flere statistikkområder"),
+    ],
+)
+def test_statistikkbank_accepts_subject_code_and_area_mapping(subject_code, subject_area):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"] = {
+        "subject": "Befolkning",
+        "subject-code": subject_code,
+        "subject-kort": "BEFOLKNING",
+        "subject-area": subject_area,
+    }
+    config["aggregater"][0]["tabell"] = (
+        f"ost_{subject_code.lower()}_befolkning_mnd_region"
+    )
+
+    parsed = Configuration.model_validate(config)
+
+    assert parsed.aggregater[0].statistikkbank.subject_code == subject_code
+
+
+def test_statistikkbank_subject_mapping_error_includes_mapping():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"] = {
+        "subject": "Befolkning",
+        "subject-code": "AM",
+        "subject-kort": "BEFOLKNING",
+        "subject-area": "Familie",
+    }
+
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+
+    assert (
+        "AM: Arbeidsmarked\nSF: Sykefravær\n"
+        "AU: Arbeidsavklaringspenger og uføretrygd\nFA: Familie\n"
+        "OT: Oppfølging og tiltak\nPE: Pensjon\nSB: Saksbehandling\n"
+        "GA: Flere statistikkområder"
+    ) in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "~ region",
+        "~ periode",
+        "~periode*region",
+        "~ periode + region",
+        "~ periode / region",
+        "~ periode : region",
+        "~ (periode + region) / (region * periode)",
+        "~ ((region))",
+        "~ PERIODE * Region",
+        "~\tperiode\n+ region ",
+        " ~ region",
+    ],
+)
+def test_aggregate_accepts_formula_with_dimensions_and_supported_operators(formula):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    assert Configuration.model_validate(config).aggregater[0].formula == formula
+
+
+@pytest.mark.parametrize("formula", ["periode * region", "antall ~ region"])
+def test_aggregate_formula_must_start_with_tilde(formula):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+
+    assert f"formula '{formula.strip()}' må starte med ~" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("formula", "message"),
+    [
+        ("", "Strengen kan ikke være tom"),
+        ("~", "må inneholde et uttrykk etter ~"),
+        ("~ ()", "Forventet kolonnenavn eller '(', men fikk: ')'"),
+        ("~ (region", "Ubalanserte parenteser i uttrykket: ' (region'."),
+        ("~ region)", "Forventet en av '*+/:)', men fikk: ')'"),
+        ("~ region +", "Uttrykket kan ikke slutte med en '*+/:': ' region +'."),
+        ("~ * region", "Forventet kolonnenavn eller '(', men fikk: '*'"),
+        ("~ region periode", "Forventet en av '*+/:)', men fikk: 'periode'"),
+        ("~ region (periode)", "Forventet en av '*+/:)', men fikk: '('"),
+        ("~ region ** periode", "Forventet kolonnenavn eller '(', men fikk: '*'"),
+        (
+            "~ region - periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region ^ periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        ("~ region + 1", "Forventet kolonnenavn eller '(', men fikk: '1'"),
+        ("~ region ~ periode", "kan ikke inneholde flere ~"),
+        ("~ ukjent", "Forventet kolonnenavn eller '(', men fikk: 'ukjent'"),
+        ("~ antall", "Forventet kolonnenavn eller '(', men fikk: 'antall'"),
+        ("~ region + antall", "Forventet kolonnenavn eller '(', men fikk: 'antall'"),
+        ("~ tellepunkt", "Forventet kolonnenavn eller '(', men fikk: 'tellepunkt'"),
+        ("~ verdi", "Forventet kolonnenavn eller '(', men fikk: 'verdi'"),
+        ("~ log(region)", "Forventet kolonnenavn eller '(', men fikk: 'log'"),
+        (
+            "~ region; periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region$",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region#",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ region @ + periode",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        ("~ region + 1periode", "Forventet kolonnenavn eller '(', men fikk: '1periode'"),
+        ("~ region + _periode", "Forventet kolonnenavn eller '(', men fikk: '_periode'"),
+        (
+            "~ region # kommentar",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+        (
+            "~ `region`",
+            "inneholder ugyldige tegn. Bare kolonnenavn, operatorene * + / : og parenteser er tillatt.",
+        ),
+    ],
+)
+def test_aggregate_rejects_invalid_formula(formula, message):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["formula"] = formula
+
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+
+    assert message in str(error.value)
+
+
+def test_aggregate_formula_uses_configured_column_names():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    aggregate["periodisering"]["kolonne"] = "maaned"
+    aggregate["variabler"] = [{"kolonne": "alder"}, {"kolonne": "kjonn"}]
+    aggregate["formula"] = "~ maaned * (alder + kjonn)"
+    aggregate["tabell"] = "ost_am_befolkning_mnd_alder_kjonn"
+
+    Configuration.model_validate(config)
+
+    aggregate["formula"] = "~ periode * region"
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+    assert "Forventet kolonnenavn eller '(', men fikk: 'periode'" in str(error.value)
+
+
+@pytest.mark.parametrize("mode", ["overskriv_siste_periode", "overskriv_ikke", "overskriv_alt"])
+def test_configuration_rejects_removed_incremental_mode(mode):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["inkrementell-strategi"] = mode
+
+    with pytest.raises(
+        ValidationError,
+        match="inkrementell-strategi må være én av legg_til_nye_perioder, overskriv_eksisterende_perioder",
+    ):
         Configuration.model_validate(config)
 
 
@@ -75,8 +365,8 @@ def test_aggregate_id_integer_is_converted_to_string():
 
 
 @pytest.mark.parametrize("agg_id", [
-    "00000", "00001", "09999", "0", "0000", "000000", "10000",
-    "NAV00001", "NAV21000", "nav21000", "20000", "23000",
+    "00000", "00001", "09999", "0", "0000", "000000", "10000", "19999",
+    "NAV00001", "NAV21000", "nav21000", "23000",
 ])
 @pytest.mark.parametrize("allow_development_id", [False, True])
 def test_aggregate_id_validation_only_bypasses_development_id(agg_id, allow_development_id):
@@ -91,12 +381,22 @@ def test_aggregate_id_validation_only_bypasses_development_id(agg_id, allow_deve
             Configuration.model_validate(config, context=context)
 
 
+@pytest.mark.parametrize("agg_id", ["20000", "22999"])
+def test_aggregate_id_accepts_range_boundaries(agg_id):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["id"] = agg_id
+
+    assert Configuration.model_validate(config).aggregater[0].id == agg_id
+
+
 @pytest.mark.parametrize("agg_id", ["00000", "00001", "09999", "21000"])
 def test_configuration_rejects_duplicate_ids_including_test_series(agg_id):
     config = configuration().model_dump(by_alias=True)
     aggregate = config["aggregater"][0]
     aggregate["id"] = agg_id
-    config["aggregater"].append({**aggregate, "tabell": "annen"})
+    config["aggregater"].append(
+        {**aggregate, "tabell": "ost_am_befolkning_mnd_annen"}
+    )
 
     with pytest.raises(ValidationError, match="id må være unike"):
         Configuration.model_validate(config, context={"ingen_id_validering": True})
@@ -106,8 +406,11 @@ def test_configuration_accepts_distinct_test_and_registered_ids():
     config = configuration().model_dump(by_alias=True)
     aggregate = config["aggregater"][0]
     config["aggregater"] = [
-        {**aggregate, "id": aggregat_id, "tabell": f"tabell_{index}"}
-        for index, aggregat_id in enumerate(["00000", "00001", "09999", "21000"])
+        {**aggregate, "id": aggregat_id, "tabell": f"ost_am_befolkning_mnd_{name}"}
+        for name, aggregat_id in zip(
+            ("forste", "andre", "tredje", "fjerde"),
+            ["00000", "00001", "09999", "21000"],
+        )
     ]
 
     result = Configuration.model_validate(config, context={"ingen_id_validering": True})
@@ -115,11 +418,23 @@ def test_configuration_accepts_distinct_test_and_registered_ids():
 
 
 def test_aggregate_metadata_is_required():
-    for field in ("navn", "navn-en", "innhold", "innhold-en"):
+    for field in ("navn", "innhold"):
         incomplete = configuration().model_dump(by_alias=True)
         incomplete["aggregater"][0].pop(field)
         with pytest.raises(ValidationError):
             Configuration.model_validate(incomplete)
+
+
+def test_aggregate_english_metadata_is_optional():
+    config = configuration().model_dump(by_alias=True)
+    aggregate = config["aggregater"][0]
+    aggregate.pop("navn-en")
+    aggregate.pop("innhold-en")
+
+    parsed = Configuration.model_validate(config)
+
+    assert parsed.aggregater[0].navn_en is None
+    assert parsed.aggregater[0].innhold_en is None
 
 
 def test_column_metadata_is_optional():
@@ -135,10 +450,83 @@ def test_column_metadata_is_optional():
 
 def test_aggregate_rejects_names_too_long_for_derived_tables():
     config = configuration().model_dump(by_alias=True)
-    config["aggregater"][0]["tabell"] = "a" * 120
+    config["aggregater"][0]["tabell"] = "ost_am_befolkning_mnd_" + "a" * 120
 
     with pytest.raises(ValidationError, match="Oracle-navn"):
         Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    "field", ["subject", "subject-area", "subject-code", "subject-kort"]
+)
+def test_statistikkbank_requires_subject_name_parts(field):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"].pop(field)
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+def test_statistikkbank_subject_must_not_be_empty():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["statistikkbank"]["subject"] = ""
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize(
+    ("name", "message"),
+    [
+        ("ost_sf_befolkning_mnd_region", "subject-code er 'sf'"),
+        ("ost_am_arbeidsmarked_mnd_region", "subject-kort er 'arbeidsmarked'"),
+        ("ost_am_befolkning", "mangler periodedel"),
+        ("ost_am_befolkning_periode_region", "periodedel er 'periode'"),
+        ("ost_am_befolkning_mnd", "mangler fordelingsdel"),
+        ("ost_am_befolkning_mnd_region1", "['region1']"),
+        ("ost_am_befolkning_mnd_region__alder", "['']"),
+        (
+            "ost_am_befolkning_mnd_any_user_defined",
+            "forventet: 'any_defined_user'",
+        ),
+    ],
+)
+def test_aggregate_name_errors_explain_invalid_parts(name, message):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = name
+
+    with pytest.raises(ValidationError) as error:
+        Configuration.model_validate(config)
+    assert message in str(error.value)
+
+
+def test_aggregate_name_must_be_lowercase():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = "OST_am_befolkning_mnd_region"
+
+    with pytest.raises(ValidationError, match="må være skrevet med små bokstaver"):
+        Configuration.model_validate(config)
+
+
+@pytest.mark.parametrize("period", ["aar", "mnd", "kvartal", "uke", "dag"])
+def test_aggregate_name_accepts_supported_period_types(period):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = f"ost_am_befolkning_{period}_region"
+
+    assert Configuration.model_validate(config).aggregater[0].tabell.endswith(
+        f"_{period}_region"
+    )
+
+
+def test_aggregate_name_accepts_user_defined_distribution_identifiers():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tabell"] = (
+        "ost_am_befolkning_mnd_any_defined_distribution_user"
+    )
+
+    parsed = Configuration.model_validate(config)
+
+    assert parsed.aggregater[0].tabell.endswith("any_defined_distribution_user")
 
 
 def test_loads_aggregate_configurations_matching_mapper(tmp_path):
@@ -147,35 +535,43 @@ def test_loads_aggregate_configurations_matching_mapper(tmp_path):
     aggregate_directory.mkdir()
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - aggregater/**
 aggregater:
-  - tabell
+  - ost_am_befolkning_mnd_region
 """,
         encoding="utf-8",
     )
-    for table in ("tabell", "annen"):
+    for table in (AGGREGATE_NAME, "ost_am_befolkning_mnd_annen"):
+        (aggregate_directory / f"{table}.sql").write_text("select 1 from dual")
         (aggregate_directory / f"{table}.yml").write_text(
             f"""
+version: 1
 definisjon:
   navn: {table}
   navn-en: {table}
   innhold: {table} 
   innhold-en: {table}
   id: 21000
-  obt-tabell: OBT_TABELL
+  referanse-tabell: OBT_TABELL
+  statistikkbank:
+    subject: Befolkning
+    subject-code: AM
+    subject-kort: BEFOLKNING
+    subject-area: Arbeidsmarked
   periodisering:
     navn: Periode
     navn-en: Period
     kolonne: periode
     innhold: Periode
     innhold-en: Month
-  inkrementell-strategi: overskriv_ikke
+  inkrementell-strategi: legg_til_nye_perioder
   tellepunkter:
     - navn: Antall
       navn-en: Count
@@ -198,12 +594,13 @@ definisjon:
     config, config_directory = load_configuration(tmp_path / "konfigurasjon.yml")
 
     assert config_directory == tmp_path
-    assert [aggregate.tabell for aggregate in config.aggregater] == ["tabell"]
+    assert config.version == 1
+    assert [aggregate.tabell for aggregate in config.aggregater] == [AGGREGATE_NAME]
     aggregate = config.aggregater[0]
-    assert aggregate.obt_tabell == "obt_tabell"
-    assert aggregate.sporring_sql == "aggregater/tabell.sql"
+    assert aggregate.referanse_tabell == "obt_tabell"
+    assert aggregate.sporring_sql == f"aggregater/{AGGREGATE_NAME}.sql"
     assert aggregate.periodisering.kolonne == "periode"
-    assert aggregate.inkrementell_strategi.value == "overskriv_ikke"
+    assert aggregate.inkrementell_strategi.value == "legg_til_nye_perioder"
     assert isinstance(aggregate.tellepunkter[0], Tellepunkt)
     assert aggregate.tellepunkter[0].kolonne == "antall"
 
@@ -214,30 +611,38 @@ def test_aggregate_table_and_sql_are_inferred_from_filename(tmp_path):
     aggregate_directory.mkdir()
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - aggregater/**
 aggregater:
-  - annet_navn
+  - ost_am_befolkning_mnd_region
 """,
         encoding="utf-8",
     )
-    (aggregate_directory / "annet_navn.yml").write_text(
+    (aggregate_directory / f"{AGGREGATE_NAME}.sql").write_text("select 1 from dual")
+    (aggregate_directory / f"{AGGREGATE_NAME}.yml").write_text(
         """
+version: 1
 definisjon:
   navn: dummy
   navn-en: dummy
   innhold: dummy 
   innhold-en: dummy
   id: "21000"
-  obt-tabell: OBT_TABELL
+  referanse-tabell: OBT_TABELL
+  statistikkbank:
+    subject: Befolkning
+    subject-code: AM
+    subject-kort: BEFOLKNING
+    subject-area: Arbeidsmarked
   periodisering:
     kolonne: periode
-  inkrementell-strategi: overskriv_ikke
+  inkrementell-strategi: legg_til_nye_perioder
   tellepunkter:
     - kolonne: antall
   formula: "~ periode * region"
@@ -251,8 +656,8 @@ definisjon:
 
     config, _ = load_configuration(tmp_path / "konfigurasjon.yml")
 
-    assert config.aggregater[0].tabell == "annet_navn"
-    assert config.aggregater[0].sporring_sql == "aggregater/annet_navn.sql"
+    assert config.aggregater[0].tabell == AGGREGATE_NAME
+    assert config.aggregater[0].sporring_sql == f"aggregater/{AGGREGATE_NAME}.sql"
 
 
 def test_aggregate_names_must_be_unique_across_search_paths(tmp_path):
@@ -263,12 +668,13 @@ def test_aggregate_names_must_be_unique_across_search_paths(tmp_path):
         (aggregate_directory / "tabell.yml").write_text("", encoding="utf-8")
     (tmp_path / "konfigurasjon.yml").write_text(
         """
+version: 1
 connection:
   database: DWHP
   schema: TEST
   user: testuser
   password: env://TEST_PASSWORD
-mapper:
+filsok:
   - første/**
   - andre/**
 aggregater:
@@ -277,11 +683,239 @@ aggregater:
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigError, match="finnes i flere konfigurasjonsfiler"):
+    with pytest.raises(ConfigError, match="har flere YAML-filer"):
         load_configuration(tmp_path / "konfigurasjon.yml")
+
+
+def test_aggregate_filename_must_be_lowercase(tmp_path):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    (aggregate_directory / "OST_AM_BEFOLKNING_MND_REGION.yml").write_text("")
+
+    with pytest.raises(ConfigError, match="må være skrevet med små bokstaver"):
+        _find_aggregate_configurations(
+            ["aggregater/*"], [AGGREGATE_NAME], tmp_path
+        )
+
+
+@pytest.mark.parametrize("yaml_suffix", [".yml", ".yaml"])
+@pytest.mark.parametrize("prefix", ["", "nested/"])
+def test_loads_separate_directories_with_overlapping_patterns_and_preserves_order(
+    tmp_path, monkeypatch, yaml_suffix, prefix
+):
+    yaml_directory = tmp_path / prefix / "yaml"
+    sql_directory = tmp_path / prefix / "sql"
+    yaml_directory.mkdir(parents=True)
+    sql_directory.mkdir(parents=True)
+    config = configuration()
+    for table, agg_id in (
+        ("ost_am_befolkning_mnd_first", "21000"),
+        ("ost_am_befolkning_mnd_second", "21001"),
+    ):
+        aggregate = config.aggregater[0].model_dump(mode="json", by_alias=True)
+        aggregate.pop("tabell")
+        aggregate.pop("sporring_sql")
+        aggregate["id"] = agg_id
+        (yaml_directory / f"{table}{yaml_suffix}").write_text(
+            yaml.safe_dump({"version": 1, "definisjon": aggregate}),
+            encoding="utf-8",
+        )
+        (sql_directory / f"{table}.sql").write_text("select 1 from dual")
+    config_directory = tmp_path
+    config_path = config_directory / "konfigurasjon.yml"
+    config_path.write_text(
+        yaml.safe_dump({
+            "version": 1,
+            "connection": config.connection.model_dump(mode="json", by_alias=True)
+            | {"password": "env://TEST_PASSWORD"},
+            "filsok": [
+                f"{prefix}yaml/ost_am_befolkning_mnd_first{yaml_suffix}",
+                f"{prefix}yaml/**",
+                f"{prefix}sql/**",
+                f"{prefix}yaml/*{yaml_suffix}",
+                f"{prefix}sql/*.sql",
+            ],
+            "aggregater": [
+                "ost_am_befolkning_mnd_second",
+                "ost_am_befolkning_mnd_first",
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(yaml_directory)
+    loaded, loaded_directory = load_configuration(config_path)
+
+    assert loaded_directory == config_directory
+    assert [aggregate.tabell for aggregate in loaded.aggregater] == [
+        "ost_am_befolkning_mnd_second",
+        "ost_am_befolkning_mnd_first",
+    ]
+    assert [aggregate.sporring_sql for aggregate in loaded.aggregater] == [
+        f"{prefix}sql/ost_am_befolkning_mnd_{table}.sql"
+        for table in ("second", "first")
+    ]
+
+
+@pytest.mark.parametrize("suffixes", [(".yml", ".yaml"), (".sql", ".SQL")])
+def test_duplicate_files_report_both_paths_and_patterns(tmp_path, suffixes):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    paths = [aggregate_directory / f"tabell{suffix}" for suffix in suffixes]
+    for path in paths:
+        path.write_text("")
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations(["aggregater/*"], ["tabell"], tmp_path)
+
+    message = str(error.value)
+    assert "har flere" in message
+    assert "søkemønstrene 'aggregater/*'" in message
+    assert all(str(path) in message for path in paths)
+    assert "Ugyldig mønster" not in message
+
+
+@pytest.mark.parametrize(
+    ("suffixes", "missing"),
+    [([".yml"], "SQL"), ([".sql"], "YAML"), ([], "YAML og SQL")],
+)
+def test_missing_files_report_type_and_search_patterns(tmp_path, suffixes, missing):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    for suffix in suffixes:
+        (aggregate_directory / f"tabell{suffix}").write_text("")
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations(
+            ["aggregater/*.yml", "aggregater/*.sql"], ["tabell"], tmp_path
+        )
+
+    message = str(error.value)
+    assert f"tabell (mangler {missing}-fil)" in message
+    assert "'aggregater/*.yml', 'aggregater/*.sql'" in message
+    assert str(tmp_path) in message
+
+
+def test_yaml_only_pattern_does_not_discover_sibling_sql(tmp_path):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    (aggregate_directory / "tabell.yml").write_text("")
+    (aggregate_directory / "tabell.sql").write_text("")
+
+    with pytest.raises(ConfigError, match="tabell \\(mangler SQL-fil\\)"):
+        _find_aggregate_configurations(["aggregater/*.yml"], ["tabell"], tmp_path)
+
+
+def test_invalid_search_pattern_reports_pattern(tmp_path):
+    pattern = str(tmp_path / "aggregater" / "*")
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations([pattern], ["tabell"], tmp_path)
+
+    assert f"Ugyldig mønster for aggregatkonfigurasjoner: {pattern}" == str(error.value)
+
+
+def test_aggregate_validation_error_reports_yaml_path(tmp_path):
+    aggregate_directory = tmp_path / "aggregater"
+    aggregate_directory.mkdir()
+    aggregate_path = aggregate_directory / "tabell.yml"
+    aggregate_path.write_text("version: 1\ndefinisjon: {}\n", encoding="utf-8")
+    (aggregate_directory / "tabell.sql").write_text("")
+    config_path = tmp_path / "konfigurasjon.yml"
+    config_path.write_text(
+        yaml.safe_dump({
+            "version": 1,
+            "connection": configuration().connection.model_dump(
+                mode="json", by_alias=True
+            ) | {"password": "env://TEST_PASSWORD"},
+            "filsok": ["aggregater/*.yml", "aggregater/*.sql"],
+            "aggregater": ["tabell"],
+        }),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError) as error:
+        load_configuration(config_path)
+
+    assert f"Konfigurasjonen i {aggregate_path} er ugyldig:" in str(error.value)
+
+
+@pytest.mark.parametrize("suffix", [".yml", ".sql"])
+@pytest.mark.parametrize("location", ["beside", "outside"])
+@pytest.mark.parametrize("symlink", [False, True])
+def test_aggregate_files_must_resolve_to_subdirectories(
+    tmp_path, suffix, location, symlink
+):
+    config_directory = tmp_path / "config"
+    config_directory.mkdir()
+    target_directory = config_directory if location == "beside" else tmp_path
+    target = target_directory / f"tabell{suffix}"
+    target.write_text("")
+    if symlink:
+        aggregate_directory = config_directory / "aggregater"
+        aggregate_directory.mkdir()
+        (aggregate_directory / target.name).symlink_to(target)
+        pattern = "aggregater/*"
+    else:
+        pattern = "*" if location == "beside" else "../*"
+
+    with pytest.raises(ConfigError) as error:
+        _find_aggregate_configurations([pattern], ["tabell"], config_directory)
+
+    message = str(error.value)
+    assert "må ligge i en undermappe til hovedkonfigurasjonen" in message
+    assert str(config_directory) in message
+    assert str(target) in message
+    assert "Ugyldig mønster" not in message
 
 
 def test_resolve_env_reference(monkeypatch):
     """Slår opp miljøvariabelreferanser for hemmeligheter."""
     monkeypatch.setenv("TEST_PASSWORD", "secret")
-    assert resolve_secret("env://TEST_PASSWORD", password=True) == "secret"
+    assert resolve_config("password", "env://TEST_PASSWORD", password=True) == "secret"
+
+
+def test_resolve_terminal_reference(monkeypatch):
+    """Leser terminalreferanser interaktivt når standard input er en terminal."""
+    from statistikkprodukt.config import loader
+
+    getpass = Mock(return_value="secret")
+    monkeypatch.setattr(loader.sys, "stdin", Mock(isatty=Mock(return_value=True)))
+    monkeypatch.setattr(loader.getpass, "getpass", getpass)
+
+    assert resolve_config("password", "terminal://", password=True) == "secret"
+    getpass.assert_called_once_with("Tast inn verdien for password: ")
+
+
+def test_resolve_terminal_reference_requires_tty(monkeypatch):
+    """Avviser terminalreferanser når standard input ikke er en terminal."""
+    from statistikkprodukt.config import loader
+
+    monkeypatch.setattr(loader.sys, "stdin", Mock(isatty=Mock(return_value=False)))
+
+    with pytest.raises(ConfigError, match="standard input er en terminal"):
+        resolve_config("password", "terminal://", password=True)
+
+
+def test_aggregate_accepts_multiple_tellepunkter():
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tellepunkter"] = [{"kolonne": "antall"}, {"kolonne": "kvinner"}]
+
+    aggregate = Configuration.model_validate(config).aggregater[0]
+
+    assert [t.kolonne for t in aggregate.tellepunkter] == ["antall", "kvinner"]
+
+
+@pytest.mark.parametrize(
+    "tellepunkter",
+    [
+        [{"kolonne": "antall"}, {"kolonne": "antall"}],
+        [{"kolonne": "verdi"}],
+        [{"kolonne": "tellepunkt"}],
+    ],
+)
+def test_aggregate_rejects_duplicate_or_reserved_tellepunkter(tellepunkter):
+    config = configuration().model_dump(by_alias=True)
+    config["aggregater"][0]["tellepunkter"] = tellepunkter
+
+    with pytest.raises(ValidationError):
+        Configuration.model_validate(config)

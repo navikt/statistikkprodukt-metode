@@ -13,27 +13,28 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 ## Implementation decisions
 
 1. **Program and package naming:** The Python distribution, import package, and executable are all named `statistikkprodukt`.
-2. **Configuration location:** `--config` accepts a YAML file containing the database connection, `mapper` glob patterns for finding aggregate files, and an `aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and derive `sporring_sql` by replacing its suffix with `.sql`. Resolve glob patterns and SQL paths from the configuration file's directory.
+2. **Configuration location:** `--konfig-fil` accepts a YAML file containing the database connection, `filsok` glob patterns for finding aggregate files, and an `aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and find the matching SQL file by its case-insensitive filename stem. YAML and SQL files may be in separate directories, but both must resolve to files in subdirectories of the main configuration file's directory. Files directly beside the main configuration or outside its directory are forbidden, including through symbolic links. Nested subdirectories are allowed. The patterns must cover both file types, and each selected aggregate requires exactly one YAML file and one SQL file, including in CSV mode. Repeated matches of the same resolved file are allowed. Store `sporring_sql` relative to the main configuration file's directory without `../`. Resolve glob patterns and SQL paths from that directory, not from the aggregate YAML file's directory or the working directory.
 3. **Oracle connection profiles:** Allowed values for `connection.database` are `DWHP`, `DWHQ`, `DWHU`, and `DWHR`. Use placeholder mappings for host, port, and service name for now.
 4. **Secret references:** Support the URI forms shown in the configuration example. Google Secret Manager payloads are UTF-8 strings and may contain a flat JSON object. Allow `terminal://` only when stdin is a TTY. Fail if a referenced value is missing.
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
-6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
+6. **Database writes:** `tabell` is the base name; write the masked data to `{tabell}_prepub` and the debug data to `{tabell}_kontroll`. Schema creation creates both tables with table and column comments. The prepub output has the same columns as the input aggregate, with each configured tellepunkt in its own column. The control output has the dimensions, a `tellepunkt` column naming the tellepunkt, a `verdi` column with its unmasked value, and the suppression markers; each tellepunkt contributes its own rows. `tellepunkt` and `verdi` are reserved column names. Use the configured `kolonne` values as output column names. Do not create uniqueness constraints. Write each "smalt aggregat" in one transaction. If the result has no rows, do not change data rows; synchronize column comments for database output.
 7. **Incremental modes:** The modes operate on the configured period column:
-   - `overskriv_ikke` appends periods that do not already exist and logs a warning for periods that already exist.
-   - `overskriv_alt` replaces all periods that are returned by the query. Other periods in the target are not removed.
-   - `overskriv_siste_periode` replaces only the maximum period present in the result.
+   - `legg_til_nye_perioder` appends periods that do not already exist and logs a warning for periods that already exist.
+   - `overskriv_eksisterende_perioder` replaces all periods that are returned by the query. Other periods in the target are not removed.
    - `--periode/-p` may be used to override one ore more periods, overriding the incremental mode.
-8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings.
+   - `--full-relast` deletes all existing rows from the target prepub and control tables, reads all source rows, and reloads both tables. It cannot be combined with `--periode/-p`.
+8. **Period and variable types:** The period column and all dimension-variable columns must be strings in both query results and created tables. Periods are therefore sorted as strings. Validate CLI period arguments and CSV/Oracle period values as four-digit years (`2025`), months (`2025M01` through `2025M12`), or quarters (`2025K1` through `2025K4`); reject missing values and other formats.
 9. **Schema compatibility:** Do not inspect the target schema before writing. Let Oracle report incompatible or missing target columns when inserting. Never create, alter, remove, or narrow columns.
 10. **Metadata:** Tags may appear in any order and values may span lines until the next tag. Escaping is not supported. Duplicate tags are invalid. Metadata is not required in local CSV mode.
-11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data) and `{tabell}_kontroll.csv` (debug data) and are distinguished by their input and output directories. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `obt-tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
+11. **Local CSV mode:** `--kilde` selects `db` or `csv` input and defaults to `db`; `--maal` selects `db` or `csv` output and defaults to `db`. CSV files are named `{tabell}.csv` for input; output files are `{tabell}_prepub.csv` (masked data), `{tabell}_kontroll.csv` (debug data), and `{tabell}_meta.csv` (metadata), and are distinguished by their input and output directories. Metadata CSV uses the same rows as Oracle plus a naive Europe/Oslo `dvh_lastet_tid` timestamp with second precision. CSV source uses available YAML metadata without requiring missing fields; database source uses resolved YAML/OBT metadata. The metadata file is always replaced, even when no data rows are returned. `--kilde-mappe` and `--maal-mappe` select those directories and default to `data_inn` and `data_ut`. OBT source data are queried only through the SQL query; `referanse-tabell` identifies the source table for database metadata. Existing output files are overwritten. `--dry-run` performs no writes and prints what would have happened.
+    Prepub, control, and metadata CSV outputs share the same `dvh_lastet_tid` timestamp per aggregate, with second precision.
 12. **R boundary:** `prikking` calls the R script and returns two dataframes, one masked and one with added metadata for debugging.
 13. **Language and errors:** CLI help and output, configuration validation, logs, documentation, and other user-facing errors must be in Norwegian. Exit with `0` for success, `2` for CLI or configuration errors, and `1` for operational failures.
 14. **Container:** Use an Ubuntu base image and install Python and R. Defer a Chainguard-based image.
 15. **Integration tests:** Tests may require Docker and use a fixed host port. CI will not run these tests in parallel.
 16. **Sandboxed test environment:** Copilot runs commands in a sandbox and cannot start the Oracle container itself. Provide `testenv setup` and `testenv teardown` commands that the user runs outside the sandbox. Provide a `testenv pytest -- PYTEST_ARGS` command for the agent; it sets `STATISTIKKPRODUKT_TESTENV_EXTERNAL=1` and forwards every argument after `--` to pytest. `test/conftest.py` detects this variable and connects to the externally managed container instead of creating an `OracleDbContainer`.
-17. **Aggregate registration:** `id` (`aggregate.id`) is an ID from 21000 through 22999 without a NAV prefix. Keep the local registration check behind `StatistikkproduktRegister`. Only `--ingen-id-validering` permits five-digit test IDs from `'00000'` through `'09999'` for development; preserve leading zeroes by using YAML strings. All aggregate IDs in the same configuration must be unique, including test IDs. Database writes must warn that these data must be removed before publication. Database metadata and log fields er named `aggregat_id`.
-18. **Metadata and logging:** Store each aggregate's resolved OBT/YAML metadata in `{tabell}_meta` and append one row per selected aggregate per run to the shared `ost_logg`. Create these tables only through `skjema opprett --db`. Store configuration and periods as JSON CLOBs and unbounded text as CLOBs without truncation. Log naive Europe/Oslo timestamps, the database session user and the program commit hash. Application models belong in `app/models.py`.
+17. **Aggregate registration:** `id` (`aggregate.id`) is an ID from 20000 through 22999 without a NAV prefix. Keep the local registration check behind `StatistikkproduktRegister`. Only `--ingen-id-validering` permits five-digit test IDs from `'00000'` through `'09999'` for development; preserve leading zeroes by using YAML strings. All aggregate IDs in the same configuration must be unique, including test IDs. Database writes must warn that these data must be removed before publication. Database metadata and log fields er named `aggregat_id`.
+18. **Metadata and logging:** Store each aggregate's resolved OBT/YAML metadata in `{tabell}_meta`, replacing all rows in one transaction. Metadata columns are `type`, `keyword`, `scope`, `language`, `value`, and database-generated `dvh_lastet_tid`. Prepub, control, metadata, and log tables use `dvh_lastet_tid DATE DEFAULT SYSDATE NOT NULL`. Types are PX, CS, CR, and SQ; scope is currently NULL; languages are NO/EN or NULL for language-independent fields. Metadata values are VARCHAR2 and limited to 4000 UTF-8 bytes without truncation. Column suffixes `__no`/`__en` are currently unsupported and raise NotImplementedError. Append one row per selected aggregate per run to the shared `ost_logg`. Create these tables only through `skjema opprett --db`; do not migrate existing metadata tables during loading. Store log configuration and periods as JSON CLOBs and unbounded log text as CLOBs without truncation. Log naive Europe/Oslo timestamps, the database session user and the program commit hash. Application models belong in `app/models.py`.
 
 ## Workflow
 
@@ -61,6 +62,7 @@ Do not change the database schema. If an insert is incompatible with the existin
 
 The shared configuration file contains connection settings and patterns for finding aggregate definitions:
 ```yaml
+version: 1
 connection:
   # Select either a predefined profile ...
   database: DWHP
@@ -81,31 +83,33 @@ connection:
   
   timeout: 30 # optional, default
 
-mapper:
+filsok:
   - aggregater/**
 aggregater:
-  - ost_befolkning_alder
-  - ost_befolkning_kjonn
+  - ost_ga_befolkning_mnd_alder
+  - ost_ga_befolkning_mnd_kjonn
 ```
 
 Each selected `.yml` or `.yaml` file contains exactly one aggregate definition, named after its target table. The names listed in `aggregater` must be globally unique:
 ```yaml
+version: 1
 definisjon:
   navn: Befolkning etter alder
   navn-en: Population by age
   innhold: Befolkning fordelt etter periode og alder.
   innhold-en: Population distributed by period and age.
   id: 21000
-  obt-tabell: obt_befolkning
+  referanse-tabell: obt_befolkning
   periodisering:
     navn: Period
     navn-en: Period
     kolonne: periode
     innhold: Månedsperiode
     innhold-en: Month period
-  inkrementell-strategi: overskriv_alt
+  inkrementell-strategi: overskriv_eksisterende_perioder
   tellepunkter:
     - kolonne: antall
+    - kolonne: antall_kvinner
   formula: "~ periode * alder"
   prikking: true
   saerskilt: false
@@ -113,7 +117,7 @@ definisjon:
     - kolonne: alder
 ```
 
-`obt-tabell` names the OBT source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `OBT.BEFOLKNING_ALDER`; an unqualified name uses the configured connection schema. `navn`, `navn-en`, `innhold` and `innhold-en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `obt-tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
+`referanse-tabell` names a source table whose table and column comments supply missing metadata. It may be schema-qualified, for example `MY_SCHEMA.OBT_BEFOLKNING`; an unqualified name uses the configured connection schema. `navn`, `navn-en`, `innhold` and `innhold-en` are optional. If they are not specified, read the database comments (`dba_tab_comments` and `dba_col_comments`) for `referanse-tabell` and parse out tags. For example, a comment could be `#NAVN Min variabel #NAVN_EN My variable #INNHOLD Min innhold #INNHOLD_EN English description`. Fail if a field is missing in both the YAML file and the database. Use the logging library, log (INFO) which source is taken. If --verbose is specified, log the values as well.
 
 ## CLI
 
@@ -129,11 +133,14 @@ statistikkprodukt last --help
 
 # Kjør prikking for hele konfigurasjon i konfigurasjon.yml
 # Kan også specifieseres med env STATISTIKKPRODUKT_AGGREGAT_CONFIG=...
-statistikkprodukt last --config=konfigurasjon.yml
+statistikkprodukt last --konfig-fil=konfigurasjon.yml
 export STATISTIKKPRODUKT_AGGREGAT_CONFIG=konfigurasjon.yml
 
 # Bare vis hva som ville skjedd
 statistikkprodukt last --dry-run
+
+# Slett alle data i måltabellene og last alle rader på nytt
+statistikkprodukt last --full-relast
 
 # kontroller logging
 statistikkprodukt last --log-level=WARN
@@ -214,29 +221,24 @@ r_prikking = robjects.globalenv["dvh_prikking"]
     
 all_results = []
 
-for sub in df[periode].unique():
-    sub_df = df[df[periode] == sub]
+for tellepunkt in config["aggregater"]["tellepunkter"]:
+    tellepunkt_results = []
+    for sub in df[periode].unique():
+        sub_df = df[df[periode] == sub]
 
-    r_result = r_prikking(
-        data = sub_df, 
-        formula = config["formula"], 
-        tallKol = config['aggregater']['tellepunkter'][0]['kolonne'],
-        prikking = config["prikking"], 
-        saerskilt = config["saerskilt"]
-    )
+        r_result = r_prikking(
+            data=sub_df,
+            formula=config["formula"],
+            tallKol=tellepunkt["kolonne"],
+            prikking=config["prikking"],
+            saerskilt=config["saerskilt"],
+        )
 
-    # The R function returns both the aggregate and quality-check data frames.
-    df_result = pandas2ri.rpy2py(r_result.rx2("smalt_aggregat"))
+        # The R function returns both the aggregate and quality-check data frames.
+        df_result = pandas2ri.rpy2py(r_result.rx2("smalt_aggregat"))
+        tellepunkt_results.append(df_result)
 
-    # TODO: Clarify whether run information should be stored separately.
-    # TODO: Clarify how to store metadata in the database.
-    # df_result["run_target"] = config["tabell"]
-    # df_result["applied_formula"] = config["formula"]
-
-    all_results.append(df_result)
-
-# 5. Union all the outputs together into one final DataFrame
-final_df = pd.concat(all_results, ignore_index=True)
+    all_results.append(pd.concat(tellepunkt_results, ignore_index=True))
 ```
 
 ## Testing

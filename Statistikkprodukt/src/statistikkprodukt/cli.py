@@ -3,18 +3,48 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+from argparse import Namespace
 from pathlib import Path
+from typing import Any
 
-from statistikkprodukt.app import installer_r_pakker, last, skjema
+from statistikkprodukt.app import installer_r_pakker, konfig, last, skjema
+from statistikkprodukt.version import (
+    require_compatible_python_version_interactive,
+    update_packages,
+)
 from statistikkprodukt.config import (
     ConfigError,
     StorageOption,
     StatistikkproduktRegister,
     load_configuration,
+    validate_period,
 )
 
 LOG_LEVELS = ("DEBUG", "INFO", "WARN", "ERROR")
 LOGGER = logging.getLogger(__name__)
+
+
+class HideInfoFormatter(logging.Formatter):
+    def __init__(self):
+        super().__init__(fmt="%(levelname)s: %(message)s")
+
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "%(levelname)s: %(message)s"
+        return super().format(record)
+
+
+def setup_logging(args: Namespace) -> Any | str:
+    level = getattr(args, "log_level", "INFO")
+    if level == "INFO":
+        handler = logging.StreamHandler()
+        handler.setFormatter(HideInfoFormatter())
+        logging.basicConfig(level=level, handlers=[handler])
+    else:
+        logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
+    return level
 
 
 def _add_logging_options(parser: argparse.ArgumentParser) -> None:
@@ -33,6 +63,13 @@ def _add_logging_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _parse_period(value: str) -> str:
+    try:
+        return validate_period(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
     """Legger til valg for konfigurasjon, filer og aggregater."""
     parser.add_argument(
@@ -42,17 +79,29 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         help="Tabellnavn for småaggregatene som skal behandles (standard: alle).",
     )
     parser.add_argument(
-        "--config",
+        "--konfig-fil",
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG eller konfigurasjon.yml).",
     )
-    parser.add_argument(
+    period_mode = parser.add_mutually_exclusive_group()
+    period_mode.add_argument(
         "-p",
         "--period",
         action="append",
         dest="periods",
+        type=_parse_period,
         metavar="PERIODE",
-        help="Begrens innlesingen til denne perioden. Kan angis flere ganger. Lastes uansett inkrementell strategi.",
+        help=(
+            "Begrens innlesingen til denne perioden (YYYY, YYYYM01–YYYYM12 "
+            "eller YYYYK1–YYYYK4). Kan angis flere ganger. "
+            "Lastes uansett inkrementell strategi."
+        ),
+    )
+    period_mode.add_argument(
+        "--full-relast",
+        dest="full_relast",
+        action="store_true",
+        help="Slett alle data i måltabellene og last alle rader fra kilden på nytt.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Vis hva som ville blitt gjort uten å skrive data.")
     parser.add_argument(
@@ -95,6 +144,33 @@ def _add_id_validation_option(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Utfører valgt testmiljøkommando."""
+    from statistikkprodukt.app import testenv
+
+    if args.testenv_command == "setup":
+        testenv.setup()
+    elif args.testenv_command == "teardown":
+        testenv.teardown()
+    else:
+        arguments = list(args.pytest_args)
+        if arguments:
+            if arguments[0] == "--":
+                arguments.pop(0)
+            else:
+                parser.error("Argumenter til pytest må starte med --.")
+
+        pytest_exit_code = testenv.run_pytest(arguments)
+        raise SystemExit(pytest_exit_code)
+
+
+def _report_error(message: str, *, debug: bool) -> None:
+    """Viser en norsk feilmelding og eventuelle feilsøkingsdetaljer."""
+    LOGGER.error(f"{message}")
+    if debug:
+        LOGGER.exception("Detaljer for feilen:")
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Bygger kommandolinjens underkommandoer og argumenter."""
     parser = argparse.ArgumentParser(
@@ -109,6 +185,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_aggregate_options(last)
 
+    config = commands.add_parser("konfig", help="Kontroller konfigurasjonen.")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    check = config_commands.add_parser(
+        "sjekk",
+        help="Valider YAML-konfigurasjonen og aggregat-ID-er uten å kjøre lasten.",
+        description=(
+            "Valider hovedkonfigurasjonen, aggregatdefinisjonene og aggregat-ID-er. "
+            "Henter ikke hemmeligheter, kobler ikke til databasen og skriver ingen data."
+        ),
+    )
+    check.add_argument(
+        "--konfig-fil",
+        default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
+        help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG).",
+    )
+    _add_id_validation_option(check)
+    _add_logging_options(check)
+
     schema = commands.add_parser("skjema", help="Vis eller opprett småaggregattabeller.")
     schema_commands = schema.add_subparsers(dest="schema_command", required=True)
     create = schema_commands.add_parser(
@@ -121,7 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tabellnavn for aggregatene (standard: alle).",
     )
     create.add_argument(
-        "--config",
+        "--konfig-fil",
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG).",
     )
@@ -136,7 +230,24 @@ def build_parser() -> argparse.ArgumentParser:
     installer_r_pakker = commands.add_parser(
         "installer-r-pakker", help="Installer R-pakker som kreves for å kjøre prikking og andre statistikkprodukter."
     )
+    installer_r_pakker.add_argument(
+        "--dev-lokal-r-pakke",
+        action="store_true",
+        help="Installer R-pakken fra lokal repository i stedet for fra GitHub. Fungerer kun for utvikling og testing.",
+    )
     _add_logging_options(installer_r_pakker)
+
+    update = commands.add_parser(
+        "oppdater",
+        help="Oppdater Python-verktøyet og R-pakkene.",
+        description="Oppdaterer statistikkprodukt med uv og installerer deretter nødvendige R-pakker.",
+    )
+    update.add_argument(
+        "--ikke-oppdater-r-pakker",
+        action="store_true",
+        help="Oppdater bare Python-verktøyet, uten å oppdatere R-pakkene.",
+    )
+    _add_logging_options(update)
 
     testenv = commands.add_parser(
         "testenv", help="Administrer Oracle-miljøet som brukes av tester."
@@ -166,19 +277,25 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(args, "log_level", "INFO"), format="%(levelname)s %(name)s: %(message)s")
+    level = setup_logging(args)
 
-    LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, getattr(args, "log_level", "INFO"))
+    LOGGER.debug("Kommando=%s, loggnivå=%s.", args.command, level)
 
     try:
+        require_compatible_python_version_interactive(args.command)
+
         if args.command == "testenv":
             _run_testenv(args, parser)
 
+        elif args.command == "konfig":
+            konfig.sjekk(
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
+            )
+
         elif args.command == "last":
-            config_path = args.config
-            LOGGER.debug("Kjører 'last' med konfigurasjon %s.", config_path)
+            LOGGER.debug("Kjører 'last' med konfigurasjon %s.", args.konfig_fil)
             configuration, config_directory = load_configuration(
-                config_path, ingen_id_validering=args.ingen_id_validering
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
             )
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering
@@ -192,12 +309,13 @@ def main() -> None:
                 args.maal_mappe,
                 selected_tables=args.aggregater,
                 selected_periods=args.periods,
+                full_relast=args.full_relast,
                 dry_run=args.dry_run,
             )
         elif args.command == "skjema":
-            LOGGER.debug("Kjører 'skjema opprett' med konfigurasjon %s (db=%s).", args.config, args.db)
+            LOGGER.debug("Kjører 'skjema opprett' med konfigurasjon %s (db=%s).", args.konfig_fil, args.db)
             configuration, config_directory = load_configuration(
-                args.config, ingen_id_validering=args.ingen_id_validering
+                args.konfig_fil, ingen_id_validering=args.ingen_id_validering
             )
             StatistikkproduktRegister().valider(
                 configuration.aggregater, ingen_id_validering=args.ingen_id_validering
@@ -209,8 +327,9 @@ def main() -> None:
                 create_in_database=args.db,
             )
         elif args.command == "installer-r-pakker":
-            LOGGER.debug("Kjører 'installer-r-pakker'.")
-            installer_r_pakker.installer_r_pakker()
+            installer_r_pakker.installer_r_pakker(args.dev_lokal_r_pakke)
+        elif args.command == "oppdater":
+            update_packages(update_r_packages=not args.ikke_oppdater_r_pakker)
         else:
             raise NotImplementedError("Ukjent kommando: " + args.command)
     except ConfigError as exc:
@@ -225,33 +344,6 @@ def main() -> None:
             debug=(args.command == "testenv" or args.log_level == "DEBUG"),
         )
         raise SystemExit(1) from None
-
-
-def _run_testenv(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """Utfører valgt testmiljøkommando."""
-    from statistikkprodukt.app import testenv
-
-    if args.testenv_command == "setup":
-        testenv.setup()
-    elif args.testenv_command == "teardown":
-        testenv.teardown()
-    else:
-        arguments = list(args.pytest_args)
-        if arguments:
-            if arguments[0] == "--":
-                arguments.pop(0)
-            else:
-                parser.error("Argumenter til pytest må starte med --.")
-
-        pytest_exit_code = testenv.run_pytest(arguments)
-        raise SystemExit(pytest_exit_code)
-
-
-def _report_error(message: str, *, debug: bool) -> None:
-    """Viser en norsk feilmelding og eventuelle feilsøkingsdetaljer."""
-    LOGGER.error(f"{message}")
-    if debug:
-        LOGGER.exception("Detaljer for feilen:")
 
 
 if __name__ == "__main__":

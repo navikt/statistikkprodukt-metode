@@ -14,6 +14,11 @@ from uuid import uuid4
 import oracledb
 import pytz
 from statistikkprodukt.config import Aggregate, Metadata, StorageOption, Configuration
+from statistikkprodukt.version import (
+    format_r_package_version,
+    get_python_version,
+    get_r_package_info,
+)
 
 
 def oslo_now() -> datetime:
@@ -53,6 +58,22 @@ class TableMetadata:
     table: Metadata
     columns: dict[str, Metadata]
 
+    @classmethod
+    def from_aggregate(cls, aggregate: Aggregate) -> TableMetadata:
+        """Henter tilgjengelige YAML-metadata uten krav om databasekommentarer."""
+        fields = set(Metadata.model_fields)
+        return cls(
+            table=Metadata.model_validate(aggregate.model_dump(include=fields)),
+            columns={
+                variable.kolonne: Metadata.model_validate(
+                    variable.model_dump(include=fields)
+                )
+                for variable in (
+                    aggregate.periodisering, *aggregate.variabler, *aggregate.tellepunkter
+                )
+            },
+        )
+
 
 @dataclass
 class LasteResultat:
@@ -73,6 +94,7 @@ class Kjorelogg:
     kilde: str
     maal: str
     aggregater: list[Aggregate]
+    db_bruker: str
     kjoring_id: str = field(default_factory=lambda: str(uuid4()))
     starttid: datetime = field(default_factory=oslo_now)
     sluttid: datetime | None = None
@@ -80,6 +102,31 @@ class Kjorelogg:
     feilmelding: str | None = None
     resultater: list[LasteResultat] = field(default_factory=list)
     commit_hash: str | None = field(default_factory=_program_commit)
+    python_pakke_versjon: str | None = field(
+        default_factory=lambda: get_python_version()
+    )
+    r_pakke_versjon: str | None = field(
+        default_factory=lambda: format_r_package_version()
+    )
+
+    @classmethod
+    def from_configuration(cls, configuration: Configuration, aggregates: list[Aggregate], kilde: str, maal: str) -> Kjorelogg:
+        konfigurasjon_json = configuration.model_dump(
+            mode="json", by_alias=True, exclude={"connection": {"password"}}
+        )
+        # pydantic masks passwords, but we want to be sure that no password ends up in the db
+        if "password" in konfigurasjon_json["connection"]:
+            raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
+
+        return cls(
+            konfigurasjon=konfigurasjon_json,
+            kilde=kilde,
+            maal=maal,
+            aggregater=aggregates,
+            db_bruker=configuration.connection.user,
+            python_pakke_versjon=get_python_version(),
+            r_pakke_versjon=format_r_package_version(get_r_package_info()),
+        )
 
     def fullfor_feil(self, feil: BaseException) -> None:
         self.sluttid = oslo_now()
@@ -99,11 +146,14 @@ class Kjorelogg:
             "sluttid": self.sluttid or oslo_now(),
             "status": self.status,
             "commit_hash": self.commit_hash,
+            "python_pakke_versjon": self.python_pakke_versjon,
+            "r_pakke_versjon": self.r_pakke_versjon,
             "konfigurasjon": json.dumps(self.konfigurasjon, ensure_ascii=False),
             "kilde": self.kilde,
             "maal": self.maal,
             "antall_aggregater": len(self.aggregater),
             "feilmelding": self.feilmelding,
+            "db_bruker": self.db_bruker,
         }
         resultater = {resultat.tabell: resultat for resultat in self.resultater}
         rows = []
@@ -115,7 +165,7 @@ class Kjorelogg:
                 "aggregat_id": aggregate.id,
                 "tabell": aggregate.tabell,
                 **{name: getattr(resolved, name) for name in Metadata.model_fields},
-                "obt_tabell": aggregate.obt_tabell,
+                "referanse_tabell": aggregate.referanse_tabell,
                 "periodisering": aggregate.periodisering.kolonne,
                 "inkrementell": str(aggregate.inkrementell_strategi),
                 "formula": aggregate.formula,

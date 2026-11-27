@@ -5,13 +5,20 @@ import json
 import logging
 import os
 import sys
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from pydantic import ValidationError
 
-from .aggregate_schema import AggregateConfiguration, ConfigError, Aggregate
+from .aggregate_schema import (
+    Aggregate,
+    AggregateConfiguration,
+    ConfigError,
+    YamlSqlPathPair,
+)
 from .app_schema import (
     Configuration,
     ConfigurationSource,
@@ -27,7 +34,7 @@ def load_configuration(
 
     if config_path is None:
         raise ConfigError(
-            "Konfigurasjonsfilen må angis med --config eller STATISTIKKPRODUKT_AGGREGAT_CONFIG."
+            "Konfigurasjonsfilen må angis med --konfig-fil eller STATISTIKKPRODUKT_AGGREGAT_CONFIG."
         )
 
     import yaml
@@ -44,26 +51,28 @@ def load_configuration(
         ) from exc
 
     aggregate_paths = _find_aggregate_configurations(
-        source.mapper, source.aggregater, path.parent
+        source.filsok, source.aggregater, path.parent
     )
     aggregates: list[Aggregate] = []
-    for aggregate_path in aggregate_paths:
-        LOGGER.debug("Leser aggregatkonfigurasjon %s.", aggregate_path)
-        aggregate_data = _read_yaml(aggregate_path, yaml)
+    for name, yml_sql_path_pair in aggregate_paths.items():
+        LOGGER.debug("Leser aggregatkonfigurasjon %s.", name)
+        aggregate_data = _read_yaml(yml_sql_path_pair.yaml, yaml)
+
         if isinstance(aggregate_data, dict) and isinstance(
             aggregate_data.get("definisjon"), dict
         ):
-            aggregate_data["definisjon"]["tabell"] = aggregate_path.stem
-            aggregate_data["definisjon"]["sporring_sql"] = Path(
-                os.path.relpath(aggregate_path.with_suffix(".sql"), path.parent)
-            ).as_posix()
+            aggregate_data["definisjon"]["tabell"] = name
+            aggregate_data["definisjon"]["sporring_sql"] = (
+                yml_sql_path_pair.sql.relative_to(path.parent).as_posix()
+            )
+
         try:
             aggregate_config = AggregateConfiguration.model_validate(
                 aggregate_data, context={"ingen_id_validering": ingen_id_validering}
             )
         except ValidationError as exc:
             raise ConfigError(
-                f"Konfigurasjonen i {aggregate_path} er ugyldig:\n"
+                f"Konfigurasjonen i {yml_sql_path_pair.yaml} er ugyldig:\n"
                 + "\n".join(format_validation_error(error) for error in exc.errors())
             ) from exc
 
@@ -71,6 +80,7 @@ def load_configuration(
 
     try:
         config = Configuration(
+            version=source.version,
             connection=source.connection,
             aggregater=aggregates,
         )
@@ -108,53 +118,108 @@ def _read_yaml(path: Path, yaml: Any) -> Any:
     )
 
     try:
-        return yaml.load(path.read_text(encoding="utf-8"), Loader=UniqueSafeLoader)
+        contents = path.read_text(encoding="utf-8")
+        LOGGER.debug("Leser YAML fra %s:\n%s", path, contents)
+        return yaml.load(contents, Loader=UniqueSafeLoader)
     except UnicodeDecodeError as exc:
         raise ConfigError(f"Konfigurasjonsfilen må være kodet som UTF-8: {path}") from exc
     except OSError as exc:
         raise ConfigError(f"Konfigurasjonsfilen kan ikke leses: {path}") from exc
     except yaml.YAMLError as exc:
+        if problem_mark := getattr(exc, "problem_mark", None):
+            raise ConfigError(
+                f"Konfigurasjonsfilen inneholder ugyldig YAML på linje {problem_mark.line + 1}, "
+                f"kolonne {problem_mark.column + 1} i {path}. {exc.problem}"
+            ) from exc
+
         raise ConfigError(f"Konfigurasjonsfilen inneholder ugyldig YAML: {path}") from exc
 
 
 def _find_aggregate_configurations(
     patterns: list[str], aggregate_names: list[str], directory: Path
-) -> list[Path]:
+) -> dict[str, YamlSqlPathPair]:
     """Finner konfigurasjonsfiler for valgte aggregater i søkemønstrene."""
-    paths: set[Path] = set()
+    @dataclass
+    class YamlSqlMatch:
+        yaml: Path | None = None
+        sql: Path | None = None
+
+    directory = directory.resolve()
+    matches_by_name: dict[str, YamlSqlMatch] = defaultdict(YamlSqlMatch)
+    patterns_str = ", ".join(f"'{pattern}'" for pattern in patterns)
+
     for pattern in patterns:
         try:
             file_pattern = (
                 f"{pattern}/*" if pattern == "**" or pattern.endswith("/**") else pattern
             )
-            matches = directory.glob(file_pattern)
-            paths.update(
-                path.resolve()
-                for path in matches
-                if path.is_file() and path.suffix.lower() in {".yml", ".yaml"}
-            )
-        except (OSError, ValueError) as exc:
+            for path in directory.glob(file_pattern):
+                if not path.is_file():
+                    continue
+                if (name := path.stem.lower()) not in aggregate_names:
+                    continue
+                if path.stem != path.stem.lower():
+                    raise ConfigError(
+                        "Aggregatnavnet (filnavnet uten filendelse) må være skrevet "
+                        f"med små bokstaver: {path.stem}."
+                    )
+
+                suffix = path.suffix.lower()
+                if suffix not in {".yaml", ".yml", ".sql"}:
+                    continue
+                file_type = "sql" if suffix == ".sql" else "yaml"
+                new_path = path.resolve()
+                if new_path.parent == directory or not new_path.is_relative_to(directory):
+                    raise ConfigError(
+                        f"{file_type.upper()}-filen for aggregat {name} må ligge "
+                        f"i en undermappe til hovedkonfigurasjonen ({directory}): "
+                        f"{new_path}."
+                    )
+                match = matches_by_name[name]
+                existing_path = match.sql if file_type == "sql" else match.yaml
+                # sjekk existing_path != new_path for å unngå falsk positiv når samme fil matches flere ganger
+                if existing_path is not None and existing_path != new_path:
+                    raise ConfigError(
+                        f"Aggregat {name} har flere {file_type.upper()}-filer "
+                        f"i søkemønstrene {patterns_str}: {existing_path} og {new_path}."
+                    )
+                if file_type == "sql":
+                    match.sql = new_path
+                else:
+                    match.yaml = new_path
+
+        except ConfigError:
+            raise
+        except (NotImplementedError, OSError, ValueError) as exc:
+            # Path.glob() can raise NotImplementedError: Non-relative patterns are unsupported
             raise ConfigError(
                 f"Ugyldig mønster for aggregatkonfigurasjoner: {pattern}"
             ) from exc
 
-    paths_by_name: dict[str, Path] = {}
-    for path in sorted(paths):
-        name = path.stem.lower()
-        if name in paths_by_name:
-            raise ConfigError(
-                f"Aggregatnavnet {name} finnes i flere konfigurasjonsfiler: "
-                f"{paths_by_name[name]} og {path}."
-            )
-        paths_by_name[name] = path
-
-    LOGGER.debug("Fant aggregatkonfigurasjoner: %s.", sorted(paths_by_name))
-    missing = [name for name in aggregate_names if name not in paths_by_name]
+    LOGGER.debug("Fant aggregatkonfigurasjoner: %s.", sorted(matches_by_name))
+    missing = []
+    for name in aggregate_names:
+        match = matches_by_name[name]
+        missing_types = [
+            file_type
+            for file_type, path in (("YAML", match.yaml), ("SQL", match.sql))
+            if path is None
+        ]
+        if missing_types:
+            missing.append(f"{name} (mangler {' og '.join(missing_types)}-fil)")
     if missing:
         raise ConfigError(
-            f"Fant ikke konfigurasjonsfiler for aggregatene: {', '.join(missing)}."
+            f"Fant ikke konfigurasjonsfiler for aggregatene: {', '.join(missing)}. "
+            f"Søkemønstre relativt til {directory}: {patterns_str}."
         )
-    return [paths_by_name[name] for name in aggregate_names]
+
+    yaml_sql_pairs: dict[str, YamlSqlPathPair] = {}
+    # iterate over aggregate_names to preserve order from the config file
+    for name in aggregate_names:
+        match = matches_by_name[name]
+        assert match.yaml is not None and match.sql is not None
+        yaml_sql_pairs[name] = YamlSqlPathPair(yaml=match.yaml, sql=match.sql)
+    return yaml_sql_pairs
 
 
 def format_validation_error(error: dict[str, Any]) -> str:
@@ -172,65 +237,98 @@ def format_validation_error(error: dict[str, Any]) -> str:
     return f"{location}: {message}"
 
 
-def resolve_secret(reference: str, *, password: bool = False) -> str:
+def resolve_config(config_key: str, reference: str, *, password: bool = False) -> str:
     """Slår opp en bokstavelig verdi eller støttet hemmelighetsreferanse."""
     if "://" not in reference:
         if password:
-            raise ConfigError("Passord må angis som en hemmelighetsreferanse.")
+            raise ConfigError(
+                f"Passord for {config_key} må angis som en hemmelighetsreferanse "
+                "(f.eks. 'terminal://')."
+            )
         return reference
 
     parsed = urlsplit(reference)
-    LOGGER.debug("Løser hemmelighetsreferanse med skjema %s://.", parsed.scheme)
+    LOGGER.debug("Løser referansen for %s med skjema %s://.", config_key, parsed.scheme)
     if parsed.scheme == "env":
-        key = parsed.netloc or parsed.path.lstrip("/")
-        value = os.environ.get(key)
-        if value is None:
-            raise ConfigError(f"Miljøvariabelen {key} er ikke satt.")
-        return value
-    if parsed.scheme == "terminal":
-        if not sys.stdin.isatty():
-            raise ConfigError("terminal:// kan bare brukes når standard input er en terminal.")
-        value = getpass.getpass("Skriv inn hemmelig verdi: ")
-        if not value:
-            raise ConfigError("Den innleste hemmeligheten kan ikke være tom.")
-        return value
-    if parsed.scheme == "gsm":
-        from google.api_core.exceptions import GoogleAPIError
-        from google.auth.exceptions import GoogleAuthError
-        from google.cloud import secretmanager
+        return _resolve_config_from_env(config_key, parsed)
+    elif parsed.scheme == "terminal":
+        return _resolve_config_from_terminal(config_key)
+    elif parsed.scheme == "gsm":
+        return _resolve_config_from_gsm(config_key, parsed)
+    else:
+        raise ConfigError(f"Ukjent referanse for {config_key}: {parsed.scheme}://.")
 
-        secret_path = parsed.path.strip("/")
-        if parsed.netloc:
-            secret_path = f"{parsed.netloc}/{secret_path}"
-        parts = secret_path.split("/")
-        key = None
-        if len(parts) >= 7 and parts[-3] == "versions":
-            key = parts.pop()
-        secret_name = "/".join(parts)
-        try:
-            response = secretmanager.SecretManagerServiceClient().access_secret_version(
-                request={"name": secret_name}
-            )
-            payload = response.payload.data.decode("utf-8")
-            if key:
-                values = json.loads(payload)
-                if not isinstance(values, dict) or key not in values:
-                    raise ConfigError(
-                        f"Nøkkelen {key!r} finnes ikke i den lagrede hemmeligheten."
-                    )
-                payload = values[key]
-            if not isinstance(payload, str) or not payload:
+
+def _resolve_config_from_env(config_key: str, parsed_url: SplitResult) -> str:
+    env_var = parsed_url.netloc or parsed_url.path.lstrip("/")
+    value = os.environ.get(env_var)
+    if value is None:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            f"Miljøvariabelen {env_var} er ikke satt."
+        )
+    return value
+
+
+def _resolve_config_from_terminal(config_key: str) -> str:
+    if not sys.stdin.isatty():
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "'terminal://' kan bare brukes når standard input er en terminal."
+        )
+    value = getpass.getpass(f"Tast inn verdien for {config_key}: ")
+    if not value:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "Den inntastete verdien er tom."
+        )
+    return value
+
+
+def _resolve_config_from_gsm(config_key: str, parsed_url: SplitResult) -> str:
+    from google.api_core.exceptions import GoogleAPIError
+    from google.auth.exceptions import GoogleAuthError
+    from google.cloud import secretmanager
+
+    secret_path = parsed_url.path.strip("/")
+    if parsed_url.netloc:
+        secret_path = f"{parsed_url.netloc}/{secret_path}"
+    parts = secret_path.split("/")
+    json_key = None
+    if len(parts) >= 7 and parts[-3] == "versions":
+        json_key = parts.pop()
+    secret_name = "/".join(parts)
+    try:
+        response = secretmanager.SecretManagerServiceClient().access_secret_version(
+            request={"name": secret_name}
+        )
+        payload = response.payload.data.decode("utf-8")
+        if json_key:
+            values = json.loads(payload)
+            if not isinstance(values, dict):
                 raise ConfigError(
-                    "Den refererte hemmelighetsverdien er tom eller ugyldig."
+                    f"Kan ikke lese referansen for {config_key} fra GSM: "
+                    "Den lagrede verdien er ikke et JSON-objekt."
                 )
-            return payload
-        except (
-            GoogleAPIError,
-            GoogleAuthError,
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-        ) as exc:
+            if json_key not in values:
+                raise ConfigError(
+                    f"Kan ikke lese referansen for {config_key} fra GSM: "
+                    f"Nøkkelen {json_key!r} finnes ikke i den lagrede verdien."
+                )
+            payload = values[json_key]
+        if not isinstance(payload, str) or not payload:
             raise ConfigError(
-                "Kunne ikke hente den refererte hemmeligheten fra Google Secret Manager."
-            ) from exc
-    raise ConfigError(f"Ukjent hemmelighetsreferanse: {parsed.scheme}://.")
+                f"Kan ikke lese referansen for {config_key} fra GSM: "
+                "Den refererte verdien er tom eller ugyldig."
+            )
+        return payload
+    except (
+        GoogleAPIError,
+        GoogleAuthError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise ConfigError(
+            f"Kan ikke lese referansen for {config_key}: "
+            "Feil i kommunikasjon med Google Secret Manager."
+        ) from exc

@@ -19,8 +19,6 @@
 #' DBI::dbDisconnect(con)
 #' }
 #'
-#' @importFrom odbc dbConnect odbc
-#' @importFrom rstudioapi askForPassword
 
 db_connect <- function(database = "DWHI", uid = NULL, dwhi_cred = c("x","y","z")) {
 
@@ -55,6 +53,14 @@ db_connect <- function(database = "DWHI", uid = NULL, dwhi_cred = c("x","y","z")
 
     # Tilgangsstyrte databaser
   } else {
+
+    if (!requireNamespace("rstudioapi", quietly = TRUE)) {
+      stop(
+        "Pakken 'rstudioapi' kreves for passorddialogen. ",
+        "Installer den med install.packages('rstudioapi').",
+        call. = FALSE
+      )
+    }
 
     con <- odbc::dbConnect(
       odbc::odbc(),

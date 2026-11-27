@@ -1,0 +1,40 @@
+type,keyword,scope,language,value,dvh_lastet_tid
+PX,MATRIX,,NO,01234,2026-11-27 07:32:50
+PX,TITLE,,NO,Eksempel Mottakere av kontantstøtte per kvartal fordelt etter alder og kjønn.,2026-11-27 07:32:50
+PX,TITLE,,EN,Example Receivers of Cash-for-Care Benefit per quarter and divided by age and sex.,2026-11-27 07:32:50
+PX,CONTENTS,,NO,Mottakere av kontantstøtte.,2026-11-27 07:32:50
+PX,CONTENTS,,EN,Receivers of Cash-for-Care Benefit.,2026-11-27 07:32:50
+PX,SUBJECT,,NO,Kontantstøtte,2026-11-27 07:32:50
+PX,SUBJECT,,EN,Cash-for-Care Benefit,2026-11-27 07:32:50
+PX,NOTE,,NO,"Denne statistikken inneholder antall mottakere av kontantstøtte per siste måned hvert kvartal, fordelt på alder og kjønn. 
+
+Se [Om statistikken](https://www.nav.no/statistikk).
+",2026-11-27 07:32:50
+PX,NOTE,,EN,"These statistics contain the number of recipients of the cash-for-care benefit as of the last month of each quarter, broken down by age and sex. 
+
+See [About the statististics](https://www.nav.no/statistikk).
+",2026-11-27 07:32:50
+PX,NOTEX,,NO,Brudd i statistikken før 2018.,2026-11-27 07:32:50
+PX,NOTEX,,EN,Break in continuity for the statistics before 2018.,2026-11-27 07:32:50
+PX,SUBJECT-AREA,,NO,Familie,2026-11-27 07:32:50
+PX,SUBJECT-CODE,,NO,FA,2026-11-27 07:32:50
+PX,DISCONTINUED,,,NO,2026-11-27 07:32:50
+PX,OFFICIAL-STATISTICS,,,NO,2026-11-27 07:32:50
+PX,LAST-UPDATED,,,,2026-11-27 07:32:50
+PX,CONTACT,,NO,Team Familie#Team Familie kan svare på spørsmål om statistikken.#+47 12345678#eksempel@nav.no,2026-11-27 07:32:50
+CS,STUB,,,"ti_aar_gruppe_besk,kjonn_flertall_besk,aar_kvartal_besk_kort",2026-11-27 07:32:50
+CS,TIMEVAL,,,aar_kvartal_besk_kort,2026-11-27 07:32:50
+CS,DATA,,,kontantstotte_antall_mottakere#0#unit_kontantstotte_antall_mottakere,2026-11-27 07:32:50
+CR,STAT_VAR,,NO,statistikkvariabel,2026-11-27 07:32:50
+CR,STAT_VAR,,EN,statistical variable,2026-11-27 07:32:50
+CR,aar_kvartal_besk_kort,,NO,kvartal,2026-11-27 07:32:50
+CR,aar_kvartal_besk_kort,,EN,quarter,2026-11-27 07:32:50
+CR,ti_aar_gruppe_besk,,NO,aldersgruppe,2026-11-27 07:32:50
+CR,ti_aar_gruppe_besk,,EN,age group,2026-11-27 07:32:50
+CR,kontantstotte_antall_mottakere,,NO,Antall mottakere,2026-11-27 07:32:50
+CR,kontantstotte_antall_mottakere,,EN,Number of receivers,2026-11-27 07:32:50
+CR,unit_kontantstotte_antall_mottakere,,NO,personer,2026-11-27 07:32:50
+CR,unit_kontantstotte_antall_mottakere,,EN,persons,2026-11-27 07:32:50
+SQ,STAT_VAR,,,1,2026-11-27 07:32:50
+SQ,aar_kvartal_besk_kort,,,-24,2026-11-27 07:32:50
+SQ,ti_aar_gruppe_besk,,,3,2026-11-27 07:32:50

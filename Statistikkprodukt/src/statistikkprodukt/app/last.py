@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
-import json
 from pathlib import Path
 
 import oracledb
 import pandas as pd
+from pandas import DataFrame
 from pydantic import SecretStr
 from statistikkprodukt import oracle, csv
-from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer
-from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, is_test_id, resolve_secret, StorageOption
+from statistikkprodukt.app.models import Kjorelogg, LasteResultat, TableMetadata, Transfer, oslo_now
+from statistikkprodukt.config import Configuration, IncrementalMode, Aggregate, Tellepunkt, is_test_id, resolve_config, StorageOption
+from statistikkprodukt.oracle.aggregate_table import read_aggregate_last_updated
 from statistikkprodukt.prikking import prikking
+from statistikkprodukt.version import require_compatible_r_package_interactive
 
 LOGGER = logging.getLogger(__name__)
 
@@ -25,12 +27,14 @@ def last(
         *,
         selected_tables: list[str] | None = None,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool = False,
 ) -> None:
     """Kjører valgte aggregater fra valgt kilde til valgt mål."""
+    require_compatible_r_package_interactive(offer_installation=True)
     LOGGER.debug(
-        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, valgte tabeller=%s.",
-        source, target, dry_run, selected_tables or "alle",
+        "Starter kjøring: kilde=%s, mål=%s, dry_run=%s, full_relast=%s, valgte tabeller=%s.",
+        source, target, dry_run, full_relast, selected_tables or "alle",
     )
     aggregates = _select_aggregates(configuration, selected_tables)
     LOGGER.debug("Behandler %d aggregater: %s.", len(aggregates), [a.tabell for a in aggregates])
@@ -54,6 +58,7 @@ def last(
                 config_directory,
                 transfer,
                 selected_periods=selected_periods,
+                full_relast=full_relast,
                 dry_run=dry_run,
             )
             logg.resultater.append(resultat)
@@ -74,18 +79,11 @@ def last(
 
 def _initialize_kjorelogg(aggregates: list[Aggregate], configuration: Configuration, source: StorageOption,
                           target: StorageOption) -> Kjorelogg:
-    konfigurasjon_json = configuration.model_dump(
-        mode="json", by_alias=True, exclude={"connection": {"password"}}
-    )
-    konfigurasjon_json_str = json.dumps(konfigurasjon_json, ensure_ascii=False)
-    if "password" in konfigurasjon_json_str or configuration.connection.password.get_secret_value() in konfigurasjon_json_str:
-        raise RuntimeError("Konfigurasjonen inneholder et passord som ikke er maskert.")
-
-    logg = Kjorelogg(
-        konfigurasjon=konfigurasjon_json,
-        kilde=str(source),
-        maal=str(target),
-        aggregater=aggregates,
+    logg = Kjorelogg.from_configuration(
+        configuration,
+        aggregates,
+        str(source),
+        str(target)
     )
     return logg
 
@@ -136,9 +134,11 @@ def _select_aggregates(
 def _connect(configuration: Configuration) -> oracledb.Connection:
     """Oppretter Oracle-tilkobling bare når kilden eller målet trenger den."""
     LOGGER.debug("Kobler til Oracle (skjema=%s).", configuration.connection.schema_name)
-    user = resolve_secret(configuration.connection.user)
-    password = resolve_secret(
-        configuration.connection.password.get_secret_value(), password=True
+    user = resolve_config("user", configuration.connection.user)
+    password = resolve_config(
+        "password",
+        configuration.connection.password.get_secret_value(),
+        password=True,
     )
     resolved_connection = configuration.connection.model_copy(
         update={
@@ -156,6 +156,7 @@ def _process_aggregate(
         transfer: Transfer,
         *,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> LasteResultat:
     """Leser, prikker og lagrer ett småaggregat, og returnerer hva som ble gjort."""
@@ -170,6 +171,7 @@ def _process_aggregate(
         config_directory,
         transfer,
         selected_periods=selected_periods,
+        full_relast=full_relast,
         dry_run=dry_run,
     )
 
@@ -185,18 +187,55 @@ def _process_aggregate(
     perioder_str = ", ".join(sorted(map(str, data[aggregate.periodisering.kolonne].dropna().unique().tolist())))
     LOGGER.info("%s: Prikker %s perioder (%s).", aggregate.id, antall_perioder_str, perioder_str)
     LOGGER.debug("Kolonner for %s: %s.", aggregate.tabell, list(data.columns))
-    prepub, kontroll = prikking(
-        data,
+    dimension_columns = [
         aggregate.periodisering.kolonne,
-        aggregate.formula,
-        aggregate.tellepunkter[0].kolonne,
-        aggregate.prikking,
-        aggregate.saerskilt,
-    )
+        *(variable.kolonne for variable in aggregate.variabler),
+    ]
+    prepub = None
+    kontroll_resultater = []
+
+    # prikk hvert tellepunkt for seg
+    for tellepunkt in aggregate.tellepunkter:
+        LOGGER.info("%s: Prikker tellepunkt %s.", aggregate.id, tellepunkt.kolonne)
+        if data.empty:
+            prepub_tellepunkt = data[[*dimension_columns, tellepunkt.kolonne]].copy()
+            kontroll_tellepunkt = prepub_tellepunkt.assign(primary=0, suppressed=0)
+        else:
+            prepub_tellepunkt, kontroll_tellepunkt = prikking(
+                data[[*dimension_columns, tellepunkt.kolonne]],
+                aggregate.periodisering.kolonne,
+                aggregate.formula,
+                tellepunkt.kolonne,
+                aggregate.prikking,
+                aggregate.saerskilt,
+            )
+        _validate_prikking_output(
+            dimension_columns, tellepunkt, prepub, prepub_tellepunkt, kontroll_tellepunkt
+        )
+
+        # store None instead of na
+        values = prepub_tellepunkt[tellepunkt.kolonne]
+        prepub_tellepunkt[tellepunkt.kolonne] = values.astype(object).where(
+            values.notna(), None
+        )
+
+        # prepub beholder en kolonne per tellepunkt
+        if prepub is None:
+            prepub = prepub_tellepunkt.copy()
+        else:
+            prepub[tellepunkt.kolonne] = prepub_tellepunkt[tellepunkt.kolonne].array
+
+        # kontroll har én rad per tellepunkt, med tellepunktets navn i egen kolonne
+        kontroll_resultat = kontroll_tellepunkt.loc[:, dimension_columns].copy()
+        kontroll_resultat["tellepunkt"] = tellepunkt.kolonne
+        kontroll_resultat["verdi"] = kontroll_tellepunkt[tellepunkt.kolonne].array
+        kontroll_resultat["primary"] = kontroll_tellepunkt["primary"].array
+        kontroll_resultat["suppressed"] = kontroll_tellepunkt["suppressed"].array
+        kontroll_resultater.append(kontroll_resultat)
 
     # ensure column order
     prepub = prepub[list(data.columns)]
-    kontroll = kontroll[[*data.columns, "primary", "suppressed"]]
+    kontroll = pd.concat(kontroll_resultater, ignore_index=True)
 
     perioder = sorted(map(str, prepub[aggregate.periodisering.kolonne].dropna().unique().tolist()))
     LOGGER.debug("Perioder i resultatet for %s: %s.", aggregate.tabell, perioder)
@@ -231,11 +270,51 @@ def _process_aggregate(
         kontroll,
         transfer,
         config_directory=config_directory,
+        full_relast=full_relast,
         dry_run=dry_run,
     )
     resultat.metadata = metadata
 
     return resultat
+
+
+def _validate_prikking_output(
+        dimension_columns: list[str],
+        tellepunkt: Tellepunkt,
+        prepub: pd.DataFrame | None,
+        prepub_tellepunkt: pd.DataFrame,
+        kontroll_tellepunkt: pd.DataFrame,
+) -> None:
+    """Kontrollerer at prikkeresultatet for ett tellepunkt kan slås sammen med de andre."""
+    required = [*dimension_columns, tellepunkt.kolonne]
+    if len(prepub_tellepunkt) != len(kontroll_tellepunkt):
+        raise ValueError(
+            f"Prikkeresultatene til publikasjon og kontroll for {tellepunkt.kolonne} har ulikt antall rader."
+        )
+    if any(column not in prepub_tellepunkt.columns for column in required):
+        raise ValueError(
+            f"Prikkeresultatet til publikasjon for {tellepunkt.kolonne} mangler nødvendige kolonner."
+        )
+    if any(column not in kontroll_tellepunkt.columns for column in required):
+        raise ValueError(
+            f"Kontrollresultatet for {tellepunkt.kolonne} mangler nødvendige kolonner."
+        )
+    if any(column not in kontroll_tellepunkt.columns for column in ("primary", "suppressed")):
+        raise ValueError(
+            f"Kontrollresultatet for {tellepunkt.kolonne} mangler prikkemarkører."
+        )
+
+    if prepub is not None:
+        if len(prepub_tellepunkt) != len(prepub):
+            raise ValueError(
+                "Prikkeresultatene for ulike tellepunkter har ulikt antall rader."
+            )
+        if not prepub_tellepunkt[dimension_columns].reset_index(drop=True).equals(
+                prepub[dimension_columns].reset_index(drop=True)
+        ):
+            raise ValueError(
+                "Prikkeresultatene for ulike tellepunkter har ulike dimensjonsrader."
+            )
 
 
 def _get_periods_to_load(
@@ -245,9 +324,15 @@ def _get_periods_to_load(
         transfer: Transfer,
         *,
         selected_periods: list[str] | None = None,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> list[str] | None:
     """Velger perioder før innlesing; None betyr alle, en tom liste betyr ingen."""
+    if full_relast:
+        if selected_periods is not None:
+            raise ValueError("Full relast kan ikke kombineres med valgte perioder.")
+        LOGGER.debug("Full relast av %s: leser alle perioder.", aggregate.tabell)
+        return None
     if selected_periods is not None:
         LOGGER.debug("Bruker eksplisitt valgte perioder for %s: %s.", aggregate.tabell, selected_periods)
         return selected_periods
@@ -269,12 +354,9 @@ def _get_periods_to_load(
         aggregate.inkrementell_strategi.value,
     )
     missing = available - existing
-    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_ALT:
+    if aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_EKSISTERENDE_PERIODER:
         periods = sorted(available)
-    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_SISTE_PERIODE:
-        max_available = {max(existing)} if existing and max(existing) in available else set()
-        periods = sorted(missing.union(max_available))
-    elif aggregate.inkrementell_strategi == IncrementalMode.OVERSKRIV_IKKE:
+    elif aggregate.inkrementell_strategi == IncrementalMode.LEGG_TIL_NYE_PERIODER:
         periods = sorted(missing)
     else:
         raise NotImplementedError(
@@ -357,18 +439,29 @@ def _write_output(
         transfer: Transfer,
         *,
         config_directory: Path,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> TableMetadata | None:
-    """Sender prikkede data og kontrolldata til CSV eller Oracle."""
+    """Sender prikkede data, kontrolldata og metadata til CSV eller Oracle."""
     LOGGER.debug(
         "Skriver resultat for %s til %s (prepub=%d rader, kontroll=%d rader).",
         aggregate.tabell, transfer.target, len(prepub), len(kontroll),
     )
     if transfer.target == StorageOption.CSV:
         directory = transfer.output_directory
-        csv.write_csv(prepub, directory, aggregate, aggregate.prepub_tabell, dry_run=dry_run)
-        csv.write_csv(kontroll, directory, aggregate, aggregate.kontroll_tabell, dry_run=dry_run)
-        return None
+        meta, metadata = _get_meta_table_data(aggregate, configuration, transfer)
+        loaded_at = oslo_now().replace(microsecond=0)
+        for frame, name in (
+            (prepub, aggregate.prepub_tabell),
+            (kontroll, aggregate.kontroll_tabell),
+            (meta, aggregate.meta_tabell),
+        ):
+            csv.write_csv(
+                frame.assign(dvh_lastet_tid=loaded_at),
+                directory, aggregate, name, dry_run=dry_run,
+                full_relast=full_relast,
+            )
+        return metadata
     else:
         return _write_database(
             configuration,
@@ -376,8 +469,34 @@ def _write_output(
             prepub,
             kontroll,
             transfer,
+            full_relast=full_relast,
             dry_run=dry_run,
         )
+
+def _get_meta_table_data(aggregate: Aggregate, configuration: Configuration, transfer: Transfer) -> tuple[
+    DataFrame, TableMetadata]:
+    aggregate_last_updated = None
+    if transfer.source == StorageOption.DB:
+        if transfer.connection is None:
+            raise RuntimeError("Databasetilkobling mangler.")
+
+        aggregate_last_updated = read_aggregate_last_updated(
+            transfer.connection,
+            configuration.connection.schema_name,
+            aggregate
+        )
+
+        metadata = oracle.read_metadata(
+            transfer.connection,
+            configuration.connection.schema_name,
+            aggregate
+        )
+    else:
+        metadata = TableMetadata.from_aggregate(aggregate)
+    meta = pd.DataFrame(
+        oracle.metadata_rows(aggregate, metadata, aggregate_last_updated), columns=oracle.META_COLUMNS
+    )
+    return meta, metadata
 
 
 def _write_database(
@@ -387,6 +506,7 @@ def _write_database(
         kontroll: pd.DataFrame,
         transfer: Transfer,
         *,
+        full_relast: bool = False,
         dry_run: bool,
 ) -> TableMetadata | None:
     """Skriver prepub- og kontrolltabellen til Oracle."""
@@ -401,13 +521,21 @@ def _write_database(
             raise RuntimeError("Databasetilkobling mangler.")
 
         for table_name, frame in results:
+            if full_relast:
+                LOGGER.info(
+                    "Ville slettet alle rader fra %s.%s før innsetting av %d rader.",
+                    schema,
+                    table_name,
+                    len(frame),
+                )
+                continue
             LOGGER.info(
                 "Ville skrevet %d rader til %s.%s.",
                 len(frame),
                 schema,
                 table_name,
             )
-        return
+        return None
 
     metadata = None
     if not dry_run:
@@ -428,13 +556,23 @@ def _write_database(
             aggregate,
             table_name,
             frame,
+            full_relast=full_relast,
             dry_run=dry_run,
         )
+
+    for table_name, frame in results:
         if not dry_run:
+            assert metadata is not None
             LOGGER.info("Oppdaterer kommentarer for %s.", table_name)
-            oracle.write_comments(connection, schema, table_name, metadata)
+            if table_name == aggregate.kontroll_tabell:
+                oracle.write_kontroll_comments(
+                    connection, schema, table_name, aggregate, metadata
+                )
+            else:
+                oracle.write_comments(connection, schema, table_name, metadata)
 
     if not dry_run:
+        assert metadata is not None
         LOGGER.info("Oppdaterer metadatatabellen %s.", aggregate.meta_tabell)
         oracle.write_metadata_table(connection, schema, aggregate, metadata)
     return metadata

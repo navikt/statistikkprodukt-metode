@@ -1,0 +1,6 @@
+[propose.allow]
+# oracle testcontainer + pycharm MCP
+localhost = [1521, 64342]
+# needed to execute R dependent tests
+read = ["/usr/local/lib/R/site-library", "/usr/lib/R/", "~/R/", "/etc/R/"]
+exec = ["~/.local/bin/uv"]

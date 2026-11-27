@@ -16,7 +16,6 @@
 #' }
 #'
 #'
-#' @importFrom DBI dbGetQuery
 
 hent_data <- function(connection, query = "") {
 

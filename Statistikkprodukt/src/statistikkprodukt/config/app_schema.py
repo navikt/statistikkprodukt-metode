@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -106,22 +107,23 @@ class DatabaseConnection(StrictModel):
 
 
 class ConfigurationSource(StrictModel):
+    version: Literal[1] = Field(description="Versjon av hovedkonfigurasjonens format.")
     connection: DatabaseConnection = Field(
         description="Tilkoblingsinnstillinger for databasen."
     )
-    mapper: list[NonEmptyString] = Field(
-        description="Mønster for å finne mapper med aggregatsdefinisjoner."
+    filsok: list[NonEmptyString] = Field(
+        description="Mønster for å finne sql og yml filer med aggregatsdefinisjoner."
     )
     aggregater: list[OracleIdentifier] = Field(
         description="Navn på aggregatene som skal lastes."
     )
 
-    @field_validator("mapper")
+    @field_validator("filsok")
     @classmethod
     def validate_mappers(cls, value: list[str]) -> list[str]:
         """Krever minst ett mønster for aggregatkonfigurasjoner."""
         if not value:
-            raise ConfigError("mapper må inneholde minst ett mønster")
+            raise ConfigError("filsok må inneholde minst ett mønster")
         return value
 
     @field_validator("aggregater")
@@ -136,6 +138,7 @@ class ConfigurationSource(StrictModel):
 
 
 class Configuration(StrictModel):
+    version: Literal[1] = Field(description="Versjon av hovedkonfigurasjonens format.")
     connection: DatabaseConnection = Field(
         description="Tilkoblingsinnstillinger for databasen."
     )

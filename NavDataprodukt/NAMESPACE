@@ -4,11 +4,5 @@ export(Prikking)
 export(db_connect)
 export(dvh_prikking)
 export(hent_data)
-importFrom(DBI,dbGetQuery)
 importFrom(GaussSuppression,GaussSuppressionFromData)
-importFrom(odbc,
-  dbConnect,
-  odbc
-)
-importFrom(rstudioapi,askForPassword)
 importFrom(stats,as.formula)
