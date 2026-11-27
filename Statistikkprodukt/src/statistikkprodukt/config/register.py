@@ -56,10 +56,10 @@ def read_register_file(path: Path | Traversable) -> dict[str, str]:
             f"Statistikkproduktregisteret {path} må ha overskriftene "
             f"{', '.join(required)} i en pipe-tabell; fant {lines[0]!r}."
         )
-    if len(lines) < 2 or not re.fullmatch(r"\|-+\+-+\+-+\|", lines[1].strip()):
+    if len(lines) < 2 or not re.fullmatch(r"\|-+\|-+\|-+\|", lines[1].strip()):
         raise ConfigError(
             f"Statistikkproduktregisteret {path} må ha en skillelinje "
-            "på formen |---+---+---| etter overskriftene."
+            "på formen |---|---|---| etter overskriftene."
         )
 
     tables: dict[str, str] = {}

@@ -8,7 +8,7 @@ from test.test_config import configuration
 
 HEADER = (
     "| Løpenr | Team   | Statistikkprodukt  |\n"
-    "|--------+--------+--------------------|\n"
+    "|--------|--------|--------------------|\n"
 )
 
 
@@ -141,12 +141,12 @@ def test_read_register_rejects_duplicate_id(tmp_path):
 
 @pytest.mark.parametrize("header", ["\n", "| Nummer | Tabell |\n", "| Løpenummer | Team | Tabellnavn |\n"])
 def test_read_register_requires_exact_header(tmp_path, header):
-    path = _write(tmp_path, header + "|---+---+---|\n| 21000 | A | x |\n")
+    path = _write(tmp_path, header + "|---|---|---|\n| 21000 | A | x |\n")
     with pytest.raises(ConfigError, match="må ha overskriftene"):
         read_register_file(path)
 
 
-@pytest.mark.parametrize("separator", ["", "|---|---|---|\n", "--------+--------+--------------------\n"])
+@pytest.mark.parametrize("separator", ["", "|---+---+---|\n", "--------|--------|--------------------\n"])
 def test_read_register_requires_separator(tmp_path, separator):
     header = HEADER.splitlines()[0] + "\n"
     path = _write(tmp_path, header + separator + "| 21000 | A | x |\n")

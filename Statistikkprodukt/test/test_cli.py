@@ -34,7 +34,7 @@ def _configure(tmp_path, monkeypatch, agg_id):
     register = tmp_path / "statistikkprodukt_register.md"
     register.write_text(
         "| Løpenr | Team | Statistikkprodukt |\n"
-        "|--------+------+-------------------|\n"
+        "|--------|------|-------------------|\n"
         f"| 21000 | Team A | {AGGREGATE_NAME} |\n", encoding="utf-8"
     )
     monkeypatch.setenv("STATISTIKKPRODUKT_REGISTER_FIL", str(register))
