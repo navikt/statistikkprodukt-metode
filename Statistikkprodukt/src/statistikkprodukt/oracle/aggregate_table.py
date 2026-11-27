@@ -128,19 +128,30 @@ def read_metadata(
 def _merge_metadata(column, config_metadata: Metadata, db_metadata: Metadata):
     """Kombinerer metadata fra konfigurasjon og databasekommentarer, prioritert etter konfigurasjon."""
     result = Metadata()
+    comments_from_db, comments_from_yaml = 0, 0
     for tag in Metadata.model_fields.keys():
         value = getattr(config_metadata, tag)
         if value:
-            LOGGER.info("%s.%s hentes fra konfigurasjonen.", column, tag)
+            comments_from_yaml += 1
         elif db_value := getattr(db_metadata, tag):
             value = db_value
-            LOGGER.info("%s.%s hentes fra databasekommentar.", column, tag)
+            comments_from_db += 1
+        elif tag.lower().endswith("_en"):
+            # todo: hack for å hoppe over valgfrie engelske metadatafelter
+            continue
         else:
             raise ValueError(
                 f"Metadatafeltet {tag} mangler for {column}; angi det i YAML."
             )
-        LOGGER.debug("%s.%s = %s", column, tag, value)
+        source = "fra konfigurasjon" if value else "fra databasekommentar"
+        LOGGER.debug("%s.%s = %s (%s)", column, tag, value, source)
         setattr(result, tag, value)
+
+    if comments_from_db > 0 or comments_from_yaml > 0:
+        LOGGER.debug(
+            "Tabell %s: Bruker %d kommentarer fra referansetabellen, %d fra konfigurasjon.",
+            column, comments_from_db, comments_from_yaml,
+        )
 
     return result
 

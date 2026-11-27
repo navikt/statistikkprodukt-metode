@@ -79,7 +79,7 @@ def _sjekk_proxytilgang() -> None:
         if missing_allowlist:
             items = "\n".join(f"- {item}" for item in missing_allowlist)
             LOGGER.error(
-                "Kontroller at følgende adresser er åpnet i bannmuren:\n"
+                "Kontroller at følgende adresser er åpnet i brannmuren:\n"
                 f"{items}"
             )
         else:
