@@ -88,7 +88,7 @@ Kjør eksempelet først, som ikke bruker databasen (se [kjør mot databasen](#kj
 ```sh
 cd Statistikkprodukt/eksempel
 statistikkprodukt last \
-  --config konfigurasjon.yml \
+  --konfig-fil konfigurasjon.yml \
   --ingen-id-validering \
   --kilde=csv \
   --maal=csv
@@ -126,13 +126,13 @@ statistikkprodukt last ost_ga_befolkning_mnd_alder ost_ga_befolkning_mnd_kjonn
 Valider hovedkonfigurasjonen, aggregatdefinisjonene og ID-er mot statistikkproduktregisteret:
 
 ```sh
-statistikkprodukt konfig sjekk --config konfigurasjon.yml
+statistikkprodukt konfig sjekk --konfig-fil konfigurasjon.yml
 
 # For eksempler med test-ID-er
-statistikkprodukt konfig sjekk --config konfigurasjon.yml --ingen-id-validering
+statistikkprodukt konfig sjekk --konfig-fil konfigurasjon.yml --ingen-id-validering
 ```
 
-`--config` kan erstattes med miljøvariabelen `STATISTIKKPRODUKT_AGGREGAT_CONFIG`.
+`--konfig-fil` kan erstattes med miljøvariabelen `STATISTIKKPRODUKT_AGGREGAT_CONFIG`.
 
 Gyldig konfigurasjon gir avslutningskode `0`; konfigurasjonsfeil gir `2`.
 
@@ -155,21 +155,21 @@ Opprett logg, resultat- og metadatatabellene (se [Databaseskjema](#databaseskjem
 
 ```shell
 cd Statistikkprodukt/eksempel
-statistikkprodukt skjema opprett --config konfigurasjon.yml --ingen-id-validering --db
+statistikkprodukt skjema opprett --konfig-fil konfigurasjon.yml --ingen-id-validering --db
 ```
 
 Uten `--db` vises bare DDL.
 
 Kjør lasten fra databasen til csv:
 ```shell
-statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering --maal=csv
+statistikkprodukt last --konfig-fil konfigurasjon.yml --ingen-id-validering --maal=csv
 ```
 
 CSV filene i `data_ut` overskrives. Du kan slette de for å verifisere at data kommer inn det.
 
 Kjør lasten fra databasen til databasen:
 ```shell
-statistikkprodukt last --config konfigurasjon.yml --ingen-id-validering
+statistikkprodukt last --konfig-fil konfigurasjon.yml --ingen-id-validering
 ```
 
 Sjekk resultatene i Oracle:
@@ -184,10 +184,10 @@ Uten `--db` vises bare DDL; med `--db` opprettes manglende tabeller etter oppsla
 
 ```sh
 # For alle aggregater i konfigurasjonen
-statistikkprodukt skjema opprett --config konfigurasjon.yml --db
+statistikkprodukt skjema opprett --konfig-fil konfigurasjon.yml --db
 
 # For enkelte aggregater
-statistikkprodukt skjema opprett --config konfigurasjon.yml --db ost_2 ost_1
+statistikkprodukt skjema opprett --konfig-fil konfigurasjon.yml --db ost_2 ost_1
 ```
 
 Tabellene per aggregat:

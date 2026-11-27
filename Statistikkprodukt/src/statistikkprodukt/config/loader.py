@@ -34,7 +34,7 @@ def load_configuration(
 
     if config_path is None:
         raise ConfigError(
-            "Konfigurasjonsfilen må angis med --config eller STATISTIKKPRODUKT_AGGREGAT_CONFIG."
+            "Konfigurasjonsfilen må angis med --konfig-fil eller STATISTIKKPRODUKT_AGGREGAT_CONFIG."
         )
 
     import yaml

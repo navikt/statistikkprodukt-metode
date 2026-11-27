@@ -13,7 +13,7 @@ Use oracledb, ppy2 and pandas. All orchestration and interaction with the databa
 ## Implementation decisions
 
 1. **Program and package naming:** The Python distribution, import package, and executable are all named `statistikkprodukt`.
-2. **Configuration location:** `--config` accepts a YAML file containing the database connection, `mapper` glob patterns for finding aggregate files, and an `aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and find the matching SQL file by its case-insensitive filename stem. YAML and SQL files may be in separate directories, but both must resolve to files in subdirectories of the main configuration file's directory. Files directly beside the main configuration or outside its directory are forbidden, including through symbolic links. Nested subdirectories are allowed. The patterns must cover both file types, and each selected aggregate requires exactly one YAML file and one SQL file, including in CSV mode. Repeated matches of the same resolved file are allowed. Store `sporring_sql` relative to the main configuration file's directory without `../`. Resolve glob patterns and SQL paths from that directory, not from the aggregate YAML file's directory or the working directory.
+2. **Configuration location:** `--konfig-fil` accepts a YAML file containing the database connection, `mapper` glob patterns for finding aggregate files, and an `aggregater` list selecting aggregate names. Each selected YAML file contains one aggregate under `definisjon`; derive `tabell` from the YAML filename and find the matching SQL file by its case-insensitive filename stem. YAML and SQL files may be in separate directories, but both must resolve to files in subdirectories of the main configuration file's directory. Files directly beside the main configuration or outside its directory are forbidden, including through symbolic links. Nested subdirectories are allowed. The patterns must cover both file types, and each selected aggregate requires exactly one YAML file and one SQL file, including in CSV mode. Repeated matches of the same resolved file are allowed. Store `sporring_sql` relative to the main configuration file's directory without `../`. Resolve glob patterns and SQL paths from that directory, not from the aggregate YAML file's directory or the working directory.
 3. **Oracle connection profiles:** Allowed values for `connection.database` are `DWHP`, `DWHQ`, `DWHU`, and `DWHR`. Use placeholder mappings for host, port, and service name for now.
 4. **Secret references:** Support the URI forms shown in the configuration example. Google Secret Manager payloads are UTF-8 strings and may contain a flat JSON object. Allow `terminal://` only when stdin is a TTY. Fail if a referenced value is missing.
 5. **SQL contract:** Pass SQL files to Oracle without pre-validating that they contain a `SELECT` statement or have no bind parameters. Do not prevalidate result columns or target column types; Oracle reports incompatibilities when inserting.
@@ -133,7 +133,7 @@ statistikkprodukt last --help
 
 # Kjør prikking for hele konfigurasjon i konfigurasjon.yml
 # Kan også specifieseres med env STATISTIKKPRODUKT_AGGREGAT_CONFIG=...
-statistikkprodukt last --config=konfigurasjon.yml
+statistikkprodukt last --konfig-fil=konfigurasjon.yml
 export STATISTIKKPRODUKT_AGGREGAT_CONFIG=konfigurasjon.yml
 
 # Bare vis hva som ville skjedd

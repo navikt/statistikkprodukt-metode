@@ -50,7 +50,7 @@ def test_cli_gates_development_id(tmp_path, monkeypatch, command, allow_developm
     monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(app.skjema, "create_tables", execute)
     flags = ["--ingen-id-validering"] if allow_development_id else []
-    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path), *flags])
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--konfig-fil", str(path), *flags])
 
     if allow_development_id:
         cli.main()
@@ -69,7 +69,7 @@ def test_cli_flag_does_not_skip_other_id_checks(tmp_path, monkeypatch, agg_id):
     monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(
         sys, "argv",
-        ["statistikkprodukt", "last", "--config", str(path), "--ingen-id-validering"],
+        ["statistikkprodukt", "last", "--konfig-fil", str(path), "--ingen-id-validering"],
     )
 
     with pytest.raises(SystemExit) as exc:
@@ -84,7 +84,7 @@ def test_cli_accepts_id_registered_in_pipe_table(tmp_path, monkeypatch, command)
     execute = Mock()
     monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(app.skjema, "create_tables", execute)
-    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path)])
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--konfig-fil", str(path)])
 
     cli.main()
 
@@ -98,7 +98,7 @@ def test_cli_accepts_repeated_period_filters(tmp_path, monkeypatch):
     monkeypatch.setattr(
         sys, "argv",
         [
-            "statistikkprodukt", "last", "--config", str(path),
+            "statistikkprodukt", "last", "--konfig-fil", str(path),
             "-p", "2025", "--period", "2025M02", "-p", "2025K4",
         ],
     )
@@ -129,7 +129,7 @@ def test_cli_rejects_full_relast_with_period(tmp_path, monkeypatch):
     monkeypatch.setattr(
         sys, "argv",
         [
-            "statistikkprodukt", "last", "--config", str(path),
+            "statistikkprodukt", "last", "--konfig-fil", str(path),
             "--full-relast", "--period", "2025M01",
         ],
     )
@@ -160,7 +160,7 @@ def test_cli_requires_unique_test_ids_with_flag(tmp_path, monkeypatch, caplog, s
     monkeypatch.setattr(app.last, "last", execute)
     monkeypatch.setattr(
         sys, "argv",
-        ["statistikkprodukt", "last", "--config", str(path), "--ingen-id-validering"],
+        ["statistikkprodukt", "last", "--konfig-fil", str(path), "--ingen-id-validering"],
     )
 
     if second_id == "00000":
@@ -198,7 +198,7 @@ def test_cli_config_check_only_validates(tmp_path, monkeypatch, capsys, use_envi
         monkeypatch.setenv("STATISTIKKPRODUKT_AGGREGAT_CONFIG", str(path))
         flags = []
     else:
-        flags = ["--config", str(path)]
+        flags = ["--konfig-fil", str(path)]
     monkeypatch.setattr(sys, "argv", ["statistikkprodukt", "konfig", "sjekk", *flags])
 
     cli.main()
@@ -260,7 +260,7 @@ def test_cli_config_check_warns_about_formula(
     aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
     monkeypatch.setattr(
         sys, "argv",
-        ["statistikkprodukt", "konfig", "sjekk", "--config", str(path)],
+        ["statistikkprodukt", "konfig", "sjekk", "--konfig-fil", str(path)],
     )
 
     cli.main()
@@ -289,7 +289,7 @@ def test_cli_formula_warnings_are_only_emitted_by_config_check(
     aggregate_path.write_text(yaml.safe_dump(aggregate), encoding="utf-8")
     monkeypatch.setattr(app.last, "last", Mock())
     monkeypatch.setattr(app.skjema, "create_tables", Mock())
-    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--config", str(path)])
+    monkeypatch.setattr(sys, "argv", ["statistikkprodukt", *command, "--konfig-fil", str(path)])
 
     cli.main()
 
@@ -306,7 +306,7 @@ def test_cli_config_check_reports_configuration_errors(tmp_path, monkeypatch, ca
         monkeypatch.delenv("STATISTIKKPRODUKT_AGGREGAT_CONFIG", raising=False)
         flags = []
     else:
-        flags = ["--config", str(path)]
+        flags = ["--konfig-fil", str(path)]
         if error == "invalid_yaml":
             path.write_text("connection: [", encoding="utf-8")
         elif error == "unknown_field":
@@ -331,7 +331,7 @@ def test_cli_config_check_gates_test_ids(tmp_path, monkeypatch, capsys, allow_de
     flags = ["--ingen-id-validering"] if allow_development_id else []
     monkeypatch.setattr(
         sys, "argv",
-        ["statistikkprodukt", "konfig", "sjekk", "--config", str(path), *flags],
+        ["statistikkprodukt", "konfig", "sjekk", "--konfig-fil", str(path), *flags],
     )
 
     if allow_development_id:

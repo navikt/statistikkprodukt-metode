@@ -79,7 +79,7 @@ def _add_aggregate_options(parser: argparse.ArgumentParser) -> None:
         help="Tabellnavn for småaggregatene som skal behandles (standard: alle).",
     )
     parser.add_argument(
-        "--config",
+        "--konfig-fil",
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG eller konfigurasjon.yml).",
     )
@@ -196,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     check.add_argument(
-        "--config",
+        "--konfig-fil",
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG).",
     )
@@ -215,7 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tabellnavn for aggregatene (standard: alle).",
     )
     create.add_argument(
-        "--config",
+        "--konfig-fil",
         default=os.environ.get("STATISTIKKPRODUKT_AGGREGAT_CONFIG"),
         help="YAML-konfigurasjonsfil (standard: STATISTIKKPRODUKT_AGGREGAT_CONFIG).",
     )
